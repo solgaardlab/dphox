@@ -1,2 +1,2 @@
-# simphox
-A simulation library for designing photonic components
+# phoxy
+Design module for tunable integrated optics
