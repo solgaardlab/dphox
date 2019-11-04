@@ -6,3 +6,4 @@ gdspy
 jsonlines
 pandas
 descartes
+scikit-image

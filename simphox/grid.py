@@ -37,14 +37,14 @@ class Grid:
         else:
             raise ValueError('dim must be 3 to fill grid')
 
-    def add(self, component: Component, zmin: float = None, thickness: float = None):
-        p = self.pos[2]
-        zidx = (p.flat[np.abs(p - zmin).argmin()], p.flat[np.abs(p - zmin - thickness).argmin()])
-        b = component.bounds
-        self.components.append(component)
+    def add(self, component: Component, eps: float, zmin: float = None, thickness: float = None):
         if not self._check_bounds(component):
             raise ValueError('The pattern is out of bounds')
+        self.components.append(component)
+        mask = component.mask(self.shape, self.grid_spacing)
         if self.dim == 2:
-            self.eps[b[0]:b[2], b[1]:b[3]] = component.mask(self.pos)
+            self.eps += mask * eps
         else:
-            self.eps[b[0]:b[2], b[1]:b[3], zidx[0]:zidx[1]] = component.mask(self.pos)
+            p = self.pos[2]
+            zidx = (int(p.flat[np.abs(p - zmin).argmin()]), int(p.flat[np.abs(p - zmin - thickness).argmin()]))
+            self.eps[:, :, zidx[0]:zidx[1]] += mask * eps
