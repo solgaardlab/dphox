@@ -1,11 +1,12 @@
 import gdspy as gy
 import numpy as np
 
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon, MultiPolygon
 from shapely.ops import cascaded_union
 from descartes import PolygonPatch
+from skimage.draw import polygon2mask
 
-from .typing import List, Dim2
+from .typing import List, Dim2, GridShape
 
 
 class Path(gy.Path):
@@ -53,13 +54,13 @@ class Component:
         polygon_list = []
         for path in self.paths:
             polygon_list += [Polygon(polygon_point_list) for polygon_point_list in path.polygons]
-        pattern = cascaded_union(polygon_list)
-        return pattern
+        return MultiPolygon(polygon_list)
 
-    def mask(self, pos: np.ndarray):
-        shape = pos[0].shape
-        pattern = self.shapely
-        return np.asarray([pattern.contains(Point(x, y)) for x, y in zip(pos[0].flat, pos[1].flat)]).reshape(shape)
+    def mask(self, shape: np.ndarray, grid_spacing: np.ndarray):
+        mask = np.zeros(shape)
+        for p in self.shapely:
+            mask += polygon2mask(shape, (p.exterior.coords.xy / grid_spacing[:, np.newaxis]).T)
+        return mask
 
     @property
     def bounds(self):
@@ -85,10 +86,14 @@ class Component:
             cell.add(path)
 
     def plot(self, ax, color):
-        ax.add_patch(PolygonPatch(self.shapely), color=color)
+        ax.add_patch(PolygonPatch(self.shapely, facecolor=color, edgecolor='none'))
+        b = self.bounds
+        ax.set_xlim((b[0], b[2]))
+        ax.set_ylim((b[1], b[3]))
+        ax.set_aspect('equal')
 
 
-class DirectionalCoupler(Component):
+class DC(Component):
     def __init__(self, bend_dim: Dim2, waveguide_width: float,
                  coupling_spacing: float, interaction_length: float, end_length: float=0):
         self.end_length = end_length
@@ -99,9 +104,9 @@ class DirectionalCoupler(Component):
 
         lower_path = Path(waveguide_width).dc(bend_dim, interaction_length, end_length)
         upper_path = Path(waveguide_width).dc(bend_dim, interaction_length, end_length, inverted=True)
-        upper_path.translate(dx=0, dy=waveguide_width + bend_dim[1] + coupling_spacing)
+        upper_path.translate(dx=0, dy=waveguide_width + 2 * bend_dim[1] + coupling_spacing)
 
-        super(DirectionalCoupler).__init__([lower_path, upper_path])
+        super(DC, self).__init__([lower_path, upper_path])
 
 
 class MZI(Component):
@@ -116,9 +121,9 @@ class MZI(Component):
 
         lower_path = Path(waveguide_width).mzi(bend_dim, interaction_length, arm_length, end_length)
         upper_path = Path(waveguide_width).mzi(bend_dim, interaction_length, arm_length, end_length, inverted=True)
-        upper_path.translate(dx=0, dy=waveguide_width + bend_dim[1] + coupling_spacing)
+        upper_path.translate(dx=0, dy=waveguide_width + 2 * bend_dim[1] + coupling_spacing)
 
-        super(MZI).__init__([lower_path, upper_path])
+        super(MZI, self).__init__([lower_path, upper_path])
 
 
 class MMI(Component):
@@ -139,4 +144,4 @@ class MMI(Component):
         upper_output_path.translate(dx=end_length + taper_dim[0] + box_dim[0], dy=interport_distance)
         box = Path(box_dim[1], (end_length + taper_dim[0], interport_distance / 2)).segment(box_dim[0])
 
-        super(MMI).__init__([lower_input_path, upper_input_path, lower_output_path, upper_output_path, box])
+        super(MMI, self).__init__([lower_input_path, upper_input_path, lower_output_path, upper_output_path, box])
