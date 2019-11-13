@@ -6,7 +6,9 @@ from shapely.ops import cascaded_union
 from descartes import PolygonPatch
 from skimage.draw import polygon2mask
 
-from .typing import List, Dim2, GridShape
+import meep as mp
+
+from .typing import List, Dim2, Union, Optional, Tuple
 
 
 class Path(gy.Path):
@@ -46,25 +48,25 @@ class Path(gy.Path):
 
 
 class Component:
-    def __init__(self, paths: List[Path]):
-        self.paths = paths
+    def __init__(self, polygons: List[Union[Path, gy.Polygon]]):
+        self.polygons = polygons
+        self.pattern = self._pattern()
 
-    @property
-    def shapely(self):
+    def _pattern(self) -> MultiPolygon:
         polygon_list = []
-        for path in self.paths:
-            polygon_list += [Polygon(polygon_point_list) for polygon_point_list in path.polygons]
+        for poly in self.polygons:
+            polygon_list += [Polygon(polygon_point_list) for polygon_point_list in poly.polygons]
         return MultiPolygon(polygon_list)
 
     def mask(self, shape: np.ndarray, grid_spacing: np.ndarray):
         mask = np.zeros(shape)
-        for p in self.shapely:
-            mask += polygon2mask(shape, (p.exterior.coords.xy / grid_spacing[:, np.newaxis]).T)
+        for p in self.pattern:
+            mask += polygon2mask(shape, (p.exterior.coords.xy / grid_spacing[:2, np.newaxis]).T)
         return mask
 
     @property
     def bounds(self):
-        return self.shapely.bounds
+        return self.pattern.bounds
 
     @property
     def size(self):
@@ -76,17 +78,33 @@ class Component:
         b = self.bounds  # (minx, miny, maxx, maxy)
         return (b[2] + b[0]) / 2, (b[3] + b[1]) / 2  # (avgx, avgy)
 
+    def meep_geometry(self, core: mp.Medium, clad: mp.Medium, bounds: Optional[Tuple[float, float]]=None, axis: int=2) -> List[mp.GeometricObject]:
+        geometry = []
+        for p in self.pattern:
+            meep_axis = np.eye(3)[axis]
+            vertices = [mp.Vector3(v[0], v[1]) for v in p.exterior.coords.xy.T]
+            geometry.append(mp.Prism(vertices, height=bounds[1],
+                                     center=mp.Vector3(*(bounds[0] * meep_axis)),
+                                     axis=mp.Vector3(*meep_axis), material=core))
+            for pint in p.interiors:
+                vertices = [mp.Vector3(v[0], v[1]) for v in pint.coords.xy.T]
+                geometry.append(mp.Prism(vertices, height=bounds[1],
+                                         center=mp.Vector3(*(bounds[0] * meep_axis)),
+                                         axis=mp.Vector3(*meep_axis), material=clad))
+        return geometry
+
     def translate(self, dx: float, dy: float):
-        for path in self.paths:
+        for path in self.polygons:
             path.translate(dx, dy)
+        self.pattern = self._pattern()
         return self
 
     def to_gds(self, cell: gy.Cell):
-        for path in self.paths:
+        for path in self.polygons:
             cell.add(path)
 
     def plot(self, ax, color):
-        ax.add_patch(PolygonPatch(self.shapely, facecolor=color, edgecolor='none'))
+        ax.add_patch(PolygonPatch(self.pattern, facecolor=color, edgecolor='none'))
         b = self.bounds
         ax.set_xlim((b[0], b[2]))
         ax.set_ylim((b[1], b[3]))
@@ -138,8 +156,8 @@ class MMI(Component):
         lower_input_path = Path(waveguide_width).segment(end_length).segment(taper_dim[0], final_width=taper_dim[1])
         upper_input_path = Path(waveguide_width).segment(end_length).segment(taper_dim[0], final_width=taper_dim[1])
         upper_input_path.translate(dx=0, dy=interport_distance)
-        lower_output_path = Path(taper_dim[1]).segment(end_length).segment(taper_dim[0], final_width=waveguide_width)
-        upper_output_path = Path(taper_dim[1]).segment(end_length).segment(taper_dim[0], final_width=waveguide_width)
+        lower_output_path = Path(taper_dim[1]).segment(taper_dim[0], final_width=waveguide_width).segment(end_length)
+        upper_output_path = Path(taper_dim[1]).segment(taper_dim[0], final_width=waveguide_width).segment(end_length)
         lower_output_path.translate(dx=end_length + taper_dim[0] + box_dim[0], dy=0)
         upper_output_path.translate(dx=end_length + taper_dim[0] + box_dim[0], dy=interport_distance)
         box = Path(box_dim[1], (end_length + taper_dim[0], interport_distance / 2)).segment(box_dim[0])
