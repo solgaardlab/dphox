@@ -31,9 +31,7 @@ class Grid:
 
     def fill(self, zmax: float, eps: float):
         if self.dim == 3:
-            p = self.pos[2]
-            zmaxidx = p.flat[np.abs(p - zmax).argmin()]
-            self.eps[:, :, :zmaxidx] = eps
+            self.eps[:, :, :int(zmax / self.grid_spacing[2])] = eps
         else:
             raise ValueError('dim must be 3 to fill grid')
 
@@ -41,10 +39,9 @@ class Grid:
         if not self._check_bounds(component):
             raise ValueError('The pattern is out of bounds')
         self.components.append(component)
-        mask = component.mask(self.shape, self.grid_spacing)
+        mask = component.mask(self.shape[:2], self.grid_spacing)
         if self.dim == 2:
-            self.eps += mask * eps
+            self.eps = mask * eps
         else:
-            p = self.pos[2]
-            zidx = (int(p.flat[np.abs(p - zmin).argmin()]), int(p.flat[np.abs(p - zmin - thickness).argmin()]))
-            self.eps[:, :, zidx[0]:zidx[1]] += mask * eps
+            zidx = (int(zmin / self.grid_spacing[0]), int((zmin + thickness) / self.grid_spacing[1]))
+            self.eps[:, :, zidx[0]:zidx[1]] += (mask * eps)[..., np.newaxis]
