@@ -7,3 +7,4 @@ jsonlines
 pandas
 descartes
 scikit-image
+plotly

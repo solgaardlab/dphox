@@ -3,11 +3,10 @@ import numpy as np
 from .component import Component
 from .typing import GridShape, GridSpacing
 
-
 class Grid:
     def __init__(self, shape: GridShape, grid_spacing: GridSpacing, eps: float = 1):
-        self.shape = np.asarray(shape)
-        self.grid_spacing = grid_spacing * np.ones(len(shape)) if isinstance(grid_spacing, float) else np.asarray(
+        self.shape = np.asfarray(shape)
+        self.grid_spacing = grid_spacing * np.ones(len(shape)) if isinstance(grid_spacing, float) else np.asfarray(
             grid_spacing)
         self.dim = len(shape)
         self.eps = np.ones(self.shape) * eps
