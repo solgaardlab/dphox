@@ -46,9 +46,11 @@ class Path(gy.Path):
     def mzi(self, bend_dim: Dim2, interaction_length: float, arm_length: float,
             end_length: float = 0, layer: int = 0, inverted: bool = False, end_bend_dim: Optional[Dim3] = None):
         if end_bend_dim:
-            self.segment(end_bend_dim[-1], layer=layer)
+            if end_bend_dim[-1] > 0:
+                self.segment(end_bend_dim[-1], layer=layer)
             self.sbend(end_bend_dim[:2], layer, inverted)
-        self.segment(end_length, layer=layer)
+        if end_length > 0:
+            self.segment(end_length, layer=layer)
         self.sbend(bend_dim, layer, inverted)
         self.segment(interaction_length, layer=layer)
         self.sbend(bend_dim, layer, not inverted)
@@ -56,10 +58,12 @@ class Path(gy.Path):
         self.sbend(bend_dim, layer, inverted)
         self.segment(interaction_length, layer=layer)
         self.sbend(bend_dim, layer, not inverted)
-        self.segment(end_length, layer=layer)
+        if end_length > 0:
+            self.segment(end_length, layer=layer)
         if end_bend_dim:
             self.sbend(end_bend_dim[:2], layer, not inverted)
-            self.segment(end_bend_dim[-1], layer=layer)
+            if end_bend_dim[-1] > 0:
+                self.segment(end_bend_dim[-1], layer=layer)
         return self
 
 
@@ -321,13 +325,15 @@ class MMI(Component):
 
         if self.bend_dim:
             center = (end_length + bend_dim[0] + taper_dim[0] + box_dim[0] / 2, interport_distance / 2 + bend_dim[1])
-            p_00 = Path(waveguide_width).segment(end_length).sbend(bend_dim).segment(taper_dim[0],
-                                                                                     final_width=taper_dim[1])
-            p_01 = Path(waveguide_width, (0, interport_distance + 2 * bend_dim[1])).segment(end_length).sbend(
-                (bend_dim[0], -bend_dim[1])).segment(taper_dim[0], final_width=taper_dim[1])
+            p_00 = Path(waveguide_width).segment(end_length) if end_length > 0 else Path(waveguide_width)
+            p_00.sbend(bend_dim).segment(taper_dim[0], final_width=taper_dim[1])
+            p_01 = Path(waveguide_width, (0, interport_distance + 2 * bend_dim[1]))
+            p_01 = p_01.segment(end_length) if end_length > 0 else p_01
+            p_01.sbend(bend_dim, inverted=True).segment(taper_dim[0], final_width=taper_dim[1])
         else:
             center = (end_length + taper_dim[0] + box_dim[0] / 2, interport_distance / 2)
-            p_00 = Path(waveguide_width).segment(end_length).segment(taper_dim[0], final_width=taper_dim[1])
+            p_00 = Path(waveguide_width).segment(end_length) if end_length > 0 else Path(waveguide_width)
+            p_00.segment(taper_dim[0], final_width=taper_dim[1])
             p_01 = copy.deepcopy(p_00).translate(dx=0, dy=interport_distance)
         mmi_start = (center[0] - box_dim[0] / 2, center[1])
         mmi = Path(box_dim[1], mmi_start).segment(box_dim[0])
