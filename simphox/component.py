@@ -17,7 +17,7 @@ from .typing import *
 
 
 class Path(gy.Path):
-    def sbend(self, bend_dim: Dim2, layer: int = 0, inverted: bool=False):
+    def sbend(self, bend_dim: Dim2, layer: int = 0, inverted: bool = False):
         pole_1 = np.asarray((bend_dim[0] / 2, 0))
         pole_2 = np.asarray((bend_dim[0] / 2, (-1) ** inverted * bend_dim[1]))
         pole_3 = np.asarray((bend_dim[0], (-1) ** inverted * bend_dim[1]))
@@ -68,8 +68,9 @@ class Path(gy.Path):
 
 
 class Component:
-    def __init__(self, *polygons: Union[Path, gy.Polygon, gy.FlexPath, Polygon], shift: Dim2 = (0, 0)):
+    def __init__(self, *polygons: Union[Path, gy.Polygon, gy.FlexPath, Polygon], shift: Dim2 = (0, 0), layer: int = 0):
         self.shift = shift
+        self.layer = layer
         self.config = copy.deepcopy(self.__dict__)
 
         self.polys = polygons
@@ -88,7 +89,7 @@ class Component:
         pattern = cascaded_union(polygon_list)
         return pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern])
 
-    def mask(self, shape: GridShape, grid_spacing: GridSpacing):
+    def mask(self, shape: Shape, grid_spacing: GridSpacing):
         x_, y_ = np.mgrid[0:grid_spacing[0] * shape[0]:grid_spacing[0], 0:grid_spacing[1] * shape[1]:grid_spacing[1]]
         return contains(self.pattern, x_, y_)
 
@@ -123,10 +124,10 @@ class Component:
         for path in self.polys:
             cell.add(gy.Polygon(np.asarray(path.exterior.coords.xy).T)) if isinstance(path, Polygon) else cell.add(path)
 
-    def to_oasis(self, cell: fatamorgana.Cell, grid_cells_per_um: int = 1000):
-        for shapely_poly in self.pattern:
-            coords: np.ndarray = (shapely_poly.coords.xy * grid_cells_per_um).astype(np.int)
-            cell.geometry.append(oasis.Polygon((coords[1:] - coords[:-1]).tolist(), x=coords[0, 0], y=coords[0, 1]))
+    # def to_oasis(self, cell: fatamorgana.Cell, grid_cells_per_um: int = 1000):
+    #     for shapely_poly in self.pattern:
+    #         coords: np.ndarray = (shapely_poly.coords.xy * grid_cells_per_um).astype(np.int)
+    #         cell.geometry.append(oasis.Polygon((coords[1:] - coords[:-1]).tolist(), x=coords[0, 0], y=coords[0, 1]))
 
     def plotly3d(self, thickness: float, color: str, floor: float = 0, resolution: Union[int, Dim3] = (1000, 1000, 10)):
         resolution = (resolution, resolution, resolution) if isinstance(resolution, float) else resolution
@@ -187,16 +188,17 @@ class Component:
 
 
 class Slab(Component):
-    def __init__(self, box_dim: Dim2, shift: Dim2 = (0, 0)):
+    def __init__(self, box_dim: Dim2, shift: Dim2 = (0, 0), layer: int = 0):
         self.box_dim = box_dim
-        self.shift = shift
 
-        super(Slab, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2), shift=shift)
+        super(Slab, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2), shift=shift,
+                                   layer=layer)
 
 
 class GratingPad(Component):
     def __init__(self, pad_dim: Dim2, taper_length: float, final_width: float, out: bool = False,
-                 end_length: Optional[float] = None, bend_dim: Optional[Dim2] = None, shift: Dim2 = (0, 0)):
+                 end_length: Optional[float] = None, bend_dim: Optional[Dim2] = None, shift: Dim2 = (0, 0),
+                 layer: int = 0):
         self.pad_dim = pad_dim
         self.taper_length = taper_length
         self.final_width = final_width
@@ -211,13 +213,13 @@ class GratingPad(Component):
             if bend_dim:
                 path.sbend(bend_dim)
             super(GratingPad, self).__init__(
-                path.segment(taper_length, final_width=pad_dim[1]).segment(pad_dim[0]), shift=shift)
+                path.segment(taper_length, final_width=pad_dim[1]).segment(pad_dim[0]), shift=shift, layer=layer)
         else:
             path = Path(pad_dim[1]).segment(pad_dim[0]).segment(taper_length, final_width=final_width)
             if bend_dim:
-                path.sbend(bend_dim)
+                path.sbend(bend_dim, layer=layer)
             if end_length > 0:
-                path.segment(end_length)
+                path.segment(end_length, layer=layer)
             super(GratingPad, self).__init__(path, shift=shift)
 
     def to(self, port: Dim2):
@@ -250,7 +252,7 @@ class GroupedComponent(Component):
 
 class DC(Component):
     def __init__(self, bend_dim: Dim2, waveguide_width: float, coupling_spacing: float, interaction_length: float,
-                 end_length: float = 0, end_bend_dim: Optional[Dim3] = None, shift: Dim2 = (0, 0)):
+                 end_length: float = 0, end_bend_dim: Optional[Dim3] = None, shift: Dim2 = (0, 0), layer: int = 0):
         self.end_length = end_length
         self.bend_dim = bend_dim
         self.waveguide_width = waveguide_width
@@ -262,11 +264,13 @@ class DC(Component):
         if end_bend_dim:
             interport_distance += 2 * end_bend_dim[1]
 
-        lower_path = Path(waveguide_width).dc(bend_dim, interaction_length, end_length, end_bend_dim=end_bend_dim)
-        upper_path = Path(waveguide_width).dc(bend_dim, interaction_length, end_length, end_bend_dim=end_bend_dim, inverted=True)
+        lower_path = Path(waveguide_width).dc(bend_dim, interaction_length, end_length, end_bend_dim=end_bend_dim,
+                                              layer=layer)
+        upper_path = Path(waveguide_width).dc(bend_dim, interaction_length, end_length, end_bend_dim=end_bend_dim,
+                                              inverted=True, layer=layer)
         upper_path.translate(dx=0, dy=interport_distance)
 
-        super(DC, self).__init__(lower_path, upper_path, shift=shift)
+        super(DC, self).__init__(lower_path, upper_path, shift=shift, layer=layer)
 
     @property
     def input_ports(self) -> np.ndarray:
@@ -283,7 +287,7 @@ class DC(Component):
 class MZI(Component):
     def __init__(self, bend_dim: Dim2, waveguide_width: float, arm_length: float, coupling_spacing: float,
                  interaction_length: float, end_length: float = 0, end_bend_dim: Optional[Dim3] = None,
-                 shift: Dim2 = (0, 0)):
+                 shift: Dim2 = (0, 0), layer: int = 0):
         self.end_length = end_length
         self.arm_length = arm_length
         self.bend_dim = bend_dim
@@ -293,9 +297,9 @@ class MZI(Component):
         self.end_bend_dim = end_bend_dim
 
         lower_path = Path(waveguide_width).mzi(bend_dim, interaction_length, arm_length, end_length,
-                                               end_bend_dim=end_bend_dim)
+                                               end_bend_dim=end_bend_dim, layer=layer)
         upper_path = Path(waveguide_width).mzi(bend_dim, interaction_length, arm_length, end_length,
-                                               end_bend_dim=end_bend_dim, inverted=True)
+                                               end_bend_dim=end_bend_dim, inverted=True, layer=layer)
         upper_path.translate(dx=0, dy=waveguide_width + 2 * bend_dim[1] + coupling_spacing)
 
         super(MZI, self).__init__(lower_path, upper_path, shift=shift)
@@ -315,7 +319,7 @@ class MZI(Component):
 class MMI(Component):
     def __init__(self, box_dim: Dim2, waveguide_width: float, interport_distance: float,
                  taper_dim: Dim2, end_length: float = 0, bend_dim: Optional[Tuple[float, float]] = None,
-                 shift: Dim2 = (0, 0)):
+                 shift: Dim2 = (0, 0), layer: int = 0):
         self.end_length = end_length
         self.waveguide_width = waveguide_width
         self.box_dim = box_dim
@@ -325,18 +329,18 @@ class MMI(Component):
 
         if self.bend_dim:
             center = (end_length + bend_dim[0] + taper_dim[0] + box_dim[0] / 2, interport_distance / 2 + bend_dim[1])
-            p_00 = Path(waveguide_width).segment(end_length) if end_length > 0 else Path(waveguide_width)
-            p_00.sbend(bend_dim).segment(taper_dim[0], final_width=taper_dim[1])
+            p_00 = Path(waveguide_width).segment(end_length, layer=layer) if end_length > 0 else Path(waveguide_width)
+            p_00.sbend(bend_dim).segment(taper_dim[0], final_width=taper_dim[1], layer=layer)
             p_01 = Path(waveguide_width, (0, interport_distance + 2 * bend_dim[1]))
-            p_01 = p_01.segment(end_length) if end_length > 0 else p_01
-            p_01.sbend(bend_dim, inverted=True).segment(taper_dim[0], final_width=taper_dim[1])
+            p_01 = p_01.segment(end_length, layer=layer) if end_length > 0 else p_01
+            p_01.sbend(bend_dim, inverted=True).segment(taper_dim[0], final_width=taper_dim[1], layer=layer)
         else:
             center = (end_length + taper_dim[0] + box_dim[0] / 2, interport_distance / 2)
-            p_00 = Path(waveguide_width).segment(end_length) if end_length > 0 else Path(waveguide_width)
-            p_00.segment(taper_dim[0], final_width=taper_dim[1])
+            p_00 = Path(waveguide_width).segment(end_length, layer=layer) if end_length > 0 else Path(waveguide_width)
+            p_00.segment(taper_dim[0], final_width=taper_dim[1], layer=layer)
             p_01 = copy.deepcopy(p_00).translate(dx=0, dy=interport_distance)
         mmi_start = (center[0] - box_dim[0] / 2, center[1])
-        mmi = Path(box_dim[1], mmi_start).segment(box_dim[0])
+        mmi = Path(box_dim[1], mmi_start).segment(box_dim[0], layer=layer)
         p_10 = copy.deepcopy(p_01).rotate(np.pi, center)
         p_11 = copy.deepcopy(p_00).rotate(np.pi, center)
 

@@ -3,8 +3,6 @@ scipy
 matplotlib
 shapely
 gdspy
-jsonlines
-pandas
 descartes
 scikit-image
 plotly
