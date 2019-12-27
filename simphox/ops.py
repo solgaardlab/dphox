@@ -16,7 +16,8 @@ def d2curl_fn(f: np.ndarray, df: Callable[[np.ndarray, int], np.ndarray]):
 
 def grid_average(params: np.ndarray) -> np.ndarray:
     if len(params.shape) == 1:
-        return (params + np.roll(params, shift=1) + np.roll(params, shift=-1)) / 3
+        p = (params + np.roll(params, shift=1) + np.roll(params, shift=-1)) / 3
+        return np.stack((p, p, p))
     p = params[..., np.newaxis] if len(params.shape) == 2 else params
     p_x = (p + np.roll(p, shift=1, axis=1) + np.roll(p, shift=1, axis=2) +
            np.roll(p, shift=-1, axis=1) + np.roll(p, shift=-1, axis=2)) / 5
