@@ -1,36 +1,27 @@
 import numpy as np
 import scipy.sparse as sp
-from .constants import C_0
-from .typing import Op, Tuple, List, Shape
+from .typing import List, Callable
 
 
-def fdtd_curl(dx: np.ndarray) -> Tuple[Op, Op]:
-    """
-    Generate curl operators for the E and H fields (for FDTD).
-
-    Args:
-        pos: pos parameter from `simphox.Simulation`
-
-    Returns:
-        Functions for discretized curl of E- and H-fields.
-    """
-
-    def de(e, d):
-        return (np.roll(e[d], -1, axis=d) - e[d]) / dx[d]
-
-    def dh(h, d):
-        return (h[d] - np.roll(h[d], 1, axis=d)) / dx[d]
-
-    def curl(f, df):
-        return np.stack([df(f[2], 1) - df(f[1], 2), df(f[0], 2) - df(f[2], 0), df(f[1], 0) - df(f[0], 1)])
-
-    return lambda e: curl(e, de), lambda h: curl(h, dh)
+def d2curl_op(d: List[sp.spmatrix]) -> sp.spmatrix:
+    o = sp.csr_matrix((d[0].shape[0], d[0].shape[0]))
+    return sp.bmat([[o, -d[2], d[1]],
+                    [d[2], o, -d[0]],
+                    [-d[1], d[0], o]])
 
 
-def kron_tile(d: List[sp.spmatrix], s: np.ndarray):
-    if len(s) == 3:
-        return [sp.kron(d[0], sp.eye(s[1] * s[2])),
-                sp.kron(sp.kron(sp.eye(s[0]), d[1]), sp.eye(s[2])),
-                sp.kron(sp.eye(s[0] * s[1]), d[2])]
-    else:
-        return [sp.kron(d[0], sp.eye(s[1])), sp.kron(sp.eye(s[0]), d[1])]
+def d2curl_fn(f: np.ndarray, df: Callable[[np.ndarray, int], np.ndarray]):
+    return np.stack([df(f[2], 1) - df(f[1], 2), df(f[0], 2) - df(f[2], 0), df(f[1], 0) - df(f[0], 1)])
+
+
+def grid_average(params: np.ndarray) -> np.ndarray:
+    if len(params.shape) == 1:
+        return (params + np.roll(params, shift=1) + np.roll(params, shift=-1)) / 3
+    p = params[..., np.newaxis] if len(params.shape) == 2 else params
+    p_x = (p + np.roll(p, shift=1, axis=1) + np.roll(p, shift=1, axis=2) +
+           np.roll(p, shift=-1, axis=1) + np.roll(p, shift=-1, axis=2)) / 5
+    p_y = (p + np.roll(p, shift=1, axis=0) + np.roll(p, shift=1, axis=2) +
+           np.roll(p, shift=-1, axis=0) + np.roll(p, shift=-1, axis=2)) / 5
+    p_z = (p + np.roll(p, shift=1, axis=0) + np.roll(p, shift=1, axis=1) +
+           np.roll(p, shift=-1, axis=0) + np.roll(p, shift=-1, axis=1)) / 5
+    return np.stack([p_x.squeeze(), p_y.squeeze(), p_z.squeeze()])
