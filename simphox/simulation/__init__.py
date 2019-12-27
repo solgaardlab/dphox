@@ -1,2 +1,2 @@
 from .fdfd import FDFD
-from .grid import Grid
+from .grid import Grid, SimGrid
