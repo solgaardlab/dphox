@@ -10,37 +10,35 @@ from ..typing import Shape, Dim, GridSpacing, Optional, Tuple, List, Union, Op
 
 
 class Grid:
-    def __init__(self, grid_shape: Shape, grid_spacing: GridSpacing, eps: Union[float, np.ndarray] = 1.0,
-                 mu: Union[float, np.ndarray] = 1.0, enable_grid_averaging: bool = True):
+    def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1.0,
+                 enable_grid_averaging: bool = True):
         """Grid object accomodating any electromagnetic simulation strategy (FDFD, FDTD, BPM, etc.)
 
         Args:
-            grid_shape: Tuple of size 1, 2, or 3 representing the number of pixels in the grid
-            grid_spacing: Spacing (microns) between each pixel along each axis (must be same dim as `grid_shape`)
+            shape: Tuple of size 1, 2, or 3 representing the number of pixels in the grid
+            spacing: Spacing (microns) between each pixel along each axis (must be same dim as `grid_shape`)
             eps: Relative permittivity
-            mu: Relative permeability
             enable_grid_averaging: Enable grid averaging for the simulation
         """
-        self.shape = np.asarray(grid_shape, dtype=np.int)
-        self.spacing = grid_spacing * np.ones(len(grid_shape)) if isinstance(grid_spacing, float) else np.asarray(
-            grid_spacing)
-        self.dim = len(grid_shape)
-        if not self.dim == len(self.spacing):
+        self.shape = np.asarray(shape, dtype=np.int)
+        self.spacing = spacing * np.ones(len(shape)) if isinstance(spacing, float) else np.asarray(spacing)
+        self.ndim = len(shape)
+        self.shape3 = np.hstack((self.shape, np.ones((3 - self.ndim,), dtype=self.shape.dtype)))
+        if not self.ndim == len(self.spacing):
             raise AttributeError(f'Require len(grid_shape) == len(grid_spacing) but got'
                                  f'({len(self.shape)}, {len(self.spacing)})')
         self.n = np.prod(self.shape)
         self.eps: np.ndarray = np.ones(self.shape) * eps if not isinstance(eps, np.ndarray) else eps
-        self.mu: np.ndarray = np.ones(self.shape) * mu if not isinstance(mu, np.ndarray) else mu
         if not tuple(self.shape) == self.eps.shape:
             raise AttributeError(f'Require grid_shape == eps.shape but got'
                                  f'({self.shape}, {self.eps.shape})')
         self.size = self.spacing * self.shape
-        self.dxes = [self.spacing[i] * np.ones((self.shape[i],))
-                     if i < self.dim else np.ones((1,)) for i in range(3)]
-        self.pos = [np.hstack((0, np.cumsum(dx))) if dx.size > 1 else None for dx in self.dxes]
-        if self.dim == 1:
+        self.cell_sizes = [self.spacing[i] * np.ones((self.shape[i],))
+                           if i < self.ndim else np.ones((1,)) for i in range(3)]
+        self.pos = [np.hstack((0, np.cumsum(dx))) if dx.size > 1 else None for dx in self.cell_sizes]
+        if self.ndim == 1:
             self.mesh_pos = np.mgrid[:self.size[0]:self.spacing[0]]
-        elif self.dim == 2:
+        elif self.ndim == 2:
             self.mesh_pos = np.stack(np.mgrid[:self.size[0]:self.spacing[0], :self.size[1]:self.spacing[1]],
                                      axis=0)
         else:
@@ -64,7 +62,7 @@ class Grid:
         Returns:
 
         """
-        if self.dim == 3:
+        if self.ndim == 3:
             self.eps[:, :, :int(zmax / self.spacing[2])] = eps
         else:
             raise ValueError('dim must be 3 to fill grid')
@@ -85,11 +83,11 @@ class Grid:
             raise ValueError('The pattern is out of bounds')
         self.components.append(component)
         mask = component.mask(self.shape[:2], self.spacing)
-        if self.dim == 2:
-            self.eps = mask * eps
+        if self.ndim == 2:
+            self.eps[mask == 1] = eps
         else:
             zidx = (int(zmin / self.spacing[0]), int((zmin + thickness) / self.spacing[1]))
-            self.eps[:, :, zidx[0]:zidx[1]] += (mask * eps)[..., np.newaxis]
+            self.eps[:, :, zidx[0]:zidx[1]] += (mask * eps)[..., np.newaxis] - self.eps[:, :, zidx[0]:zidx[1]]
 
     def reshape(self, v: np.ndarray) -> np.ndarray:
         """A simple method to reshape flat 3d vec array into the same shape
@@ -100,21 +98,28 @@ class Grid:
         Returns:
 
         """
-        return np.stack([split_v.reshape(self.shape) for split_v in np.split(v, 3)])
+        return np.stack([split_v.reshape(self.shape3) for split_v in np.split(v, 3)])
 
 
 class SimGrid(Grid):
-    def __init__(self, grid_shape: Shape, grid_spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
-                 pml_shape: Optional[Union[Shape, Dim]] = None, pml_eps: float = 1.0):
-        super(SimGrid, self).__init__(grid_shape, grid_spacing, eps)
-        self.pml_shape = np.asarray(pml_shape, dtype=np.int) if pml_shape else None
+    def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
+                 bloch_phase: Union[Dim, float] = 0.0, pml: Optional[Union[int, Shape, Dim]] = None,
+                 pml_eps: float = 1.0):
+        super(SimGrid, self).__init__(shape, spacing, eps)
+        self.pml_shape = np.asarray(pml, dtype=np.int) if isinstance(pml, tuple) else pml
+        self.pml_shape = np.ones(self.ndim, dtype=np.int) * pml if isinstance(pml, int) else pml
         self.pml_eps = pml_eps
-        if self.pml_shape:
+        if self.pml_shape is not None:
             if np.any(self.pml_shape <= 3) or np.any(self.pml_shape >= self.shape // 2):
                 raise AttributeError(f'PML shape must be more than 3 and less than half the shape on each axis.')
-        if pml_shape is not None and not len(pml_shape) == len(self.shape):
+        if pml is not None and not len(self.pml_shape) == len(self.shape):
             raise AttributeError(f'Need len(pml_shape) == len(grid_shape),'
-                                 f'got ({len(pml_shape)}, {len(self.shape)}).')
+                                 f'got ({len(pml)}, {len(self.shape)}).')
+        self.bloch = np.ones_like(self.shape) * np.exp(1j * np.asarray(bloch_phase)) if isinstance(bloch_phase, float) \
+            else np.exp(1j * np.asarray(bloch_phase))
+        if not len(self.bloch) == len(self.shape):
+            raise AttributeError(f'Need len(bloch_phase) == len(grid_shape),'
+                                 f'got ({len(self.bloch)}, {len(self.shape)}).')
 
     @lru_cache()
     def deriv(self, back: bool = False) -> List[sp.spmatrix]:
@@ -129,20 +134,17 @@ class SimGrid(Grid):
         """
 
         # account for 1d and 2d cases
-        b = np.hstack((self.bloch, np.ones((3 - self.dim,), dtype=self.bloch.dtype)))
-        s = np.hstack((self.shape, np.ones((3 - self.dim,), dtype=self.shape.dtype)))
-
-        # define grid cell sizes (including pml if necessary)
-        dx_f, dx_b = self._dxes
+        b = np.hstack((self.bloch, np.ones((3 - self.ndim,), dtype=self.bloch.dtype)))
+        s = np.hstack((self.shape, np.ones((3 - self.ndim,), dtype=self.shape.dtype)))
 
         if back:
             # get backward derivative
-            dx = np.meshgrid(*dx_b, indexing='ij')
+            _, dx = self._dxes
             d = [sp.diags([1, -1, -np.conj(b[ax])], [0, -1, n - 1], shape=(n, n), dtype=np.complex128)
                  if n > 1 else 0 for ax, n in enumerate(s)]  # get single axis back-derivs
         else:
             # get forward derivative
-            dx = np.meshgrid(*dx_f, indexing='ij')
+            dx, _ = self._dxes
             d = [sp.diags([-1, 1, b[ax]], [0, 1, -n + 1], shape=(n, n), dtype=np.complex128)
                  if n > 1 else 0 for ax, n in enumerate(s)]  # get single axis forward-derivs
         d = [sp.kron(d[0], sp.eye(s[1] * s[2])),
@@ -172,27 +174,21 @@ class SimGrid(Grid):
     def curl_b(self):
         return d2curl_op(self.db)
 
-    @property
-    @lru_cache()
-    def curl_e(self) -> Op:
-        dx_f, dx_b = self._dxes
-        dx = np.meshgrid(*dx_f, indexing='ij')
+    def curl_e(self, e) -> np.ndarray:
+        dx, _ = self._dxes
 
-        def de(e, d):
-            return (np.roll(e[d], -1, axis=d) - e[d]) / dx[d]
+        def de(e_, d):
+            return (np.roll(e_, -1, axis=d) - e_) / dx[d]
 
-        return lambda e: d2curl_fn(e, de)
+        return d2curl_fn(e, de)
 
-    @property
-    @lru_cache()
-    def curl_h(self) -> Op:
-        dx_f, dx_b = self._dxes
-        dx = np.meshgrid(*dx_b, indexing='ij')
+    def curl_h(self, h) -> np.ndarray:
+        _, dx = self._dxes
 
-        def dh(h, d):
-            return (h[d] - np.roll(h[d], 1, axis=d)) / dx[d]
+        def dh(h_, d):
+            return (h_ - np.roll(h_, 1, axis=d)) / dx[d]
 
-        return lambda h: d2curl_fn(h, dh)
+        return d2curl_fn(h, dh)
 
     @property
     def _dxes(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
@@ -201,12 +197,9 @@ class SimGrid(Grid):
         Returns:
             dxes for e and h fields, respectively.
         """
-        return self.dxes, self.dxes
+        return np.meshgrid(*self.cell_sizes, indexing='ij'), np.meshgrid(*self.cell_sizes, indexing='ij')
 
     @property
     def eps_t(self):
         return grid_average(self.eps) if self.enable_grid_averaging else np.stack((self.eps, self.eps, self.eps))
 
-    @property
-    def mu_t(self):
-        return grid_average(self.mu) if self.enable_grid_averaging else np.stack((self.mu, self.mu, self.mu))

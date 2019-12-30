@@ -277,7 +277,7 @@ class DC(Component):
         interport_distance = self.waveguide_width + 2 * self.bend_dim[1] + self.coupling_spacing
         if self.end_bend_dim:
             interport_distance += 2 * self.end_bend_dim[1]
-        return np.asarray(((0, 0), (0, interport_distance)))
+        return np.asarray(((0, 0), (0, interport_distance))) + self.shift
 
     @property
     def output_ports(self) -> np.ndarray:
@@ -309,7 +309,7 @@ class MZI(Component):
         interport_distance = self.waveguide_width + 2 * self.bend_dim[1] + self.coupling_spacing
         if self.end_bend_dim:
             interport_distance += 2 * self.end_bend_dim[1]
-        return np.asarray(((0, 0), (0, interport_distance)))
+        return np.asarray(((0, 0), (0, interport_distance))) + self.shift
 
     @property
     def output_ports(self) -> np.ndarray:
@@ -349,7 +349,7 @@ class MMI(Component):
     @property
     def input_ports(self) -> np.ndarray:
         bend_y = 2 * self.bend_dim[1] if self.bend_dim else 0
-        return np.asarray(((0, 0), (0, self.interport_distance + bend_y)))
+        return np.asarray(((0, 0), (0, self.interport_distance + bend_y))) + self.shift
 
     @property
     def output_ports(self) -> np.ndarray:
