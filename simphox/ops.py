@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.sparse as sp
+
 from .typing import List, Callable
 
 
@@ -25,4 +26,4 @@ def grid_average(params: np.ndarray) -> np.ndarray:
            np.roll(p, shift=-1, axis=0) + np.roll(p, shift=-1, axis=2)) / 5
     p_z = (p + np.roll(p, shift=1, axis=0) + np.roll(p, shift=1, axis=1) +
            np.roll(p, shift=-1, axis=0) + np.roll(p, shift=-1, axis=1)) / 5
-    return np.stack([p_x.squeeze(), p_y.squeeze(), p_z.squeeze()])
+    return np.stack([p_x, p_y, p_z])
