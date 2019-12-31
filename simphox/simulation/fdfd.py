@@ -18,14 +18,23 @@ except OSError:  # if mkl isn't installed
 class FDFD(SimGrid):
     def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
                  wavelength: float = 1.55, bloch_phase: Union[Dim, float] = 0.0,
-                 pml: Optional[Union[Shape, Dim]] = None, pml_eps: float = 1.0, no_grad: bool = True):
+                 pml: Optional[Union[Shape, Dim]] = None, pml_eps: float = 1.0,
+                 grid_avg: bool = True, no_grad: bool = True):
 
         self.wavelength = wavelength
         self.k0 = 2 * np.pi / self.wavelength  # defines the units for the simulation!
         self.omega = C_0 * self.k0
         self.no_grad = no_grad
 
-        super(FDFD, self).__init__(shape, spacing, eps, bloch_phase, pml, pml_eps)
+        super(FDFD, self).__init__(
+            shape=shape,
+            spacing=spacing,
+            eps=eps,
+            bloch_phase=bloch_phase,
+            pml=pml,
+            pml_eps=pml_eps,
+            grid_avg=grid_avg
+        )
 
     @property
     def mat(self) -> Union[sp.spmatrix, Tuple[np.ndarray, np.ndarray]]:
@@ -43,18 +52,15 @@ class FDFD(SimGrid):
         Returns:
             Electric field operator :math:`A` for solving Maxwell's equations at frequency :math:`omega`.
         """
-        curl_curl: sp.spmatrix = self.curl_b @ self.curl_f
         if self.no_grad:
-            mat = curl_curl - self.k0 ** 2 * sp.diags(self.eps_t.flatten())
-            mat.sort_indices()
+            mat = self.curl_curl - self.k0 ** 2 * sp.diags(self.eps_t.flatten())
             return mat
         else:
-            curl_curl: sp.coo_matrix = curl_curl.tocoo()
-            rc_curl_curl = np.vstack((curl_curl.row, curl_curl.col))
+            data, rc = self.curl_curl_coo
             data_param = self.k0 ** 2 * self.eps_t.flatten()
             rc_param = np.hstack((np.arange(self.n * 3), np.arange(self.n * 3)))
             # TODO(sunil): change this to bd.hstack for autograd, torch, tf
-            return np.hstack((data_param, curl_curl.data)), np.hstack((rc_param, rc_curl_curl))
+            return np.hstack((data_param, data)), np.hstack((rc_param, rc))
 
     A = mat  # alias A (common symbol for FDFD matrix) to mat
 
@@ -80,15 +86,12 @@ class FDFD(SimGrid):
         Returns:
             Electric field operator :math:`A_z` for a source with z-polarized e-field.
         """
-        df, db = self.df, self.db
-        dd = -db[0] @ df[0] - db[1] @ df[1]
 
         if self.no_grad:
-            mat = dd - self.k0 ** 2 * sp.diags(self.eps_t[2].flatten())
-            mat.sort_indices()
+            mat = self.ddz - self.k0 ** 2 * sp.diags(self.eps_t[2].flatten())
             return mat
         else:
-            dd: sp.coo_matrix = dd.tocoo()
+            dd: sp.coo_matrix = self.ddz.tocoo()
             data_param = self.k0 ** 2 * self.eps_t[2].flatten()
             rc_param = np.hstack((np.arange(self.n), np.arange(self.n)))
             # TODO(sunil): change this to bd.hstack for autograd, torch, tf
@@ -127,38 +130,6 @@ class FDFD(SimGrid):
             return sp.diags(self.eps_t[0].flatten()) * self.k0 ** 2 + df[0].dot(db[0])
 
     C = wgm  # C is the matrix for the guided mode eigensolver
-
-    @property
-    def e2h_op(self) -> sp.spmatrix:
-        """
-        Convert magnetic field :math:`\mathbf{e}` to electric field :math:`\mathbf{h}` (op).
-
-        Usage is: `h = fdfd.e2h @ e`, where `e` is flattened (not grid-shaped)
-
-        Mathematically, this represents rearranging the Maxwell equation in the frequency domain:
-        ..math::
-            -i \omega h = \nabla \times e
-
-        Returns:
-
-        """
-        return self.curl_f @ sp.diags(1 / self.k0)
-
-    @property
-    def h2e_op(self) -> sp.spmatrix:
-        """
-        Convert magnetic field :math:`\mathbf{h}` to electric field :math:`\mathbf{e}` (op).
-
-        Usage is: `e = fdfd.h2e @ h`, where `h` is flattened (not grid-shaped)
-
-        Mathematically, this represents rearranging the Maxwell equation in the frequency domain:
-        ..math::
-            -i \omega \epsilon \mathbf{e} = \nabla \times \mathbf{h}
-
-        Returns:
-
-        """
-        return self.curl_b @ sp.diags(1 / (self.k0 * self.eps_t.flatten()))
 
     def e2h(self, e: np.ndarray) -> np.ndarray:
         """
@@ -209,15 +180,15 @@ class FDFD(SimGrid):
         b = self.k0 * src.flatten()
         if b.size == self.n * 3:
             e = solver_fn(self.mat, b) if solver_fn else spsolve(self.mat, b)
-        elif b.size == self.n:  # only the z component
+        elif b.size == self.n:  # assume only the z component
             ez = solver_fn(self.matz, b) if solver_fn else spsolve(self.matz, b)
             o = np.zeros_like(ez)
             e = np.vstack((o, o, ez))
         else:
-            raise ValueError(f'Expected b.size == {self.n * 3} or {self.n}, but got {b.size}.')
+            raise ValueError(f'Expected src.size == {self.n * 3} or {self.n}, but got {b.size}.')
         return self.reshape(e) if reshaped else e
 
-    def wgm_solve(self, num_modes: int = 1, beta_guess: Optional[float] = None,
+    def wgm_solve(self, num_modes: int = 6, beta_guess: Optional[Union[float, Tuple[float, float]]] = None,
                   tol: float = 1e-5) -> Tuple[np.ndarray, np.ndarray]:
         """FDFD waveguide mode (WGM) solver
 
@@ -252,14 +223,15 @@ class FDFD(SimGrid):
             h = eigvecs
         return np.sqrt(eigvals[inds_sorted]), h[:, inds_sorted].T
 
-    def wgm_src(self, axis: int = 0, mode_num: int = 0, negative: bool = False,
-                beta_guess: Optional[float] = None, tol: float = 1e-5) -> np.ndarray:
+    def src(self, axis: int = 0, mode_idx: int = 0, negative: bool = False, power: float = 1,
+            beta_guess: Optional[float] = None, tol: float = 1e-5) -> np.ndarray:
         """Define waveguide mode source using waveguide mode solver (incl. pml if part of the mode solver!)
 
         Args:
             axis: Axis of propagation
-            mode_num: Mode index to use (0 is fundamental mode)
+            mode_idx: Mode index to use (default is 0, the fundamental mode)
             negative: Propagate in the -ve direction (else +ve)
+            power: Power to scale the source (default is 1, a normalized mode in arb units)
             beta_guess: Guess for propagation constant :math:`\beta`
             tol: Tolerance of the mode solver
 
@@ -267,27 +239,30 @@ class FDFD(SimGrid):
             Grid-shaped waveguide mode (wgm) source (normalized h-mode for 1d, spins-b source for 2d)
         """
 
-        beta, h = self.wgm_solve(mode_num + 1, beta_guess, tol)
+        if power < 0:
+            raise ValueError("Power must be > 0.")
+
+        beta, h = self.wgm_solve(min(mode_idx + 1, 6), beta_guess, tol)
 
         if self.ndim == 2 and self.pml_shape:
-            h = self.reshape(h[-1])  # get the last mode and shape it
+            h = self.reshape(h[mode_idx])  # get the last mode and shape it
             idx = np.roll(np.arange(3, dtype=np.int), -axis)
             direction = 1 - 2 * negative
             _, dx = self._dxes
             phasor = np.exp(1j * direction * beta * dx[axis])
 
-            e = np.roll(self.h2e(h), shift=-1, axis=axis)  # get shifted e-field
+            # get shifted e-field
+            e = np.roll(self.h2e(h), shift=-1, axis=axis)
             # define current sources
             j = np.stack((np.zeros(self.shape), -h[idx[2]], h[idx[1]])) * phasor[np.newaxis, ...]
             m = np.stack((np.zeros(self.shape), -e[idx[2]], e[idx[1]]))
-            # need (3, nx, ny, nz) array for functional curl to work, hence the newaxis
-            jm = self.curl_h(m[..., np.newaxis]).squeeze() / self.k0
+            jm = self.curl_h(m) / self.k0
 
-            return (j + jm) / dx[axis] * direction
+            return (j + jm) / dx[axis] * direction * np.sqrt(power)
         else:
             if self.ndim == 1 and self.pml_shape:
                 raise NotImplementedError("PML for 1d wgm source must be None.")
-            return h  # z-polarized for x-axis (with cyclic permutations)
+            return h * np.sqrt(power)
 
     @property
     @lru_cache()
@@ -312,17 +287,41 @@ class FDFD(SimGrid):
                     dxes_pml_h.append(self.cell_sizes[ax] * self._scpml(ph, ax))
             return np.meshgrid(*dxes_pml_e, indexing='ij'), np.meshgrid(*dxes_pml_h, indexing='ij')
 
-    def _scpml(self, d: np.ndarray, ax: int, exp_scale: float = 2, log_reflection: float = -5):
+    def _scpml(self, d: np.ndarray, ax: int, exp_scale: float = 3, log_reflection: float = -16):
         absorption_corr = self.k0 * self.pml_eps
         t = self.pml_shape[ax]
         d_pml = np.hstack((
             (d[:t] - np.min(d)) / (d[t] - np.min(d)),
             np.zeros_like(d[t:-t]),
             (np.max(d) - d[-t:]) / (np.max(d) - d[-t])
-        ))
+        ))  # imaginary
         return 1 + 1j * (exp_scale + 1) * log_reflection / 2 * d_pml ** exp_scale / absorption_corr
 
+    @property
+    @lru_cache()
+    def curl_curl(self) -> sp.spmatrix:
+        curl_curl: sp.spmatrix = self.curl_b @ self.curl_f
+        curl_curl.sort_indices()  # for the solver
+        return curl_curl
 
-def spsolve_raw(data: np.ndarray, rc: np.ndarray, rhs: np.ndarray):
-    mat = sp.coo_matrix((data, rc)).tocsr()  # need coo matrix to add duplicate elements!
-    return spsolve(mat, rhs)
+    @property
+    @lru_cache()
+    def ddz(self) -> sp.spmatrix:
+        df, db = self.df, self.db
+        ddz = -db[0] @ df[0] - db[1] @ df[1]
+        ddz.sort_indices()  # for the solver
+        return ddz
+
+    @property
+    @lru_cache()
+    def curl_curl_coo(self) -> Tuple[np.ndarray, np.ndarray]:
+        curl_curl: sp.coo_matrix = self.curl_curl.tocoo()
+        rc_curl_curl = np.vstack((curl_curl.row, curl_curl.col))
+        return curl_curl.data, rc_curl_curl
+
+    @property
+    @lru_cache()
+    def ddz_coo(self) -> Tuple[np.ndarray, np.ndarray]:
+        ddz: sp.coo_matrix = self.ddz.tocoo()
+        rc_curl_curl = np.vstack((ddz.row, ddz.col))
+        return ddz.data, rc_curl_curl

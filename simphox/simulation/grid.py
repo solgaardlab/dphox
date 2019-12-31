@@ -4,21 +4,18 @@ import numpy as np
 import scipy.sparse as sp
 
 from ..component import Component
-from ..ops import d2curl_op, d2curl_fn
-from ..ops import grid_average
-from ..typing import Shape, Dim, GridSpacing, Optional, Tuple, List, Union, Op
+from ..typing import Shape, Dim, GridSpacing, Optional, Tuple, List, Union
+from ..utils import d2curl_op, d2curl_fn, grid_average
 
 
 class Grid:
-    def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1.0,
-                 enable_grid_averaging: bool = True):
+    def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1.0):
         """Grid object accomodating any electromagnetic simulation strategy (FDFD, FDTD, BPM, etc.)
 
         Args:
             shape: Tuple of size 1, 2, or 3 representing the number of pixels in the grid
             spacing: Spacing (microns) between each pixel along each axis (must be same dim as `grid_shape`)
             eps: Relative permittivity
-            enable_grid_averaging: Enable grid averaging for the simulation
         """
         self.shape = np.asarray(shape, dtype=np.int)
         self.spacing = spacing * np.ones(len(shape)) if isinstance(spacing, float) else np.asarray(spacing)
@@ -46,28 +43,24 @@ class Grid:
                                      :self.size[1]:self.spacing[1],
                                      :self.size[2]:self.spacing[2]], axis=0)
         self.components = []
-        self.enable_grid_averaging = enable_grid_averaging
 
-    def _check_bounds(self, component):
+    def _check_bounds(self, component) -> bool:
         b = component.bounds
         return b[0] >= 0 and b[1] >= 0 and b[2] <= self.size[0] and b[3] <= self.size[1]
 
-    def fill(self, zmax: float, eps: float) -> None:
-        """Fill grid up to `zmax`
+    def fill(self, zmax: float, eps: float):
+        """Fill grid up to `zmax`, typically used for substrate + cladding epsilon settings
 
         Args:
-            zmax: Maximum z of the fill operation
+            zmax: Maximum z (or final dimension) of the fill operation
             eps: Relative eps to fill
 
         Returns:
 
         """
-        if self.ndim == 3:
-            self.eps[:, :, :int(zmax / self.spacing[2])] = eps
-        else:
-            raise ValueError('dim must be 3 to fill grid')
+        self.eps[..., :int(zmax / self.spacing[-1])] = eps
 
-    def add(self, component: Component, eps: float, zmin: float = None, thickness: float = None) -> None:
+    def add(self, component: Component, eps: float, zmin: float = None, thickness: float = None):
         """Add a component to the grid
 
         Args:
@@ -104,11 +97,12 @@ class Grid:
 class SimGrid(Grid):
     def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
                  bloch_phase: Union[Dim, float] = 0.0, pml: Optional[Union[int, Shape, Dim]] = None,
-                 pml_eps: float = 1.0):
+                 pml_eps: float = 1.0, grid_avg: bool = True):
         super(SimGrid, self).__init__(shape, spacing, eps)
         self.pml_shape = np.asarray(pml, dtype=np.int) if isinstance(pml, tuple) else pml
         self.pml_shape = np.ones(self.ndim, dtype=np.int) * pml if isinstance(pml, int) else pml
         self.pml_eps = pml_eps
+        self.grid_avg = grid_avg
         if self.pml_shape is not None:
             if np.any(self.pml_shape <= 3) or np.any(self.pml_shape >= self.shape // 2):
                 raise AttributeError(f'PML shape must be more than 3 and less than half the shape on each axis.')
@@ -201,5 +195,5 @@ class SimGrid(Grid):
 
     @property
     def eps_t(self):
-        return grid_average(self.eps) if self.enable_grid_averaging else np.stack((self.eps, self.eps, self.eps))
+        return grid_average(self.eps) if self.grid_avg else np.stack((self.eps, self.eps, self.eps))
 
