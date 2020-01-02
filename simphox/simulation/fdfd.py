@@ -6,11 +6,10 @@ from scipy.sparse.linalg import eigs
 
 
 from .grid import SimGrid
-from ..constants import C_0
 from ..typing import Shape, Dim, GridSpacing, Optional, Tuple, List, Union, SpSolve, Op
 
 try:  # pardiso (using Intel MKL) is much faster than scipy's solver
-    from .pardiso import spsolve
+    from .mkl import spsolve, feast_eigs
 except OSError:  # if mkl isn't installed
     from scipy.sparse.linalg import spsolve
 
@@ -23,7 +22,6 @@ class FDFD(SimGrid):
 
         self.wavelength = wavelength
         self.k0 = 2 * np.pi / self.wavelength  # defines the units for the simulation!
-        self.omega = C_0 * self.k0
         self.no_grad = no_grad
 
         super(FDFD, self).__init__(
@@ -213,25 +211,34 @@ class FDFD(SimGrid):
         """
 
         db = self.db
-        sigma = beta_guess ** 2 if beta_guess else (self.k0 * np.sqrt(np.max(self.eps))) ** 2
-        eigvals, eigvecs = eigs(self.wgm, k=num_modes, sigma=sigma, tol=tol)
-        inds_sorted = np.asarray(np.argsort(np.real(np.sqrt(eigvals)))[::-1])
+        if isinstance(beta_guess, float) or beta_guess is None:
+            sigma = beta_guess ** 2 if beta_guess else (self.k0 * np.sqrt(np.max(self.eps))) ** 2
+            eigvals, eigvecs = eigs(self.wgm, k=num_modes, sigma=sigma, tol=tol)
+        elif isinstance(beta_guess, tuple):
+            erange = beta_guess[0] ** 2, beta_guess[1] ** 2
+            eigvals, eigvecs, _, _, _, _ = feast_eigs(self.wgm, erange=erange, k=num_modes)
+        else:
+            raise TypeError(f'Expected beta_guess to be None, float, or Tuple[float, float] but got {type(beta_guess)}')
+        inds_sorted = np.asarray(np.argsort(np.sqrt(eigvals.real))[::-1])
         if self.ndim > 1:
             hz = sp.hstack(db[:2]) @ eigvecs / (1j * np.sqrt(eigvals))
             h = np.vstack((eigvecs, hz))
         else:
             h = eigvecs
+
+        factor = np.exp(-1j * np.angle(h[:1, :])) if self.dtype == np.complex128 else np.sign(h[:1, :])
+        h *= factor  # divide by global phase or set polarity (set reference plane)
         return np.sqrt(eigvals[inds_sorted]), h[:, inds_sorted].T
 
-    def src(self, axis: int = 0, mode_idx: int = 0, negative: bool = False, power: float = 1,
+    def src(self, axis: int = 0, mode_idx: int = 0, power: float = 1,
             beta_guess: Optional[float] = None, tol: float = 1e-5) -> np.ndarray:
         """Define waveguide mode source using waveguide mode solver (incl. pml if part of the mode solver!)
 
         Args:
             axis: Axis of propagation
             mode_idx: Mode index to use (default is 0, the fundamental mode)
-            negative: Propagate in the -ve direction (else +ve)
-            power: Power to scale the source (default is 1, a normalized mode in arb units)
+            power: Power to scale the source (default is 1, a normalized mode in arb units),
+            and if negative, the source moves in opposite direction (polarity is encoded in sign of power).
             beta_guess: Guess for propagation constant :math:`\beta`
             tol: Tolerance of the mode solver
 
@@ -239,17 +246,16 @@ class FDFD(SimGrid):
             Grid-shaped waveguide mode (wgm) source (normalized h-mode for 1d, spins-b source for 2d)
         """
 
-        if power < 0:
-            raise ValueError("Power must be > 0.")
+        polarity = np.sign(power)
+        p = np.abs(power)
 
         beta, h = self.wgm_solve(min(mode_idx + 1, 6), beta_guess, tol)
 
         if self.ndim == 2 and self.pml_shape:
             h = self.reshape(h[mode_idx])  # get the last mode and shape it
             idx = np.roll(np.arange(3, dtype=np.int), -axis)
-            direction = 1 - 2 * negative
             _, dx = self._dxes
-            phasor = np.exp(1j * direction * beta * dx[axis])
+            phasor = np.exp(1j * polarity * beta * dx[axis])
 
             # get shifted e-field
             e = np.roll(self.h2e(h), shift=-1, axis=axis)
@@ -258,11 +264,11 @@ class FDFD(SimGrid):
             m = np.stack((np.zeros(self.shape), -e[idx[2]], e[idx[1]]))
             jm = self.curl_h(m) / self.k0
 
-            return (j + jm) / dx[axis] * direction * np.sqrt(power)
+            return (j + jm) / dx[axis] * polarity * np.sqrt(p)
         else:
             if self.ndim == 1 and self.pml_shape:
                 raise NotImplementedError("PML for 1d wgm source must be None.")
-            return h * np.sqrt(power)
+            return h * polarity * np.sqrt(p)
 
     @property
     @lru_cache()
@@ -282,20 +288,25 @@ class FDFD(SimGrid):
                     dxes_pml_e.append(self.cell_sizes[ax])
                     dxes_pml_h.append(self.cell_sizes[ax])
                 else:
-                    pe, ph = (p[:-1] + p[1:]) / 2, p[:-1]
-                    dxes_pml_e.append(self.cell_sizes[ax] * self._scpml(pe, ax))
-                    dxes_pml_h.append(self.cell_sizes[ax] * self._scpml(ph, ax))
+                    scpml_e, scpml_h = self.scpml(ax)
+                    dxes_pml_e.append(self.cell_sizes[ax] * scpml_e)
+                    dxes_pml_h.append(self.cell_sizes[ax] * scpml_h)
             return np.meshgrid(*dxes_pml_e, indexing='ij'), np.meshgrid(*dxes_pml_h, indexing='ij')
 
-    def _scpml(self, d: np.ndarray, ax: int, exp_scale: float = 3, log_reflection: float = -16):
+    def scpml(self, ax: int, exp_scale: float = 4, log_reflection: float = -16) -> Tuple[np.ndarray, np.ndarray]:
+        p = self.pos[ax]
+        pe, ph = (p[:-1] + p[1:]) / 2, p[:-1]
         absorption_corr = self.k0 * self.pml_eps
         t = self.pml_shape[ax]
-        d_pml = np.hstack((
-            (d[:t] - np.min(d)) / (d[t] - np.min(d)),
-            np.zeros_like(d[t:-t]),
-            (np.max(d) - d[-t:]) / (np.max(d) - d[-t])
-        ))  # imaginary
-        return 1 + 1j * (exp_scale + 1) * log_reflection / 2 * d_pml ** exp_scale / absorption_corr
+
+        def _scpml(d: np.ndarray):
+            d_pml = np.hstack((
+                (d[t] - d[:t]) / (d[t] - p[0]),
+                np.zeros_like(d[t:-t]),
+                (d[-t:] - d[-t]) / (p[-1] - d[-t])
+            ))
+            return 1 + 1j * (exp_scale + 1) * (d_pml ** exp_scale) * log_reflection / (2 * absorption_corr)
+        return _scpml(pe), _scpml(ph)
 
     @property
     @lru_cache()
