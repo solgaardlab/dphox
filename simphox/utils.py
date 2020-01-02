@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.sparse as sp
 
-from .typing import List, Callable
+from .typing import List, Callable, Optional
 
 
 def d2curl_op(d: List[sp.spmatrix]) -> sp.spmatrix:
@@ -27,3 +27,23 @@ def grid_average(params: np.ndarray) -> np.ndarray:
     p_z = (p + np.roll(p, shift=1, axis=0) + np.roll(p, shift=1, axis=1) +
            np.roll(p, shift=-1, axis=0) + np.roll(p, shift=-1, axis=1)) / 5
     return np.stack([p_x, p_y, p_z])
+
+
+def emplot(ax, val, eps, spacing: Optional[float] = None, field_cmap: str = 'RdBu'):
+    ax.imshow(eps.T, cmap='gray', origin='lower left', alpha=1)
+    ax.imshow(val.T, cmap=field_cmap, origin='lower left', alpha=0.9)
+    ax.set_ylabel(r'$y$ ($\mu$m)')
+    ax.set_xlabel(r'$x$ ($\mu$m)')
+    if spacing:  # in microns!
+        xticks = ax.get_xticks() * spacing
+        ax.set_xticklabels(np.around(xticks, 2))
+        yticks = ax.get_yticks() * spacing
+        ax.set_yticklabels(np.around(yticks, 2))
+
+
+def field_emplot_re(ax, field: np.ndarray, eps: np.ndarray, spacing: Optional[float] = None):
+    emplot(ax, field.real, eps, spacing, field_cmap='RdBu')
+
+
+def field_emplot_mag(ax, field: np.ndarray, eps: np.ndarray, spacing: Optional[float] = None):
+    emplot(ax, np.abs(field), eps, spacing, field_cmap='hot')

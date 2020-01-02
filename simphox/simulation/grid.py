@@ -21,6 +21,7 @@ class Grid:
         self.spacing = spacing * np.ones(len(shape)) if isinstance(spacing, float) else np.asarray(spacing)
         self.ndim = len(shape)
         self.shape3 = np.hstack((self.shape, np.ones((3 - self.ndim,), dtype=self.shape.dtype)))
+
         if not self.ndim == len(self.spacing):
             raise AttributeError(f'Require len(grid_shape) == len(grid_spacing) but got'
                                  f'({len(self.shape)}, {len(self.spacing)})')
@@ -43,6 +44,7 @@ class Grid:
                                      :self.size[1]:self.spacing[1],
                                      :self.size[2]:self.spacing[2]], axis=0)
         self.components = []
+
 
     def _check_bounds(self, component) -> bool:
         b = component.bounds
@@ -114,6 +116,7 @@ class SimGrid(Grid):
         if not len(self.bloch) == len(self.shape):
             raise AttributeError(f'Need len(bloch_phase) == len(grid_shape),'
                                  f'got ({len(self.bloch)}, {len(self.shape)}).')
+        self.dtype = np.float64 if not pml and bloch_phase == 0 else np.complex128
 
     @lru_cache()
     def deriv(self, back: bool = False) -> List[sp.spmatrix]:
@@ -134,12 +137,12 @@ class SimGrid(Grid):
         if back:
             # get backward derivative
             _, dx = self._dxes
-            d = [sp.diags([1, -1, -np.conj(b[ax])], [0, -1, n - 1], shape=(n, n), dtype=np.complex128)
+            d = [sp.diags([1, -1, -np.conj(b[ax])], [0, -1, n - 1], shape=(n, n))
                  if n > 1 else 0 for ax, n in enumerate(s)]  # get single axis back-derivs
         else:
             # get forward derivative
             dx, _ = self._dxes
-            d = [sp.diags([-1, 1, b[ax]], [0, 1, -n + 1], shape=(n, n), dtype=np.complex128)
+            d = [sp.diags([-1, 1, b[ax]], [0, 1, -n + 1], shape=(n, n))
                  if n > 1 else 0 for ax, n in enumerate(s)]  # get single axis forward-derivs
         d = [sp.kron(d[0], sp.eye(s[1] * s[2])),
              sp.kron(sp.kron(sp.eye(s[0]), d[1]), sp.eye(s[2])),

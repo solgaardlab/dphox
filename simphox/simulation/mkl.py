@@ -61,7 +61,7 @@ feast_argtypes = [POINTER(c_char),      # uplo
 sfeast_scsrev, dfeast_scsrev, cfeast_hcsrev, zfeast_hcsrev = mkl.sfeast_scsrev, mkl.dfeast_scsrev,\
                                                              mkl.cfeast_hcsrev, mkl.zfeast_hcsrev
 sfeast_scsrev.argtypes = dfeast_scsrev.argtypes = cfeast_hcsrev.argtypes = zfeast_hcsrev.argtypes = feast_argtypes
-sfeast_scsrev.restype  = dfeast_scsrev.restype = cfeast_hcsrev.restype = zfeast_hcsrev.restype = None
+sfeast_scsrev.restype = dfeast_scsrev.restype = cfeast_hcsrev.restype = zfeast_hcsrev.restype = None
 
 
 from ..typing import Optional
@@ -75,7 +75,7 @@ PARDISO_FULLSOLVE = 13
 
 # a cleaner version of pyMKL with some additional factorization optimizations
 class Pardiso:
-    def __init__(self, mtype: int = 6):
+    def __init__(self, mtype: int = 13):
         self.mtype = mtype
         if mtype in (1, 3):
             raise NotImplementedError(f"mtype = {mtype} - structurally symmetric not supported")
@@ -206,7 +206,7 @@ class Feast:
     def __init__(self, num_contours: int = 8, stopping: int = 12, max_refinement_loops_dp: int = 20,
                  max_refinement_loops_sp: int = 5, one_contour: bool = False,
                  check_input: bool = False, check_pos_definite: bool = False):
-        self.fpm = np.zeros(128, np.int)
+        self.fpm = np.zeros(128, np.int32)
         self.fpm_ = self.fpm.ctypes.data_as(POINTER(c_int))
         self.iparm = self.fpm[-64:]
 
@@ -223,16 +223,15 @@ class Feast:
         # from pyMKL
         self.iparm[1] = 3   # Parallel nested dissection for reordering
         self.iparm[23] = 1  # Parallel factorization
-        self.iparm[34] = 1  # Zero-indexing
 
     def feast(self, mat: sp.csr_matrix, m0: int, erange: Tuple[float, float], symmetric: bool = True):
         dtype = mat.dtype
         ctypes_dtype = np.ctypeslib.ndpointer(dtype)
         single_precision = dtype == np.complex64 or dtype == np.float32
-        rdtype = np.float64 if single_precision else np.float32
+        rdtype = np.float32 if single_precision else np.float64
         ctypes_rdtype = np.ctypeslib.ndpointer(rdtype)
         if dtype == np.complex128 or dtype == np.complex64:
-            feast_fn = zfeast_hcsrev if single_precision else cfeast_hcsrev
+            feast_fn = cfeast_hcsrev if single_precision else zfeast_hcsrev
         elif dtype == np.float64 or dtype == np.float32:
             feast_fn = sfeast_scsrev if single_precision else dfeast_scsrev
         else:
@@ -240,8 +239,8 @@ class Feast:
                             f'but got {mat.dtype}.')
 
         # If mat is symmetric, store only the upper triangular portion
-        if symmetric:
-            mat = sp.triu(mat, format='csr')
+        # if symmetric:
+        #     mat = sp.triu(mat, format='csr')
 
         if mat.shape[0] != mat.shape[1] or mat.ndim > 2:
             raise ValueError(f'Expected mat square (i.e., shape (n, n)), but has shape: {mat.shape}')
@@ -252,16 +251,15 @@ class Feast:
         n = mat.shape[0]
 
         emin, emax = erange
-        uplo_ = byref(c_char(b'U')) if symmetric else byref(c_char(b'F'))
+        # uplo_ = byref(c_char(b'U')) if symmetric else byref(c_char(b'F'))
+        uplo_ = byref(c_char(b'F'))
         emin_ = byref(c_float(emin)) if single_precision else byref(c_double(emin))
         emax_ = byref(c_float(emax)) if single_precision else byref(c_double(emax))
         epsout_ = byref(c_float(0.0)) if single_precision else byref(c_double(0.0))
         loop = c_int(0)
         m = c_int(0)
         x = np.zeros(m0 * n, dtype=dtype)
-        x_ = x.ctypes.data_as(ctypes_dtype)
         e = np.zeros(m0, dtype=rdtype)
-        e_ = e.ctypes.data_as(ctypes_rdtype)
         res = np.zeros(m0, dtype=rdtype)
         res_ = res.ctypes.data_as(ctypes_rdtype)
         info = c_int(0)
@@ -270,16 +268,16 @@ class Feast:
             uplo_,                                              # uplo
             byref(c_int(n)),                                    # n
             mat.data.ctypes.data_as(ctypes_dtype),              # a
-            mat.indptr.ctypes.data_as(POINTER(c_int)),          # ia
-            mat.indices.ctypes.data_as(POINTER(c_int)),         # ja
+            (mat.indptr + 1).ctypes.data_as(POINTER(c_int)),    # ia (one-based indexing)
+            (mat.indices + 1).ctypes.data_as(POINTER(c_int)),   # ja (one-based indexing)
             self.fpm_,                                          # fpm
             epsout_,                                            # epsout
             byref(loop),                                        # loop
             emin_,                                              # emin
             emax_,                                              # emax
             c_int(m0),                                          # m0
-            e_,                                                 # e
-            x_,                                                 # x
+            e.ctypes.data_as(ctypes_rdtype),                    # e
+            x.ctypes.data_as(ctypes_dtype),                     # x
             byref(m),                                           # m
             res_,                                               # res
             byref(info)                                         # info
@@ -290,11 +288,11 @@ class Feast:
                                f"This could mean that the matrix is singular.")
 
         if info.value != 0:
-            raise RuntimeError(f"Feast returned an error with code {info.value}. "
+            raise RuntimeError(f"Feast returned an error/warning with code {info.value}. "
                                f"Check error codes in manual: "
                                f"https://software.intel.com/sites/default/files/mkl-2020-developer-reference-fortran.pdf")
 
-        return e, x.reshape((n, m0), order='f').T, m.value, loop.value, res, info.value
+        return e, x.reshape((n, m0), order='f'), m.value, loop.value, res, info.value
 
 
 pardiso = Pardiso()
