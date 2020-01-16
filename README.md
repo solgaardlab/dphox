@@ -1,2 +1,2 @@
-# phoxy
-Design module for tunable integrated optics
+# simphox
+Design and simulation module for photonics
