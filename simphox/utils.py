@@ -29,21 +29,19 @@ def grid_average(params: np.ndarray) -> np.ndarray:
     return np.stack([p_x, p_y, p_z])
 
 
-def emplot(ax, val, eps, spacing: Optional[float] = None, field_cmap: str = 'RdBu'):
-    ax.imshow(eps.T, cmap='gray', origin='lower left', alpha=1)
-    ax.imshow(val.T, cmap=field_cmap, origin='lower left', alpha=0.9)
-    ax.set_ylabel(r'$y$ ($\mu$m)')
-    ax.set_xlabel(r'$x$ ($\mu$m)')
+def emplot(ax, val, eps, spacing: Optional[float] = None, field_cmap: str = 'RdBu', alpha=0.9):
+    nx, ny = val.shape
+    extent = (0, int(nx * spacing), 0, int(ny * spacing)) if spacing else (0, nx, 0, ny)
+    ax.imshow(eps.T, cmap='gray', origin='lower left', alpha=1, extent=extent)
+    ax.imshow(val.T, cmap=field_cmap, origin='lower left', alpha=alpha, extent=extent)
     if spacing:  # in microns!
-        xticks = ax.get_xticks() * spacing
-        ax.set_xticklabels(np.around(xticks, 2))
-        yticks = ax.get_yticks() * spacing
-        ax.set_yticklabels(np.around(yticks, 2))
+        ax.set_ylabel(r'$y$ ($\mu$m)')
+        ax.set_xlabel(r'$x$ ($\mu$m)')
 
 
 def field_emplot_re(ax, field: np.ndarray, eps: np.ndarray, spacing: Optional[float] = None):
-    emplot(ax, field.real, eps, spacing, field_cmap='RdBu')
+    emplot(ax, field.real, eps, spacing)
 
 
 def field_emplot_mag(ax, field: np.ndarray, eps: np.ndarray, spacing: Optional[float] = None):
-    emplot(ax, np.abs(field), eps, spacing, field_cmap='hot')
+    emplot(ax, np.abs(field), eps, spacing, field_cmap='hot', alpha=0.8)

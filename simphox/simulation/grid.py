@@ -105,6 +105,7 @@ class SimGrid(Grid):
         self.pml_shape = np.ones(self.ndim, dtype=np.int) * pml if isinstance(pml, int) else pml
         self.pml_eps = pml_eps
         self.grid_avg = grid_avg
+        self.field_shape = np.hstack((3, self.shape))
         if self.pml_shape is not None:
             if np.any(self.pml_shape <= 3) or np.any(self.pml_shape >= self.shape // 2):
                 raise AttributeError(f'PML shape must be more than 3 and less than half the shape on each axis.')
