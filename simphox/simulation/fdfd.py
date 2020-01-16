@@ -197,8 +197,6 @@ class FDFD(SimGrid):
         where :math:`0 \leq m < M` for the :math:`M` (`num_modes`) modes with the largest wavenumbers
         (:math:`\beta_m = \sqrt{\lambda_m}`).
 
-        The wavenumber or :math:`\beta` corresponds to the square root of the eigenvalues, i.e.
-
         Args:
             num_modes: Number of modes
             beta_guess: Guess for propagation constant :math:`\beta`
@@ -282,18 +280,16 @@ class FDFD(SimGrid):
         if self.pml_shape is None:
             return np.meshgrid(*self.cell_sizes, indexing='ij'), np.meshgrid(*self.cell_sizes, indexing='ij')
         else:
-            dxes_pml_e, dxes_pml_h = ([], [])
+            dxes_pml_e, dxes_pml_h = [], []
             for ax, p in enumerate(self.pos):
-                if self.cell_sizes[ax].size == 1:
-                    dxes_pml_e.append(self.cell_sizes[ax])
-                    dxes_pml_h.append(self.cell_sizes[ax])
-                else:
-                    scpml_e, scpml_h = self.scpml(ax)
-                    dxes_pml_e.append(self.cell_sizes[ax] * scpml_e)
-                    dxes_pml_h.append(self.cell_sizes[ax] * scpml_h)
+                scpml_e, scpml_h = self.scpml(ax)
+                dxes_pml_e.append(self.cell_sizes[ax] * scpml_e)
+                dxes_pml_h.append(self.cell_sizes[ax] * scpml_h)
             return np.meshgrid(*dxes_pml_e, indexing='ij'), np.meshgrid(*dxes_pml_h, indexing='ij')
 
     def scpml(self, ax: int, exp_scale: float = 4, log_reflection: float = -16) -> Tuple[np.ndarray, np.ndarray]:
+        if self.cell_sizes[ax].size == 1:
+            return np.ones(1), np.ones(1)
         p = self.pos[ax]
         pe, ph = (p[:-1] + p[1:]) / 2, p[:-1]
         absorption_corr = self.k0 * self.pml_eps
