@@ -4,5 +4,4 @@ matplotlib
 shapely
 gdspy
 descartes
-scikit-image
-plotly
+nazca

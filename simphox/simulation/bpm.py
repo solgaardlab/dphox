@@ -14,7 +14,7 @@ except OSError:  # if mkl isn't installed
     from scipy.sparse.linalg import spsolve
 
 
-class FDFD(SimGrid):
+class BPM(SimGrid):
     def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
                  wavelength: float = 1.55, bloch_phase: Union[Dim, float] = 0.0,
                  pml: Optional[Union[Shape, Dim]] = None, pml_eps: float = 1.0,
@@ -332,4 +332,3 @@ class FDFD(SimGrid):
         ddz: sp.coo_matrix = self.ddz.tocoo()
         rc_curl_curl = np.vstack((ddz.row, ddz.col))
         return ddz.data, rc_curl_curl
-

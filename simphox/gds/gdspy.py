@@ -1,5 +1,4 @@
 import gdspy as gy
-import numpy as np
 import copy
 from shapely.vectorized import contains
 from shapely.geometry import Polygon, MultiPolygon
@@ -13,7 +12,7 @@ try:
 except ImportError:
     pass
 
-from .typing import *
+from simphox.typing import *
 
 
 class Path(gy.Path):
@@ -65,6 +64,9 @@ class Path(gy.Path):
             if end_bend_dim[-1] > 0:
                 self.segment(end_bend_dim[-1], layer=layer)
         return self
+
+    def to(self, port: Dim2):
+        return self.sbend((port[0] - self.x, port[1] - self.y))
 
 
 class Component:
@@ -354,3 +356,4 @@ class MMI(Component):
     @property
     def output_ports(self) -> np.ndarray:
         return self.input_ports + np.asarray((self.size[0], 0))
+
