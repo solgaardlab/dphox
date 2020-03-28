@@ -5,7 +5,7 @@ import nazca as nd
 import numpy as np
 
 # NOTE: This file currently contains privileged information. Only distribute to those who have signed NDA with AMF.
-# This NDA is a MUTUAL CONFIDENTIALITY AGREEMENT signed at 13th March 2020 by Advanced Micro Foundry Pte. Ltd (Co. Reg.
+# This NDA is a MUTUAL CONFIDENTIALITY AGREEMENT signed on 13th March 2020 by Advanced Micro Foundry Pte. Ltd (Co. Reg.
 # No. 20170322R) of 11 Science Park Road Singapore 117685 and Olav Solgaard, Stanford University,
 # Stanford, CA 94305, USA. Much contribution to this code (aside from authors of this repo) comes from much work done at
 # Politecnico de Milano, specifically by Maziyar Milanizadeh. Any further distribution of this work must be done with
@@ -13,20 +13,20 @@ import numpy as np
 
 
 class PhotonicChip:
-    def __init__(self, process_stack: dict, waveguide_w: float):
+    def __init__(self, process_stack: dict, waveguide_w: float, accuracy: float = 0.001):
         """
 
         Args:
-            process_stack: The stack, in JSON format (see below example)
+            process_stack: The stack, in JSON format
             waveguide_w: The width of the waveguide (μm)
         """
         for layer_name in process_stack['layers']:
-            nd.add_layer(name=layer_name, layer=process_stack['layers'][layer_name], accuracy=0.001, overwrite=True)
+            nd.add_layer(name=layer_name, layer=process_stack['layers'][layer_name], accuracy=accuracy, overwrite=True)
         for xs_name in process_stack['cross_sections']:
             for layer_dict in process_stack['cross_sections'][xs_name]:
                 nd.add_layer2xsection(
                     xsection=xs_name,
-                    accuracy=0.001,
+                    accuracy=accuracy,
                     overwrite=True,
                     **layer_dict)
         xs = nd.get_xsection('waveguide_xs')
@@ -178,22 +178,22 @@ class PhotonicChip:
 
             # upper path
             self.grating.put(0, 0, 180)
-            self.waveguide_ic.strt(width=waveguide_w, length=arm_l).put(0, 0, 0)
+            self.waveguide_ic.strt(width=self.waveguide_w, length=arm_l).put(0, 0, 0)
             self.tunable_coupler_path(angle, arm_l, interaction_l, radius,
                                       trench_gap, heater=heater, trench=trench)
             self.grating.put()
 
             # lower path
             self.grating.put(0, mzi_w, 180)
-            self.waveguide_ic.strt(width=waveguide_w, length=arm_l).put(0, mzi_w, 0)
+            self.waveguide_ic.strt(width=self.waveguide_w, length=arm_l).put(0, mzi_w, 0)
             self.tunable_coupler_path(-angle, arm_l, interaction_l, radius,
                                       trench_gap, heater=heater, trench=trench)
             self.grating.put()
         return mzi
 
     @nd.hashme('binary_tree_4', 'n_pads', 'pitch', 'sensor')
-    def binary_tree_4(self, gap_w, interaction_l, mzi_w, arm_l, radius, trench_gap, right_facing=True,
-                      sensor=0):
+    def splitter_tree_4(self, gap_w, interaction_l, mzi_w, arm_l, radius, trench_gap, right_facing=True,
+                        sensor=0):
         directions = np.asarray([(1, 1), (1, -1), (-1, 1), (-1, -1)]) if right_facing else \
             np.asarray([(1, 1), (-1, 1), (1, -1), (-1, -1)])
 
@@ -209,9 +209,12 @@ class PhotonicChip:
                 self.tunable_coupler_path(direction[1] * angle, arm_l, interaction_l, radius,
                                           trench_gap, heater=heater, trench=trench)
                 if sensor != 0:
-                    self.waveguide_ic.bend(radius=radius, angle=sensor * 45).put()
-                    self.waveguide_ic.strt(length=(4 * mzi_w - radius) * np.sqrt(2)).put()
-                    self.waveguide_ic.bend(radius=radius, angle=-sensor * 45).put()
+                    c = idx if sensor < 0 else 4 - idx
+                    self.waveguide_ic.strt(length=arm_l * (c + 0.25 * (1 + sensor))).put()
+                    self.waveguide_ic.bend(radius=radius, angle=sensor * 90).put()
+                    self.waveguide_ic.strt(length=((4 + (idx - 2.5) * sensor) * mzi_w - 2 * radius)).put()
+                    self.waveguide_ic.bend(radius=radius, angle=-sensor * 90).put()
+                    self.waveguide_ic.strt(length=arm_l * (4 - c - 0.25 * (1 + sensor))).put()
                     self.tunable_coupler_path(sensor * angle, arm_l, interaction_l, radius,
                                               trench_gap, heater=heater, trench=trench)
                 self.waveguide_ic.strt(length=arm_l).put()
@@ -307,8 +310,9 @@ if __name__ == 'main':
     chip.triangular_mesh(n=6, **mzi_kwargs, with_grating_taps=False).put(0, 900)
 
     # splitter trees
-    chip.binary_tree_4(**mzi_kwargs, sensor=1).put(0, 1800)
-    chip.binary_tree_4(**mzi_kwargs, sensor=-1).put(0, 1800 + 4 * interport_w)
+    chip.splitter_tree_4(**mzi_kwargs, sensor=1).put(0, 1800)
+    chip.splitter_tree_4(**mzi_kwargs, sensor=-1).put(0, 1800 + 4 * interport_w)
+    chip.mzi(**mzi_kwargs).put(0, 3000)
 
     # bond pad arrays
 
