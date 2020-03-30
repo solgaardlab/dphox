@@ -144,33 +144,48 @@ class PhotonicChip:
             nd.put_stub([], length=0)
         return bond_pad_array
 
-    def coupler_path(self, angle, interaction_l, radius):
+    def tap_notch_path(self, angle, radius):
+        self.waveguide_ic.bend(radius=radius, angle=angle / 8).put()
+        self.waveguide_ic.bend(radius=radius, angle=-angle / 8).put()
+        tap_waveguide = self.waveguide_ic.bend(radius=radius, angle=-angle / 8).put()
+        self.waveguide_ic.bend(radius=radius, angle=angle / 8).put()
+        return tap_waveguide
+
+    def coupler_path(self, angle, interaction_l, radius, tap_notch=False):
+        # if input_notch:
+        #     input_waveguide = self.tap_notch_path(np.abs(angle), radius)
+        #     self.waveguide_ic.bend(radius=radius, angle=angle).put()
+        # else:
         input_waveguide = self.waveguide_ic.bend(radius=radius, angle=angle).put()
         self.waveguide_ic.bend(radius=radius, angle=-angle).put()
         self.waveguide_ic.strt(length=interaction_l).put()
         self.waveguide_ic.bend(radius=radius, angle=-angle).put()
         output_waveguide = self.waveguide_ic.bend(radius=radius, angle=angle).put()
-        return input_waveguide.pin['a0'], output_waveguide.pin['b0']
+        tap_waveguide = output_waveguide
+        if tap_notch:
+            tap_waveguide = self.tap_notch_path(np.abs(angle), radius)
+            output_waveguide = self.waveguide_ic.strt(length=25).put()  # to make room for trench
+        return input_waveguide.pin['a0'], tap_waveguide.pin['a0'], output_waveguide.pin['b0']
 
     def mzi_path(self, angle, arm_l, interaction_l, radius, trench_gap,
-                 heater: Optional[nd.Cell] = None, trench: Optional[nd.Cell] = None):
+                 heater: Optional[nd.Cell] = None, trench: Optional[nd.Cell] = None, with_grating_taps=True):
         def put_heater():
             x, y = nd.cp.x(), nd.cp.y()
             if trench:
                 trench.put(x, y + trench_gap)
-                # trench.put(x, y - trench_gap)
+                trench.put(x, y - trench_gap)
             if heater:
                 heater.put(x, y)
         put_heater()
         self.waveguide_ic.strt(length=arm_l).put()
-        i_node, l_node = self.coupler_path(angle, interaction_l, radius)
+        i_node, lt_node, l_node = self.coupler_path(angle, interaction_l, radius, tap_notch=with_grating_taps)
         put_heater()
         self.waveguide_ic.strt(length=arm_l).put()
-        r_node, o_node = self.coupler_path(angle, interaction_l, radius)
-        return i_node, l_node, r_node, o_node
+        r_node, ot_node, o_node = self.coupler_path(angle, interaction_l, radius, tap_notch=with_grating_taps)
+        return i_node, l_node, lt_node, r_node, ot_node, o_node
 
     @nd.hashme('mzi', 'n_pads', 'pitch')
-    def mzi(self, gap_w, interaction_l, mzi_w, arm_l, radius, trench_gap, with_grating_taps=True):
+    def mzi(self, gap_w, interaction_l, mzi_w, arm_l, radius, trench_gap, with_grating_taps=False):
         heater = self.heater(heater_l=arm_l)
         trench = self.trench_ic.strt(length=arm_l)
         with nd.Cell(hashme=True) as mzi:
@@ -180,7 +195,7 @@ class PhotonicChip:
             self.grating.put(0, 0, 180)
             self.waveguide_ic.strt(width=self.waveguide_w, length=arm_l).put(0, 0, 0)
             self.mzi_path(angle, arm_l, interaction_l, radius,
-                          trench_gap, heater=heater, trench=trench)
+                          trench_gap, heater=heater, trench=trench, with_grating_taps=with_grating_taps)
             self.waveguide_ic.strt(length=arm_l).put()
             self.grating.put()
 
@@ -188,7 +203,7 @@ class PhotonicChip:
             self.grating.put(0, mzi_w, 180)
             self.waveguide_ic.strt(width=self.waveguide_w, length=arm_l).put(0, mzi_w, 0)
             self.mzi_path(-angle, arm_l, interaction_l, radius,
-                          trench_gap, heater=heater, trench=trench)
+                          trench_gap, heater=heater, trench=trench, with_grating_taps=with_grating_taps)
             self.waveguide_ic.strt(length=arm_l).put()
             self.grating.put()
         return mzi
@@ -212,14 +227,16 @@ class PhotonicChip:
                               trench_gap, heater=heater, trench=trench)
                 self.waveguide_ic.strt(length=arm_l).put()
                 if sensor != 0:
+                    # currently very hacky :(
                     c = idx if sensor < 0 else 4 - idx
+                    small_radius = 10
                     self.waveguide_ic.strt(length=arm_l * (c + 0.25 * (1 + sensor))).put()
-                    self.waveguide_ic.bend(radius=radius, angle=sensor * 90).put()
+                    self.waveguide_ic.bend(radius=small_radius, angle=sensor * 90).put()
                     if sensor < 0:
-                        self.waveguide_ic.strt(length=((4.5 - idx) * mzi_w - 2 * radius)).put()
+                        self.waveguide_ic.strt(length=((4.5 - idx) * mzi_w - 2 * small_radius)).put()
                     else:
-                        self.waveguide_ic.strt(length=((idx + 1.5) * mzi_w - 2 * radius)).put()
-                    self.waveguide_ic.bend(radius=radius, angle=-sensor * 90).put()
+                        self.waveguide_ic.strt(length=((idx + 1.5) * mzi_w - 2 * small_radius)).put()
+                    self.waveguide_ic.bend(radius=small_radius, angle=-sensor * 90).put()
                     self.waveguide_ic.strt(length=arm_l * (4.25 - c - 0.25 * sensor)).put()
                     self.mzi_path(sensor * angle, arm_l, interaction_l, radius,
                                   trench_gap, heater=heater, trench=trench)
@@ -234,8 +251,6 @@ class PhotonicChip:
         num_straight = (n - 1) - (np.hstack([np.arange(1, n), np.arange(n - 2, 0, -1)]) + 1)
         bend_angle = np.arccos(1 - (mzi_w - gap_w - self.waveguide_w) / 4 / radius) * 180 / np.pi
 
-        angles, pos_i, pos_l, pos_r, pos_o = [], [], [], [], []
-
         with nd.Cell(hashme=True) as triangular_mesh:
             heater = self.heater(heater_l=arm_l)
             trench = self.trench_ic.strt(length=arm_l)
@@ -243,55 +258,40 @@ class PhotonicChip:
             for idx in range(n):
                 self.grating.put(0, mzi_w * idx, 180)
                 self.waveguide_ic.strt(width=self.waveguide_w, length=arm_l).put(0, mzi_w * idx, 0)
-                # heater.put(arm_l, mzi_w * idx)
-                # trench.put(arm_l, mzi_w * idx + trench_gap)
-                # trench.put(arm_l, mzi_w * idx - trench_gap)
-                # self.waveguide_ic.strt(width=self.waveguide_w, length=arm_l).put(arm_l, mzi_w * idx)
                 for layer in range(2 * n - 3):
                     angle = -bend_angle if idx - layer % 2 < n and idx >= num_straight[layer] and (
                             idx + layer) % 2 else bend_angle
                     angle = -angle if idx < num_straight[layer] else angle
-                    angles.append(angle)
-                    i_node, l_node, r_node, o_node = self.mzi_path(angle, arm_l, interaction_l, radius,
-                                                                   trench_gap, heater=heater, trench=trench)
+                    i_node, l_node, lt_node, r_node, ot_node, o_node = self.mzi_path(angle, arm_l, interaction_l, radius,
+                                                                                     trench_gap, heater=heater, trench=trench,
+                                                                                     with_grating_taps=with_grating_taps)
 
                     nd.Pin(f'i{idx}{layer}').put(i_node)
                     nd.Pin(f'l{idx}{layer}').put(l_node)
+                    nd.Pin(f'lt{idx}{layer}').put(lt_node)
                     nd.Pin(f'r{idx}{layer}').put(r_node)
                     nd.Pin(f'o{idx}{layer}').put(o_node)
+                    nd.Pin(f'ot{idx}{layer}').put(ot_node)
 
-                    y_offset = (self.waveguide_w + gap_w) * np.sign(angle)
+                    y_offset = self.waveguide_w + gap_w
 
-                    pos_i.append((i_node.x, i_node.y - y_offset))
-                    pos_l.append((l_node.x, l_node.y - y_offset))
-                    pos_r.append((r_node.x, r_node.y - y_offset))
-                    pos_o.append((o_node.x, o_node.y - y_offset))
+                    if with_grating_taps:
+                        for p in (lt_node, ot_node):
+                            angle_1 = np.abs(angle) / 4
+                            angle_2 = 90 - angle_1
+                            self.waveguide_ic.bend(radius=radius, angle=angle_1).put(p.x, p.y + y_offset)
+                            self.waveguide_ic.bend(radius=10, angle=angle_2).put()
+                            self.grating.put(nd.cp.x(), nd.cp.y(), 90)
+                            self.waveguide_ic.bend(radius=radius, angle=-angle_1).put(p.x, p.y + y_offset, -180)
+                            self.waveguide_ic.bend(radius=10, angle=-angle_2).put()
+                            self.grating.put(nd.cp.x(), nd.cp.y(), 90)
+                    self.waveguide_ic.strt().put(o_node)
                 output = self.waveguide_ic.strt(length=2 * arm_l).put()
                 self.grating.put()
                 o_node = output.pin['a0']
                 heater.put(o_node.x, mzi_w * idx)
                 trench.put(o_node.x, mzi_w * idx + trench_gap)
-
-            # grating taps
-            if with_grating_taps:
-                for (angle, pi, pl, pr, po) in zip(angles, pos_i, pos_l, pos_r, pos_o):
-                    for p in (pi, pr):
-                        self.waveguide_ic.bend(width=self.waveguide_w, radius=radius, angle=-angle / 4).put(p[0], p[1])
-                        self.waveguide_ic.bend(radius=radius, angle=angle / 2).put()
-                        self.waveguide_ic.bend(radius=radius, angle=-angle / 4).put()
-                        self.waveguide_ic.strt(length=15).put()
-                        self.grating.put(nd.cp.x(), nd.cp.y())
-
-                    for p in (pl, po):
-                        self.waveguide_ic.bend(width=self.waveguide_w, radius=radius, angle=angle / 4).put(p[0], p[1], -180)
-                        self.waveguide_ic.bend(radius=radius, angle=-angle / 2).put()
-                        self.waveguide_ic.bend(radius=radius, angle=angle / 4).put()
-                        if angle < 0:
-                            self.waveguide_ic.bend(radius=57 / 4, angle=np.sign(angle) * 90).put()
-                            self.waveguide_ic.strt(length=5).put()
-                            self.waveguide_ic.bend(radius=57 / 4, angle=np.sign(angle) * 90).put()
-                            self.waveguide_ic.strt(length=45).put()
-                            self.grating.put(nd.cp.x(), nd.cp.y())
+                trench.put(o_node.x, mzi_w * idx - trench_gap)
 
             nd.put_stub([], length=0)
         return triangular_mesh
