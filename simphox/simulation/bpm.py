@@ -24,7 +24,7 @@ class BPM(SimGrid):
         self.k0 = 2 * np.pi / self.wavelength  # defines the units for the simulation!
         self.no_grad = no_grad
 
-        super(FDFD, self).__init__(
+        super(BPM, self).__init__(
             shape=shape,
             spacing=spacing,
             eps=eps,
@@ -144,7 +144,7 @@ class BPM(SimGrid):
 
         """
         e = self.reshape(e) if e.ndim == 2 else e
-        return self.curl_e(e) / self.k0
+        return self.curl_f @ e / self.k0
 
     def h2e(self, h: np.ndarray) -> np.ndarray:
         """
@@ -161,7 +161,7 @@ class BPM(SimGrid):
 
         """
         h = self.reshape(h) if h.ndim == 2 else h
-        return self.curl_h(h) / (self.k0 * self.eps_t)
+        return self.curl_b @ h / (self.k0 * self.eps_t)
 
     def solve(self, src: np.ndarray, solver_fn: Optional[SpSolve] = None, reshaped: bool = True) -> np.ndarray:
         """FDFD e-field Solver

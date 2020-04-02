@@ -129,7 +129,7 @@ class FDFD(SimGrid):
 
     C = wgm  # C is the matrix for the guided mode eigensolver
 
-    def e2h(self, e: np.ndarray) -> np.ndarray:
+    def e2h(self, e: np.ndarray, beta: Optional[float] = None) -> np.ndarray:
         """
         Convert magnetic field :math:`\mathbf{e}` to electric field :math:`\mathbf{h}`.
 
@@ -144,9 +144,9 @@ class FDFD(SimGrid):
 
         """
         e = self.reshape(e) if e.ndim == 2 else e
-        return self.curl_e(e) / self.k0
+        return self.curl_e(e, beta) / self.k0
 
-    def h2e(self, h: np.ndarray) -> np.ndarray:
+    def h2e(self, h: np.ndarray, beta: Optional[float] = None) -> np.ndarray:
         """
         Convert magnetic field :math:`\mathbf{h}` to electric field :math:`\mathbf{e}`.
 
@@ -161,7 +161,7 @@ class FDFD(SimGrid):
 
         """
         h = self.reshape(h) if h.ndim == 2 else h
-        return self.curl_h(h) / (self.k0 * self.eps_t)
+        return self.curl_h(h, beta) / (self.k0 * self.eps_t)
 
     def solve(self, src: np.ndarray, solver_fn: Optional[SpSolve] = None, reshaped: bool = True) -> np.ndarray:
         """FDFD e-field Solver
