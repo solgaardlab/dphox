@@ -1,8 +1,9 @@
-from ..typing import Tuple, Optional
+from ..typing import Optional, List
 from ..constants import AMF_STACK
 
 import nazca as nd
 import numpy as np
+
 
 # NOTE: This file currently contains privileged information. Only distribute to those who have signed NDA with AMF.
 # This NDA is a MUTUAL CONFIDENTIALITY AGREEMENT signed on 13th March 2020 by Advanced Micro Foundry Pte. Ltd (Co. Reg.
@@ -32,17 +33,19 @@ class PhotonicChip:
         xs = nd.get_xsection('waveguide_xs')
         xs.os = 0.0  # define strt - bend offset
         xs.minimum_radius = 10
+        self.min_radius = 10
         xs = nd.get_xsection('heater_xs')
         xs.os = 0.0
 
         self.waveguide_w = waveguide_w
-        self.waveguide_ic = nd.interconnects.Interconnect(width=waveguide_w, radius=10, xs='waveguide_xs')
-        self.slab_ic = nd.interconnects.Interconnect(width=waveguide_w, radius=10, xs='slab_xs')
-        self.grating_ic = nd.interconnects.Interconnect(width=waveguide_w, radius=10, xs='grating_xs')
-        self.heater_ic = nd.interconnects.Interconnect(width=waveguide_w, radius=10, xs='heater_xs')
-        self.via_heater_ic = nd.interconnects.Interconnect(width=waveguide_w, radius=10, xs='via_heater_xs')
-        self.pad_ic = nd.interconnects.Interconnect(width=100, radius=10, xs='pad_xs')
-        self.trench_ic = nd.interconnects.Interconnect(width=10, radius=10, xs='trench_xs')
+        self.waveguide_ic = nd.interconnects.Interconnect(width=waveguide_w, radius=self.min_radius, xs='waveguide_xs')
+        self.slab_ic = nd.interconnects.Interconnect(width=waveguide_w, radius=self.min_radius, xs='slab_xs')
+        self.grating_ic = nd.interconnects.Interconnect(width=waveguide_w, radius=self.min_radius, xs='grating_xs')
+        self.heater_ic = nd.interconnects.Interconnect(width=waveguide_w, radius=self.min_radius, xs='heater_xs')
+        self.via_heater_ic = nd.interconnects.Interconnect(width=waveguide_w, radius=self.min_radius,
+                                                           xs='via_heater_xs')
+        self.pad_ic = nd.interconnects.Interconnect(width=100, radius=self.min_radius, xs='pad_xs')
+        self.trench_ic = nd.interconnects.Interconnect(width=10, radius=self.min_radius, xs='trench_xs')
 
         self.grating = self._grating()
 
@@ -94,10 +97,6 @@ class PhotonicChip:
             # Create rib and slab regions
             grating_ic.strt(length=grat_l, width=grat_w).put(grat_sep)
             slab_ic.strt(length=grat_l, width=grat_w).put(grat_sep)
-            # Export nodes
-            nd.Pin(f'g').put(in_tpr.pin['a0'])
-
-            nd.put_stub([], length=0)
 
         return grating
 
@@ -107,25 +106,14 @@ class PhotonicChip:
         heater_ic, via_ic = self.heater_ic, self.via_heater_ic
         with nd.Cell(hashme=True) as heater:
             htr = heater_ic.strt(length=heater_l).put(0, 0)
-            via_in = via_ic.strt(width=via_w, length=via_w).put(htr.pin['a0'])
-            via_out = via_ic.strt(width=via_w, length=via_w).put(htr.pin['b0'])
-
-            # add pins to the building block
-            nd.Pin('hl').put(htr.pin['a0'])
-            nd.Pin('hr').put(htr.pin['b0'])
-            nd.Pin('pl').put(via_in.pin['a0'])
-            nd.Pin('pr').put(via_out.pin['b0'])
-
-            nd.put_stub([], length=0)
+            via_ic.strt(width=via_w, length=via_w).put(htr.pin['a0'])
+            via_ic.strt(width=via_w, length=via_w).put(htr.pin['b0'])
         return heater
 
     # Polimi bond pad (Maziyar Milanizadeh)
     def bond_pad(self, pad_w: float = 100, pad_l: float = 100):
         with nd.Cell(name='bond_pad') as bond_pad:
-            pad = self.pad_ic.strt(length=pad_l, width=pad_w).put()
-            # add pins to the building block
-            nd.Pin('a0', pin=pad.pin['a0']).put()
-            nd.Pin('b0', pin=pad.pin['b0']).put()
+            self.pad_ic.strt(length=pad_l, width=pad_w).put()
         return bond_pad
 
     # Polimi 1d bond pad array (Maziyar Milanizadeh)
@@ -137,25 +125,18 @@ class PhotonicChip:
             pad = self.bond_pad(pad_w=pad_w, pad_l=pad_l)
             for i in range(n_pads):
                 lattice_bond_pads.append(pad.put(i * pitch, 0, 270))
-                nd.Pin(f'pdt{i}').put(lattice_bond_pads[i].pin['a0'])
-                nd.Pin(f'pdb{i}').put(lattice_bond_pads[i].pin['b0'])
                 message = nd.text(text=f'{i}', align='cc', layer=10, height=50)
                 message.put(pitch / 2 + i * pitch, -pad_l / 2)
-            nd.put_stub([], length=0)
         return bond_pad_array
 
-    def tap_notch_path(self, angle, radius):
+    def tap_notch_path(self, angle: float, radius: float):
         self.waveguide_ic.bend(radius=radius, angle=angle / 8).put()
         self.waveguide_ic.bend(radius=radius, angle=-angle / 8).put()
         tap_waveguide = self.waveguide_ic.bend(radius=radius, angle=-angle / 8).put()
         self.waveguide_ic.bend(radius=radius, angle=angle / 8).put()
         return tap_waveguide
 
-    def coupler_path(self, angle, interaction_l, radius, tap_notch=False):
-        # if input_notch:
-        #     input_waveguide = self.tap_notch_path(np.abs(angle), radius)
-        #     self.waveguide_ic.bend(radius=radius, angle=angle).put()
-        # else:
+    def coupler_path(self, angle: float, interaction_l: float, radius: float, tap_notch: float = False):
         input_waveguide = self.waveguide_ic.bend(radius=radius, angle=angle).put()
         self.waveguide_ic.bend(radius=radius, angle=-angle).put()
         self.waveguide_ic.strt(length=interaction_l).put()
@@ -167,8 +148,8 @@ class PhotonicChip:
             output_waveguide = self.waveguide_ic.strt(length=25).put()  # to make room for trench
         return input_waveguide.pin['a0'], tap_waveguide.pin['a0'], output_waveguide.pin['b0']
 
-    def mzi_path(self, angle, arm_l, interaction_l, radius, trench_gap,
-                 heater: Optional[nd.Cell] = None, trench: Optional[nd.Cell] = None, with_grating_taps=True):
+    def mzi_path(self, angle: float, arm_l: float, interaction_l: float, radius: float, trench_gap: float,
+                 heater: Optional[nd.Cell] = None, trench: Optional[nd.Cell] = None, with_grating_taps: bool = True):
         def put_heater():
             x, y = nd.cp.x(), nd.cp.y()
             if trench:
@@ -176,6 +157,7 @@ class PhotonicChip:
                 trench.put(x, y - trench_gap)
             if heater:
                 heater.put(x, y)
+
         put_heater()
         self.waveguide_ic.strt(length=arm_l).put()
         i_node, lt_node, l_node = self.coupler_path(angle, interaction_l, radius, tap_notch=with_grating_taps)
@@ -185,7 +167,8 @@ class PhotonicChip:
         return i_node, l_node, lt_node, r_node, ot_node, o_node
 
     @nd.hashme('mzi', 'n_pads', 'pitch')
-    def mzi(self, gap_w, interaction_l, mzi_w, arm_l, radius, trench_gap, with_grating_taps=False):
+    def mzi(self, gap_w: float, interaction_l: float, mzi_w: float, arm_l: float, radius: float,
+            trench_gap: float, with_grating_taps: bool = False):
         heater = self.heater(heater_l=arm_l)
         trench = self.trench_ic.strt(length=arm_l)
         with nd.Cell(hashme=True) as mzi:
@@ -206,47 +189,101 @@ class PhotonicChip:
                           trench_gap, heater=heater, trench=trench, with_grating_taps=with_grating_taps)
             self.waveguide_ic.strt(length=arm_l).put()
             self.grating.put()
+
         return mzi
 
-    @nd.hashme('binary_tree_4', 'n_pads', 'pitch', 'sensor')
-    def splitter_tree_4(self, gap_w, interaction_l, mzi_w, arm_l, radius, trench_gap, right_facing=True,
-                        sensor=0):
-        directions = np.asarray([(1, 1), (1, -1), (-1, 1), (-1, -1)]) if right_facing else \
-            np.asarray([(1, 1), (-1, 1), (1, -1), (-1, -1)])
+    def equal_bend_mesh(self, directions, gap_w: float, interaction_l: float, mzi_w: float, arm_l: float,
+                        radius: float, trench_gap: float, with_grating_taps: bool = True):
+        heater = self.heater(heater_l=arm_l)
+        trench = self.trench_ic.strt(length=arm_l)
+        angle = np.arccos(1 - (mzi_w - gap_w - self.waveguide_w) / 4 / radius) * 180 / np.pi
+        for idx, direction in enumerate(directions):
+            self.waveguide_ic.strt(width=self.waveguide_w, length=arm_l).put(0, mzi_w * idx, 0)
+            for d in direction:
+                self.mzi_path(d * angle, arm_l, interaction_l, radius,
+                              trench_gap, heater=heater, trench=trench,
+                              with_grating_taps=with_grating_taps)
+            self.waveguide_ic.strt(length=arm_l).put()
 
+    @nd.hashme('splitter_tree_4', 'gap_w', 'interaction_l', 'mzi_w', 'arm_l')
+    def splitter_tree_4(self, gap_w: float, interaction_l: float, mzi_w: float, arm_l: float,
+                        radius: float, trench_gap: float):
+        directions = np.asarray([(1, 1), (-1, 1), (1, -1), (-1, -1)])
         with nd.Cell(hashme=True) as binary_tree_4:
-            heater = self.heater(heater_l=arm_l)
-            trench = self.trench_ic.strt(length=arm_l)
-            angle = np.arccos(1 - (mzi_w - gap_w - self.waveguide_w) / 4 / radius) * 180 / np.pi
-            for idx, direction in enumerate(directions):
-                self.grating.put(0, mzi_w * idx, 180)
-                self.waveguide_ic.strt(width=self.waveguide_w, length=arm_l).put(0, mzi_w * idx, 0)
-                self.mzi_path(direction[0] * angle, arm_l, interaction_l, radius,
-                              trench_gap, heater=heater, trench=trench)
-                self.mzi_path(direction[1] * angle, arm_l, interaction_l, radius,
-                              trench_gap, heater=heater, trench=trench)
-                self.waveguide_ic.strt(length=arm_l).put()
-                if sensor != 0:
-                    # currently very hacky :(
-                    c = idx if sensor < 0 else 4 - idx
-                    small_radius = 10
-                    self.waveguide_ic.strt(length=arm_l * (c + 0.25 * (1 + sensor))).put()
-                    self.waveguide_ic.bend(radius=small_radius, angle=sensor * 90).put()
-                    if sensor < 0:
-                        self.waveguide_ic.strt(length=((4.5 - idx) * mzi_w - 2 * small_radius)).put()
-                    else:
-                        self.waveguide_ic.strt(length=((idx + 1.5) * mzi_w - 2 * small_radius)).put()
-                    self.waveguide_ic.bend(radius=small_radius, angle=-sensor * 90).put()
-                    self.waveguide_ic.strt(length=arm_l * (4.25 - c - 0.25 * sensor)).put()
-                    self.mzi_path(sensor * angle, arm_l, interaction_l, radius,
-                                  trench_gap, heater=heater, trench=trench)
-                self.grating.put()
-
+            self.equal_bend_mesh(directions, gap_w, interaction_l, mzi_w, arm_l, radius, trench_gap)
         return binary_tree_4
 
+    @nd.hashme('splitter_line_4', 'gap_w', 'interaction_l', 'mzi_w', 'arm_l')
+    def splitter_line_4(self, gap_w: float, interaction_l: float, mzi_w: float, arm_l: float,
+                        radius: float, trench_gap: float):
+        directions = np.asarray([(1, 1, 1), (-1, 1, 1), (-1, -1, 1), (-1, -1, -1)])
+        with nd.Cell(hashme=True) as diagonal_line_4:
+            self.equal_bend_mesh(directions, gap_w, interaction_l, mzi_w, arm_l, radius, trench_gap)
+        return diagonal_line_4
+
+    @nd.hashme('splitter_layer_4', 'gap_w', 'interaction_l', 'mzi_w', 'arm_l')
+    def splitter_layer_4(self, gap_w: float, interaction_l: float, mzi_w: float, arm_l: float,
+                        radius: float, trench_gap: float):
+        directions = np.asarray([[-1, 1, -1, 1, -1, 1, -1, 1]]).T
+        with nd.Cell(hashme=True) as layer_4:
+            self.equal_bend_mesh(directions, gap_w, interaction_l, mzi_w, arm_l, radius, trench_gap)
+        return layer_4
+
+    @nd.hashme('grating_array', 'n', 'period', 'final_period')
+    def grating_array(self, n: int, period: float, final_period: Optional[float] = None):
+        final_period = period if final_period is None else final_period
+        period_diff = final_period - period
+
+        grating_length = self.grating.bbox[2] - self.grating.bbox[0]
+        out_nodes = []
+
+        use_interposer = (period_diff > 0)
+        with nd.Cell(hashme=True) as gratings:
+            for idx in range(n + 2 * use_interposer):
+                self.grating.put(0, final_period * idx, flop=True)
+                if use_interposer:
+                    radius = period_diff / 2  # need to change
+                    angle = np.arccos(1 - period_diff / 4 / radius) * 180 / np.pi
+                    if idx == 0:
+                        self.waveguide_ic.bend(radius=radius, angle=-180).put(0, 0)
+                        self.waveguide_ic.strt(length=grating_length + 5).put()
+                        self.waveguide_ic.bend(radius=radius, angle=-90).put()
+                        self.waveguide_ic.strt(length=final_period * (n + 1) + 2 * radius).put()
+                        self.waveguide_ic.bend(radius=radius, angle=-90).put()
+                        self.waveguide_ic.strt(length=grating_length + 5).put()
+                        self.waveguide_ic.bend(radius=radius, angle=-180).put()
+                    elif idx < n + 1:
+                        self.waveguide_ic.strt().put(0, final_period * idx, 0)
+                        for i in range(int(np.ceil(n / 2))):
+                            if idx < int(np.ceil(n / 2)):
+                                self.waveguide_ic.bend(radius, angle).put()
+                                self.waveguide_ic.bend(radius, -angle).put()
+                                self.waveguide_ic.bend(radius, angle if i >= idx else -angle).put()
+                                out = self.waveguide_ic.bend(radius, -angle if i >= idx else angle).put()
+                            else:
+                                self.waveguide_ic.bend(radius, -angle).put()
+                                self.waveguide_ic.bend(radius, angle).put()
+                                self.waveguide_ic.bend(radius, -angle if i >= n - idx else angle).put()
+                                out = self.waveguide_ic.bend(radius, angle if i >= n - idx else -angle).put()
+                        out_nodes.append(out.pin['b0'])
+        return gratings, out_nodes
+
+    # def multipath_turn(self, n: int, radius: float, angle: float, curr_period: float, final_period: float):
+    #
+
+    def bidirectional_grating_tap(self, node: nd.Node, radius: float, angle: float, gap_w: float):
+        vert_angle = 90 - angle if angle > 0 else -90 + angle
+        y_offset = self.waveguide_w + gap_w
+        self.waveguide_ic.bend(radius=radius, angle=angle).put(node.x, node.y + y_offset)
+        self.waveguide_ic.bend(radius=self.min_radius, angle=vert_angle).put()
+        self.grating.put(nd.cp.x(), nd.cp.y(), 90 * np.sign(angle))
+        self.waveguide_ic.bend(radius=radius, angle=-angle).put(node.x, node.y + y_offset, -180)
+        self.waveguide_ic.bend(radius=self.min_radius, angle=-vert_angle).put()
+        self.grating.put(nd.cp.x(), nd.cp.y(), 90 * np.sign(angle))
+
     @nd.hashme('triangular_mesh', 'n', 'arm_l', 'gap_w', 'interaction_l')
-    def triangular_mesh(self, n, arm_l, gap_w, interaction_l, mzi_w, radius, trench_gap,
-                        with_grating_taps=True):
+    def triangular_mesh(self, n: int, arm_l: float, gap_w: float, interaction_l: float, mzi_w: float, radius: float,
+                        trench_gap: float, with_grating_taps: bool = True):
 
         num_straight = (n - 1) - (np.hstack([np.arange(1, n), np.arange(n - 2, 0, -1)]) + 1)
         bend_angle = np.arccos(1 - (mzi_w - gap_w - self.waveguide_w) / 4 / radius) * 180 / np.pi
@@ -256,49 +293,29 @@ class PhotonicChip:
             trench = self.trench_ic.strt(length=arm_l)
             # mesh
             for idx in range(n):
-                self.grating.put(0, mzi_w * idx, 180)
                 self.waveguide_ic.strt(width=self.waveguide_w, length=arm_l).put(0, mzi_w * idx, 0)
                 for layer in range(2 * n - 3):
-                    angle = -bend_angle if idx - layer % 2 < n and idx >= num_straight[layer] and (
+                    angle = -bend_angle if idx == n - 1 or (idx - layer % 2 < n and idx > num_straight[layer]) and (
                             idx + layer) % 2 else bend_angle
-                    angle = -angle if idx < num_straight[layer] else angle
-                    i_node, l_node, lt_node, r_node, ot_node, o_node = self.mzi_path(angle, arm_l, interaction_l, radius,
-                                                                                     trench_gap, heater=heater, trench=trench,
-                                                                                     with_grating_taps=with_grating_taps)
-
-                    nd.Pin(f'i{idx}{layer}').put(i_node)
-                    nd.Pin(f'l{idx}{layer}').put(l_node)
-                    nd.Pin(f'lt{idx}{layer}').put(lt_node)
-                    nd.Pin(f'r{idx}{layer}').put(r_node)
-                    nd.Pin(f'o{idx}{layer}').put(o_node)
-                    nd.Pin(f'ot{idx}{layer}').put(ot_node)
-
-                    y_offset = self.waveguide_w + gap_w
+                    i_node, l_node, lt_node, r_node, ot_node, o_node = self.mzi_path(angle, arm_l, interaction_l,
+                                                                                     radius,
+                                                                                     trench_gap, heater=heater,
+                                                                                     trench=trench)
 
                     if with_grating_taps:
-                        for p in (lt_node, ot_node):
-                            angle_1 = np.abs(angle) / 4
-                            angle_2 = 90 - angle_1
-                            self.waveguide_ic.bend(radius=radius, angle=angle_1).put(p.x, p.y + y_offset)
-                            self.waveguide_ic.bend(radius=10, angle=angle_2).put()
-                            self.grating.put(nd.cp.x(), nd.cp.y(), 90)
-                            self.waveguide_ic.bend(radius=radius, angle=-angle_1).put(p.x, p.y + y_offset, -180)
-                            self.waveguide_ic.bend(radius=10, angle=-angle_2).put()
-                            self.grating.put(nd.cp.x(), nd.cp.y(), 90)
-                    self.waveguide_ic.strt().put(o_node)
+                        self.bidirectional_grating_tap(lt_node, radius, np.abs(angle) / 4, gap_w)
+                        self.bidirectional_grating_tap(ot_node, radius, np.abs(angle) / 4, gap_w)
+                    self.waveguide_ic.strt(length=0).put(o_node)
                 output = self.waveguide_ic.strt(length=2 * arm_l).put()
-                self.grating.put()
                 o_node = output.pin['a0']
                 heater.put(o_node.x, mzi_w * idx)
                 trench.put(o_node.x, mzi_w * idx + trench_gap)
                 trench.put(o_node.x, mzi_w * idx - trench_gap)
 
-            nd.put_stub([], length=0)
         return triangular_mesh
 
 
 if __name__ == 'main':
-
     waveguide_w = 0.5
     interport_w = 70
     mzi_kwargs = {
@@ -314,20 +331,40 @@ if __name__ == 'main':
 
     # triangular meshes
 
-    chip.triangular_mesh(n=6, **mzi_kwargs).put(0, 0)
-    chip.triangular_mesh(n=6, **mzi_kwargs, with_grating_taps=False).put(0, 900)
+    mesh = chip.triangular_mesh(n=6, **mzi_kwargs).put(0, 0)
+    chip.triangular_mesh(n=6, **mzi_kwargs, with_grating_taps=False).put(0, 11 * interport_w, flip=True)
 
-    # splitter trees
-    chip.splitter_tree_4(**mzi_kwargs, sensor=1).put(0, 1800)
-    chip.splitter_tree_4(**mzi_kwargs, sensor=-1).put(0, 1800 + 6 * interport_w)
-    chip.mzi(**mzi_kwargs).put(0, 3000)
+    # small test structures
+
+    splitter_tree = chip.splitter_tree_4(**mzi_kwargs)
+    splitter_tree.put(0, -4 * interport_w)
+    splitter_tree.put(0, 20 * interport_w)
+    splitter_line = chip.splitter_line_4(**mzi_kwargs)
+    splitter_line.put(mesh.bbox[2], -4 * interport_w, flop=True)
+    splitter_line.put(mesh.bbox[2], 20 * interport_w, flop=True)
+    chip.mzi(**mzi_kwargs).put(mesh.bbox[2] / 2, 20 * interport_w, flop=True)
+    chip.mzi(**mzi_kwargs).put(mesh.bbox[2] / 2, -4 * interport_w, flop=True)
+
+    # gratings and interposers
+
+    interposer, out_nodes = chip.grating_array(16, period=70, final_period=127)
+    idx = 4
+    interposer.put(-out_nodes[idx].x, -out_nodes[idx].y)
+    interposer.put(mesh.bbox[2] + out_nodes[idx].x, -out_nodes[idx].y, flop=True)
+
+    gratings_4, _ = chip.grating_array(4, period=70)
+    gratings_4.put(splitter_tree.bbox[2], -4 * interport_w, flop=True)
+    gratings_4.put(splitter_tree.bbox[2], 20 * interport_w, flop=True)
+    gratings_4.put(0, 20 * interport_w)
+    gratings_4.put(mesh.bbox[2] - splitter_line.bbox[2], -4 * interport_w)
+    gratings_4.put(mesh.bbox[2], 20 * interport_w, flop=True)
+    gratings_4.put(mesh.bbox[2] - splitter_line.bbox[2], 20 * interport_w)
 
     # bond pad arrays
-
-    bond_pad_array = chip.bond_pad_array(n_pads=23)
-    bond_pad_array.put(0, -2 * interport_w)
-    bond_pad_array.put(100, -2 * interport_w)
-    bond_pad_array.put(0, -2 * interport_w + 900)
-    bond_pad_array.put(100, -2 * interport_w + 900)
+    bond_pad_array = chip.bond_pad_array(n_pads=26)
+    bond_pad_array.put(100, -6 * interport_w)
+    bond_pad_array.put(200, -6 * interport_w - 200)
+    bond_pad_array.put(100, 14 * interport_w)
+    bond_pad_array.put(200, 14 * interport_w + 200)
 
     nd.export_gds(filename='amf.gds')

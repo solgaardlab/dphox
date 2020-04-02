@@ -88,7 +88,7 @@ class Grid:
         """A simple method to reshape flat 3d vec array into the same shape
 
         Args:
-            v: vector of size `(3n,)` to rearrange into array of size `(3n,)`
+            v: vector of size `(3n,)` to rearrange into array of size `(3, n)`
 
         Returns:
 
@@ -172,21 +172,21 @@ class SimGrid(Grid):
     def curl_b(self):
         return d2curl_op(self.db)
 
-    def curl_e(self, e) -> np.ndarray:
+    def curl_e(self, e, beta: Optional[float] = None) -> np.ndarray:
         dx, _ = self._dxes
 
         def de(e_, d):
             return (np.roll(e_, -1, axis=d) - e_) / dx[d]
 
-        return d2curl_fn(e, de)
+        return d2curl_fn(e, de, beta)
 
-    def curl_h(self, h) -> np.ndarray:
+    def curl_h(self, h, beta: Optional[float] = None) -> np.ndarray:
         _, dx = self._dxes
 
         def dh(h_, d):
             return (h_ - np.roll(h_, 1, axis=d)) / dx[d]
 
-        return d2curl_fn(h, dh)
+        return d2curl_fn(h, dh, beta)
 
     @property
     def _dxes(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
