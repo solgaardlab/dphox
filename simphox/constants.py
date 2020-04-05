@@ -29,6 +29,11 @@ AMF_STACK = {
                 'growy': 0.001
             }
         ],
+        'metal_xs': [
+            {
+                'layer': 125,  # mt_heater
+            }
+        ],
         'via_heater_xs': [
             {
                 'layer': 120  # via_heater
