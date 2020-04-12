@@ -144,7 +144,7 @@ class FDFD(SimGrid):
 
         """
         e = self.reshape(e) if e.ndim == 2 else e
-        return self.curl_e(e, beta) / self.k0
+        return self.curl_e(e, beta) / (1j * self.k0)
 
     def h2e(self, h: np.ndarray, beta: Optional[float] = None) -> np.ndarray:
         """
@@ -161,7 +161,7 @@ class FDFD(SimGrid):
 
         """
         h = self.reshape(h) if h.ndim == 2 else h
-        return self.curl_h(h, beta) / (self.k0 * self.eps_t)
+        return self.curl_h(h, beta) / (1j * self.k0 * self.eps_t)
 
     def solve(self, src: np.ndarray, solver_fn: Optional[SpSolve] = None, reshaped: bool = True) -> np.ndarray:
         """FDFD e-field Solver
