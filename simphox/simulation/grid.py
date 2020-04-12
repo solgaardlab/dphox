@@ -99,7 +99,7 @@ class Grid:
 class SimGrid(Grid):
     def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
                  bloch_phase: Union[Dim, float] = 0.0, pml: Optional[Union[int, Shape, Dim]] = None,
-                 pml_eps: float = 1.0, grid_avg: bool = True):
+                 pml_eps: float = 1.0, grid_avg: float = 1):
         super(SimGrid, self).__init__(shape, spacing, eps)
         self.pml_shape = np.asarray(pml, dtype=np.int) if isinstance(pml, tuple) else pml
         self.pml_shape = np.ones(self.ndim, dtype=np.int) * pml if isinstance(pml, int) else pml
@@ -199,5 +199,5 @@ class SimGrid(Grid):
 
     @property
     def eps_t(self):
-        return grid_average(self.eps) if self.grid_avg else np.stack((self.eps, self.eps, self.eps))
+        return grid_average(self.eps, shift=self.grid_avg) if self.grid_avg > 0 else np.stack((self.eps, self.eps, self.eps))
 
