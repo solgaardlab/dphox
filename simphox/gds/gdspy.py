@@ -16,6 +16,18 @@ from simphox.typing import *
 
 
 class Path(gy.Path):
+    def poly_taper(self, length: float, taper_params: Union[np.ndarray, List[float]],
+                   num_taper_evaluations: int = 100, layer: int = 0, inverted: bool = False):
+        curr_width = self.w * 2
+        taper_params = np.asarray(taper_params)
+        self.parametric(lambda u: (length * u, 0),
+                        lambda u: (1, 0),
+                        final_width=lambda u: curr_width + (-1) ** inverted *
+                                              np.sum(taper_params * u ** np.arange(taper_params.size, dtype=float)),
+                        number_of_evaluations=num_taper_evaluations,
+                        layer=layer)
+        return self
+
     def sbend(self, bend_dim: Dim2, layer: int = 0, inverted: bool = False):
         pole_1 = np.asarray((bend_dim[0] / 2, 0))
         pole_2 = np.asarray((bend_dim[0] / 2, (-1) ** inverted * bend_dim[1]))
@@ -357,3 +369,31 @@ class MMI(Component):
     def output_ports(self) -> np.ndarray:
         return self.input_ports + np.asarray((self.size[0], 0))
 
+
+class Waveguide(Component):
+    def __init__(self, waveguide_width: float, taper_length: float = 0, taper_dim: Dim3 = None,
+                 length: float = 5, num_taper_evaluations: int = 100, end_length: float = 0,
+                 shift: Dim2 = (0, 0), layer: int = 0):
+        self.end_length = end_length
+        self.length = length
+        self.waveguide_width = waveguide_width
+        p = Path(waveguide_width).segment(end_length, layer=layer) if end_length > 0 else Path(waveguide_width)
+        if end_length > 0:
+            p.segment(end_length)
+        if taper_length > 0 or taper_dim is not None:
+            p.poly_taper(taper_length, taper_dim, num_taper_evaluations, layer)
+        p.segment(length, layer=layer)
+        if taper_length > 0 or taper_dim is not None:
+            p.poly_taper(-taper_length, taper_dim, num_taper_evaluations, layer)
+        if end_length > 0:
+            p.segment(end_length)
+        super(Waveguide, self).__init__(p, shift=shift)
+
+    @property
+    def input_ports(self) -> np.ndarray:
+        bend_y = 2 * self.bend_dim[1] if self.bend_dim else 0
+        return np.asarray(((0, 0), (0, self.interport_distance + bend_y))) + self.shift
+
+    @property
+    def output_ports(self) -> np.ndarray:
+        return self.input_ports + np.asarray((self.size[0], 0))

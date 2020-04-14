@@ -125,8 +125,8 @@ class PhotonicChip:
             pad = self.bond_pad(pad_w=pad_w, pad_l=pad_l)
             for i in range(n_pads):
                 lattice_bond_pads.append(pad.put(i * pitch, 0, 270))
-                message = nd.text(text=f'{i if labels is None else labels[i]}', align='cc', layer=10, height=50)
-                message.put(pitch / 2 + i * pitch, -pad_l / 2)
+                message = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='cc', layer=10, height=50)
+                message.put(-pitch / 2 + i * pitch, -pad_l / 2)
         return bond_pad_array
 
     def tap_notch_path(self, angle: float, radius: float):
@@ -157,7 +157,7 @@ class PhotonicChip:
 
     def mzi_path(self, angle: float, arm_l: float, interaction_l: float, radius: float, trench_gap: float,
                  heater: Optional[nd.Cell] = None, trench: Optional[nd.Cell] = None, grating_tap_w: float = 0,
-                 tap_notch: float = 0, input_phase_shift: bool = True, interaction_block: bool = False,
+                 tap_notch: float = 0, input_phase_shift: int = 1, interaction_block: bool = False,
                  ignore_internal_sampling: bool = False):
         def put_heater():
             x, y = nd.cp.x(), nd.cp.y()
@@ -169,8 +169,15 @@ class PhotonicChip:
 
         with_grating_taps = (grating_tap_w > 0)
         if input_phase_shift:
+            if input_phase_shift == 2:
+                tap_waveguide = self.tap_notch_path(np.abs(angle) * tap_notch, radius)
+                x, y = nd.cp.x(), nd.cp.y()
+                if with_grating_taps:
+                    self.bidirectional_grating_tap(tap_waveguide.pin['a0'], radius, np.abs(angle) / 4, grating_tap_w)
+                self.waveguide_ic.strt(length=25).put(x, y)
             put_heater()
             self.waveguide_ic.strt(length=arm_l).put()
+
         i_node, l_node, _ = self.coupler_path(angle, interaction_l, radius, tap_notch=(grating_tap_w > 0) or tap_notch,
                                               interaction_block=interaction_block)
         put_heater()
@@ -261,11 +268,12 @@ class PhotonicChip:
         angle = self._mzi_angle(gap_w, interport_w, radius)
         for idx, direction in enumerate(directions):
             self.waveguide_ic.strt(length=arm_l).put(0, interport_w * idx, 0)
-            for d in direction:
+            for j, d in enumerate(direction):
+                ips = 1 if j > 0 and input_phase_shift == 2 else input_phase_shift
                 self.mzi_path(d * angle, arm_l, interaction_l, radius,
                               trench_gap, heater=heater, trench=trench,
                               grating_tap_w=with_grating_taps * gap_w, tap_notch=tap_notch,
-                              input_phase_shift=input_phase_shift,
+                              input_phase_shift=ips,
                               interaction_block=interaction_block)
             if include_end:
                 output = self.waveguide_ic.strt(length=2 * arm_l).put()
@@ -273,6 +281,7 @@ class PhotonicChip:
                 heater.put(o_node.x, interport_w * idx)
                 trench.put(o_node.x, interport_w * idx + trench_gap)
                 trench.put(o_node.x, interport_w * idx - trench_gap)
+
 
     def splitter_tree_4(self, gap_w: float, interaction_l: float, interport_w: float, arm_l: float,
                         radius: float, trench_gap: float, tap_notch: float = 0,
@@ -406,20 +415,22 @@ class PhotonicChip:
         return u_connector
 
     def autoroute_turn(self, n: Union[int, List, np.ndarray], period: float, final_period: float, pin_prefix: str,
-                       connector_x: float = 0, connector_y: float = 0, turn_offset: bool = False, overlap: float = 1):
+                       connector_x: float = 0, connector_y: float = 0, turn_radius: float = 0, overlap: float = 1):
         with nd.Cell(f'autoroute_turn_{period}_{final_period}') as autoroute_turn:
             route_arr = np.ones(n) if isinstance(n, int) else np.asarray(n)
             route_num = 0
             for m, route_idx in enumerate(route_arr):
                 if route_idx > 0:
                     self.metal_ic.strt(length=overlap).put(-overlap, m * period)
-                    if turn_offset:
-                        self.metal_ic.bend(radius=period / 4, angle=90).put()
-                        self.metal_ic.bend(radius=period / 4, angle=-90).put()
-                    self.metal_ic.strt(route_num * final_period + connector_x - turn_offset * period / 2).put()
-                    self.metal_ic.bend(radius=15, angle=-90).put()
-                    self.metal_ic.strt(connector_y).put()
-                    output = self.metal_ic.strt(m * period + turn_offset * period / 2).put()
+                    if turn_radius > 0:
+                        self.metal_ic.bend(radius=turn_radius, angle=90).put()
+                        self.metal_ic.bend(radius=turn_radius, angle=-90).put()
+                    # self.metal_ic.strt(route_num * final_period + connector_x - turn_radius * 2).put()
+                    # self.metal_ic.bend(radius=15, angle=-90).put()
+                    self.metal_ic.strt(route_num * final_period + connector_x - turn_radius * 2 + 15).put()
+                    # self.metal_ic.bend(radius=15, angle=-90).put()
+                    self.metal_ic.strt(connector_y + 22.5).put(nd.cp.x(), nd.cp.y() + 7.5, -90)
+                    output = self.metal_ic.strt(m * period + turn_radius * 2).put()
                     nd.Pin(f'{pin_prefix}{int(route_num)}', pin=output.pin['b0']).put()
                     route_num += 1
             nd.put_stub([], length=0)
@@ -466,7 +477,8 @@ class PhotonicChip:
                             idx + layer) % 2 else bend_angle
                     i_node, o_node = self.mzi_path(angle, arm_l, interaction_l, radius, trench_gap, heater=heater,
                                                    trench=trench, grating_tap_w=with_grating_taps * gap_w,
-                                                   tap_notch=tap_notch, ignore_internal_sampling=ignore_internal_sampling)
+                                                   tap_notch=tap_notch, ignore_internal_sampling=ignore_internal_sampling,
+                                                   input_phase_shift=2 if layer == 0 else 1)
                     self.waveguide_ic.strt(length=0).put(o_node)
                 output = self.waveguide_ic.strt(length=2 * arm_l).put()
                 o_node = output.pin['a0']
@@ -520,20 +532,20 @@ class PhotonicChip:
         return sampling_test
 
     def chiplet_trench(self, y_lines: List[float], x_lines: List[float] = (50, 2950),
-                       x_line_w: float = 100, y_line_w: float = 200, tot_height: float = 3000,
+                       x_line_w: float = 100, y_line_w: float = 200, tot_height: float = 2800,
                        tot_width: float = 16000):
         with nd.Cell(name=f'chiplet_trench') as chiplet_trench:
             for y in x_lines:
                 self.trench_ic.strt(width=x_line_w, length=tot_width).put(0, y)
             for x in y_lines:
-                self.trench_ic.strt(width=y_line_w, length=tot_height).put(x, 0, 90)
+                self.trench_ic.strt(width=y_line_w, length=tot_height).put(x, x_line_w, 90)
         return chiplet_trench
 
     def drop_port_array(self, n: Union[int, List[int]], period: float, final_taper_width: float):
-        with nd.Cell(name=f'grating_array_{n}_{period}') as drop_port_array:
+        with nd.Cell(name=f'drop_port_array_{n}_{period}') as drop_port_array:
             idxs = np.arange(n) if isinstance(n, int) else n
             for idx in idxs:
-                self.waveguide_ic.taper(length=5, width1=self.waveguide_w,
+                self.waveguide_ic.taper(length=50, width1=self.waveguide_w,
                                         width2=final_taper_width).put(0, period * float(idx))
                 self.waveguide_ic.bend(radius=10, angle=180, width=final_taper_width).put()
         return drop_port_array

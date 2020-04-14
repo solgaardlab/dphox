@@ -42,6 +42,11 @@ AMF_STACK = {
                 'layer': 125,  # mt_heater
                 'growx': 1.5,
                 'growy': 1.5
+            },
+            {
+                'layer': 115,  # heater
+                'growx': 1.5,
+                'growy': 1.5
             }
         ],
         'grating_xs': [
