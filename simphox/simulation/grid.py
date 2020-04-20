@@ -3,7 +3,7 @@ from functools import lru_cache
 import numpy as np
 import scipy.sparse as sp
 
-from simphox.gds.gdspy import Component
+from ..gds.gdspy import Component
 from ..typing import Shape, Dim, GridSpacing, Optional, Tuple, List, Union
 from ..utils import d2curl_op, d2curl_fn, grid_average
 
