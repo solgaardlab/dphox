@@ -76,9 +76,10 @@ def emplot(ax, val, eps, spacing: Optional[float] = None, field_cmap: str = 'RdB
 
 
 def field_emplot_re(ax, field: np.ndarray, eps: np.ndarray, spacing: Optional[float] = None, div_norm: bool = True):
-    emplot(ax, field.real, eps, spacing, field_cmap='RdBu', mat_cmap='hot', div_norm=div_norm)
+    emplot(ax, field.real, eps, spacing, field_cmap='RdBu', mat_cmap='gray', div_norm=div_norm)
 
 
 def field_emplot_mag(ax, field: np.ndarray, eps: np.ndarray, spacing: Optional[float] = None, cmax=None,
                      field_cmap='hot', mat_cmap='nipy_spectral'):
     emplot(ax, np.abs(field), eps, spacing, field_cmap=field_cmap, mat_cmap=mat_cmap, alpha=0.8, clim=(0, cmax))
+

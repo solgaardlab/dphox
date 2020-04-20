@@ -282,7 +282,6 @@ class PhotonicChip:
                 trench.put(o_node.x, interport_w * idx + trench_gap)
                 trench.put(o_node.x, interport_w * idx - trench_gap)
 
-
     def splitter_tree_4(self, gap_w: float, interaction_l: float, interport_w: float, arm_l: float,
                         radius: float, trench_gap: float, tap_notch: float = 0,
                         input_phase_shift: bool = True, interaction_block: bool = False):
@@ -477,7 +476,8 @@ class PhotonicChip:
                             idx + layer) % 2 else bend_angle
                     i_node, o_node = self.mzi_path(angle, arm_l, interaction_l, radius, trench_gap, heater=heater,
                                                    trench=trench, grating_tap_w=with_grating_taps * gap_w,
-                                                   tap_notch=tap_notch, ignore_internal_sampling=ignore_internal_sampling,
+                                                   tap_notch=tap_notch,
+                                                   ignore_internal_sampling=ignore_internal_sampling,
                                                    input_phase_shift=2 if layer == 0 else 1)
                     self.waveguide_ic.strt(length=0).put(o_node)
                 output = self.waveguide_ic.strt(length=2 * arm_l).put()
@@ -549,6 +549,15 @@ class PhotonicChip:
                                         width2=final_taper_width).put(0, period * float(idx))
                 self.waveguide_ic.bend(radius=10, angle=180, width=final_taper_width).put()
         return drop_port_array
+
+    def ring_resonator(self, node: nd.Node, radius: float, gap_w: float, racetrack_length: float = 0):
+        y_offset = self.waveguide_w + gap_w
+        with nd.Cell(name=f'ring_resonator_{radius}_{racetrack_length}') as ring_resonator:
+            self.waveguide_ic.strt(racetrack_length).put(node.x, node.y + y_offset)
+            self.waveguide_ic.bend(radius=radius, angle=180).put()
+            self.waveguide_ic.strt(racetrack_length).put()
+            self.waveguide_ic.bend(radius=radius, angle=180).put()
+        return ring_resonator
 
 
 class NazcaVisualizer:

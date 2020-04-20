@@ -22,8 +22,11 @@ class Path(gy.Path):
         taper_params = np.asarray(taper_params)
         self.parametric(lambda u: (length * u, 0),
                         lambda u: (1, 0),
-                        final_width=lambda u: curr_width + (-1) ** inverted *
-                                              np.sum(taper_params * u ** np.arange(taper_params.size, dtype=float)),
+                        final_width=lambda u: curr_width - np.sum(taper_params) +
+                                              np.sum(taper_params * (1 - u) ** np.arange(taper_params.size,
+                                                                                         dtype=float)) if inverted
+                        else curr_width +
+                             np.sum(taper_params * u ** np.arange(taper_params.size, dtype=float)),
                         number_of_evaluations=num_taper_evaluations,
                         layer=layer)
         return self
@@ -371,7 +374,8 @@ class MMI(Component):
 
 
 class Waveguide(Component):
-    def __init__(self, waveguide_width: float, taper_length: float = 0, taper_dim: Dim3 = None,
+    def __init__(self, waveguide_width: float, taper_length: float = 0,
+                 taper_params: Union[np.ndarray, List[float]] = None,
                  length: float = 5, num_taper_evaluations: int = 100, end_length: float = 0,
                  shift: Dim2 = (0, 0), layer: int = 0):
         self.end_length = end_length
@@ -379,21 +383,49 @@ class Waveguide(Component):
         self.waveguide_width = waveguide_width
         p = Path(waveguide_width).segment(end_length, layer=layer) if end_length > 0 else Path(waveguide_width)
         if end_length > 0:
-            p.segment(end_length)
-        if taper_length > 0 or taper_dim is not None:
-            p.poly_taper(taper_length, taper_dim, num_taper_evaluations, layer)
+            p.segment(end_length, layer=layer)
+        if taper_length > 0 or taper_params is not None:
+            p.poly_taper(taper_length, taper_params, num_taper_evaluations, layer)
         p.segment(length, layer=layer)
-        if taper_length > 0 or taper_dim is not None:
-            p.poly_taper(-taper_length, taper_dim, num_taper_evaluations, layer)
+        if taper_length > 0 or taper_params is not None:
+            p.poly_taper(taper_length, taper_params, num_taper_evaluations, layer, inverted=True)
         if end_length > 0:
-            p.segment(end_length)
+            p.segment(end_length, layer=layer)
         super(Waveguide, self).__init__(p, shift=shift)
 
     @property
     def input_ports(self) -> np.ndarray:
-        bend_y = 2 * self.bend_dim[1] if self.bend_dim else 0
-        return np.asarray(((0, 0), (0, self.interport_distance + bend_y))) + self.shift
+        return np.asarray((0, 0)) + self.shift
 
     @property
     def output_ports(self) -> np.ndarray:
         return self.input_ports + np.asarray((self.size[0], 0))
+
+#
+# class RingResonator(Component):
+#     def __init__(self, waveguide_width: float, taper_length: float = 0,
+#                  taper_params: Union[np.ndarray, List[float]] = None,
+#                  length: float = 5, num_taper_evaluations: int = 100, end_length: float = 0,
+#                  shift: Dim2 = (0, 0), layer: int = 0):
+#         self.end_length = end_length
+#         self.length = length
+#         self.waveguide_width = waveguide_width
+#         p = Path(waveguide_width).segment(end_length, layer=layer) if end_length > 0 else Path(waveguide_width)
+#         if end_length > 0:
+#             p.segment(end_length, layer=layer)
+#         if taper_length > 0 or taper_params is not None:
+#             p.poly_taper(taper_length, taper_params, num_taper_evaluations, layer)
+#         p.segment(length, layer=layer)
+#         if taper_length > 0 or taper_params is not None:
+#             p.poly_taper(taper_length, taper_params, num_taper_evaluations, layer, inverted=True)
+#         if end_length > 0:
+#             p.segment(end_length, layer=layer)
+#         super(RingResonator, self).__init__(p, shift=shift)
+#
+#     @property
+#     def input_ports(self) -> np.ndarray:
+#         return np.asarray((0, 0)) + self.shift
+#
+#     @property
+#     def output_ports(self) -> np.ndarray:
+#         return self.input_ports + np.asarray((self.size[0], 0))
