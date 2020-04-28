@@ -21,7 +21,6 @@ class FDFD(SimGrid):
                  grid_avg: bool = True, no_grad: bool = True):
 
         self.wavelength = wavelength
-        self.k0 = 2 * np.pi / self.wavelength  # defines the units for the simulation!
         self.no_grad = no_grad
 
         super(FDFD, self).__init__(
@@ -33,6 +32,10 @@ class FDFD(SimGrid):
             pml_eps=pml_eps,
             grid_avg=grid_avg
         )
+
+    @property
+    def k0(self):
+        return 2 * np.pi / self.wavelength  # defines the units for the simulation!
 
     @property
     def mat(self) -> Union[sp.spmatrix, Tuple[np.ndarray, np.ndarray]]:
