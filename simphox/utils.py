@@ -13,6 +13,11 @@ def poynting_z(e: np.ndarray, h: np.ndarray):
     return e_cross[0] * h_cross.conj()[1] - e_cross[1] * h_cross.conj()[0]
 
 
+def overlap(e1: np.ndarray, h1: np.ndarray, e2: np.ndarray, h2: np.ndarray):
+    return (np.sum(poynting_z(e1, h2)) * np.sum(poynting_z(e2, h1)) /
+            np.sum(poynting_z(e1, h1))).real / np.sum(poynting_z(e2, h2)).real
+
+
 def d2curl_op(d: List[sp.spmatrix]) -> sp.spmatrix:
     o = sp.csr_matrix((d[0].shape[0], d[0].shape[0]))
     return sp.bmat([[o, -d[2], d[1]],
@@ -22,8 +27,12 @@ def d2curl_op(d: List[sp.spmatrix]) -> sp.spmatrix:
 
 def d2curl_fn(f: np.ndarray, df: Callable[[np.ndarray, int], np.ndarray], beta: float = None):
     if beta is not None:
-        return np.stack([df(f[2], 1) + 1j * beta * f[1], -1j * beta * f[0] - df(f[2], 0), df(f[1], 0) - df(f[0], 1)])
-    return np.stack([df(f[2], 1) - df(f[1], 2), df(f[0], 2) - df(f[2], 0), df(f[1], 0) - df(f[0], 1)])
+        return np.stack([df(f[2], 1) + 1j * beta * f[1],
+                         -1j * beta * f[0] - df(f[2], 0),
+                         df(f[1], 0) - df(f[0], 1)])
+    return np.stack([df(f[2], 1) - df(f[1], 2),
+                     df(f[0], 2) - df(f[2], 0),
+                     df(f[1], 0) - df(f[0], 1)])
 
 
 def grid_average(params: np.ndarray, shift: int = 1) -> np.ndarray:

@@ -190,7 +190,7 @@ class FDFD(SimGrid):
         return self.reshape(e) if reshaped else e
 
     def wgm_solve(self, num_modes: int = 6, beta_guess: Optional[Union[float, Tuple[float, float]]] = None,
-                  tol: float = 1e-5) -> Tuple[np.ndarray, np.ndarray]:
+                  tol: float = 1e-7) -> Tuple[np.ndarray, np.ndarray]:
         """FDFD waveguide mode (WGM) solver
 
         Solve for waveguide modes (x-translational symmetry) by finding the eigenvalues of :math:`C`.
@@ -211,7 +211,8 @@ class FDFD(SimGrid):
 
         """
 
-        db = self.db
+        # db = self.db
+        df = self.df
         if isinstance(beta_guess, float) or beta_guess is None:
             sigma = beta_guess ** 2 if beta_guess else (self.k0 * np.sqrt(np.max(self.eps))) ** 2
             eigvals, eigvecs = eigs(self.wgm, k=num_modes, sigma=sigma, tol=tol)
@@ -222,7 +223,7 @@ class FDFD(SimGrid):
             raise TypeError(f'Expected beta_guess to be None, float, or Tuple[float, float] but got {type(beta_guess)}')
         inds_sorted = np.asarray(np.argsort(np.sqrt(eigvals.real))[::-1])
         if self.ndim > 1:
-            hz = sp.hstack(db[:2]) @ eigvecs / (1j * np.sqrt(eigvals))
+            hz = sp.hstack(df[:2]) @ eigvecs / (1j * np.sqrt(eigvals))
             h = np.vstack((eigvecs, hz))
         else:
             h = eigvecs
