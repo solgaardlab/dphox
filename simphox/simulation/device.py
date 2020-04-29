@@ -120,6 +120,18 @@ class Modes:
             te_ratios.append(norms[0] ** 2 / np.sum(norms ** 2))
         return np.asarray(te_ratios)
 
+    def s_matrix(self, other_modes: "Modes"):
+        return np.asarray([
+            [np.sum(poynting_z(e_o, h_i) + poynting_z(e_i, h_o)) / np.sum(2 * poynting_z(e_i, h_i))
+            for h_o, e_o in zip(other_modes.hs, other_modes.es)]
+            for h_i, e_i in zip(self.hs, self.es)
+        ])
+
+    def fundamental_coeff(self, other_modes: "Modes"):
+        e_i, h_i = self.e, self.h
+        e_o, h_o = other_modes.e, other_modes.h
+        return np.sum(poynting_z(e_o, h_i) + poynting_z(e_i, h_o)) / np.sum(2 * poynting_z(e_i, h_i))
+
 
 class ModeDevice:
     def __init__(self, wg: ModeBlock, sub: ModeBlock, size: Tuple[float, float], wg_height: float,
@@ -137,14 +149,10 @@ class ModeDevice:
         self.wg = wg
         self.sub = sub
 
-        self.modes_list = []
-
     def solve(self, eps: np.ndarray, save: bool = False, m: int = 6):
         self.fdfd.eps = eps
         beta, modes = self.fdfd.wgm_solve(num_modes=m, beta_guess=self.fdfd.k0 * np.sqrt(self.wg.material.eps))
         solution = Modes(beta, modes, self.fdfd)
-        if save:
-            self.modes_list.append(solution)
         return solution
 
     def single(self, ps: Optional[ModeBlock] = None, sep: float = 0):
@@ -218,20 +226,25 @@ class ModeDevice:
 
         return eps
 
-    def dc_grid(self, seps: np.ndarray, pbar: Callable, gap: float, ps: Optional[ModeBlock] = None, store: bool = True,
-                m: int = 6):
+    def dc_grid(self, seps: np.ndarray, gap: float, ps: Optional[ModeBlock] = None, store: bool = True,
+                m: int = 6, pbar: Callable = None):
+        solutions = []
+        pbar = range if pbar is None else pbar
         for sep_1 in pbar(seps):
             for sep_2 in pbar(seps):
                 ps_height_1 = self.wg.y + self.wg_height + sep_1
                 ps_height_2 = self.wg.y + self.wg_height + sep_2
                 eps = self.coupled(gap, ps, seps=(ps_height_1, ps_height_2))
-                self.solve(eps, store, m)
+                solutions.append(copy.deepcopy(self.solve(eps, store, m)))
 
-    def ps_sweep(self, seps: np.ndarray, pbar: Callable, ps: Optional[ModeBlock] = None, store: bool = True,
-                 m: int = 6):
+    def ps_sweep(self, seps: np.ndarray, ps: Optional[ModeBlock] = None, store: bool = True,
+                 m: int = 6, pbar: Callable = None):
+        solutions = []
+        pbar = range if pbar is None else pbar
         for sep in pbar(seps):
             eps = self.single(ps, sep=self.wg.y + self.wg_height + sep)
-            self.solve(eps, store, m)
+            solutions.append(copy.deepcopy(self.solve(eps, store, m)))
+
 
 
 def dispersion_sweep(device: ModeDevice, lmbdas: np.ndarray, pbar: Callable):
@@ -242,4 +255,3 @@ def dispersion_sweep(device: ModeDevice, lmbdas: np.ndarray, pbar: Callable):
         beta, modes = fdfd.wgm_solve(num_modes=6)
         solutions.append(copy.deepcopy(Modes(beta, modes, device.fdfd)))
     return solutions
-

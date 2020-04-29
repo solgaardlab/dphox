@@ -82,3 +82,40 @@ AMF_STACK = {
         ]
     }
 }
+
+
+AIM_STACK = {
+    'layers': {
+        'si': 1,  # ream
+        'sin_1': 2,
+        'sin_2': 3
+    },
+    'cross_sections': {
+        'si_xs': [
+            {
+                'layer': 10,  # waveguide
+                'growy': 0.004
+            }
+        ],
+        'sin_xs': [
+            {
+                'layer': 125  # mt_heater
+            },
+            {
+                'layer': 150,  # pad
+                'growx': -2,
+                'growy': -2
+            }
+        ],
+        'trench_xs': [
+            {
+                'layer': 160  # trench
+            }
+        ],
+        'slab_xs': [
+            {
+                'layer': 12  # slab
+            }
+        ]
+    }
+}
