@@ -86,35 +86,39 @@ AMF_STACK = {
 
 AIM_STACK = {
     'layers': {
-        'si': 1,  # ream
-        'sin_1': 2,
-        'sin_2': 3
+        'si_ridge': [707, 727],  # ream
+        'si': [709, 727],  # seam
+        'sin_bot': [733, 727],  # fnam
+        'sin_top': [735, 727],  # snam
+        'sin_ox_open': [737, 727],  # tzam
+        'trench': [726, 727]  # diam
     },
     'cross_sections': {
-        'si_xs': [
+        'si_ridge_xs': [
             {
-                'layer': 10,  # waveguide
+                'layer': [707, 727],  # rib etch
                 'growy': 0.004
             }
         ],
-        'sin_xs': [
+        'waveguide_xs': [
             {
-                'layer': 125  # mt_heater
-            },
+                'layer': [709, 727],  # waveguide
+                'growy': 0.004
+            }
+        ],
+        'sin_bot_xs': [
             {
-                'layer': 150,  # pad
-                'growx': -2,
-                'growy': -2
+                'layer': [733, 727],  # sin_bot
+            }
+        ],
+        'sin_top_xs': [
+            {
+                'layer': [735, 727],  # sin_top
             }
         ],
         'trench_xs': [
             {
-                'layer': 160  # trench
-            }
-        ],
-        'slab_xs': [
-            {
-                'layer': 12  # slab
+                'layer': [726, 727]  # trench
             }
         ]
     }
