@@ -1,7 +1,7 @@
 import numpy as np
-from ..typing import Tuple, Dim2, Optional, Callable
+from ..typing import Tuple, Dim2, Optional, Callable, List
 from .fdfd import FDFD
-from ..utils import poynting_z
+from ..utils import poynting_z, field_emplot_mag, field_emplot_re
 from functools import lru_cache
 import copy
 
@@ -21,8 +21,8 @@ class Material:
 # OXIDE = Material('Oxide', (0.6, 0, 0), 1.4442 ** 2)
 # NITRIDE = Material('Nitride', (0, 0, 0.7), 1.996 ** 2)
 
-SILICON = Material('Silicon', (0.3, 0.3, 0.3), 3.45 ** 2)
-POLYSILICON = Material('Poly-Si', (0.5, 0.5, 0.5), 3.45 ** 2)
+SILICON = Material('Silicon', (0.3, 0.3, 0.3), 3.47 ** 2)
+POLYSILICON = Material('Poly-Si', (0.5, 0.5, 0.5), 3.47 ** 2)
 OXIDE = Material('Oxide', (0.6, 0, 0), 1.45 ** 2)
 NITRIDE = Material('Nitride', (0, 0, 0.7), 2 ** 2)
 LS_NITRIDE = Material('Low-Stress Nitride', (0, 0.4, 1))
@@ -48,6 +48,7 @@ class Modes:
         self.modes = modes
         self.fdfd = copy.deepcopy(fdfd)
         self.eps = fdfd.eps
+        self.num_modes = self.m = len(self.betas)
 
     @property
     @lru_cache()
@@ -122,15 +123,37 @@ class Modes:
 
     def s_matrix(self, other_modes: "Modes"):
         return np.asarray([
-            [np.sum(poynting_z(e_o, h_i) + poynting_z(e_i, h_o)) / np.sum(2 * poynting_z(e_i, h_i))
-            for h_o, e_o in zip(other_modes.hs, other_modes.es)]
+            [np.sum(poynting_z(e_o, h_i) + poynting_z(e_i, h_o)).real / np.sum(2 * poynting_z(e_i, h_i)).real
+             for h_o, e_o in zip(other_modes.hs, other_modes.es)]
             for h_i, e_i in zip(self.hs, self.es)
         ])
 
     def fundamental_coeff(self, other_modes: "Modes"):
         e_i, h_i = self.e, self.h
         e_o, h_o = other_modes.e, other_modes.h
-        return np.sum(poynting_z(e_o, h_i) + poynting_z(e_i, h_o)) / np.sum(2 * poynting_z(e_i, h_i))
+        return np.sum(poynting_z(e_o, h_i) + poynting_z(e_i, h_o)).real
+
+    def plot_sz(self, ax, idx: int):
+        if idx > self.m - 1:
+            ValueError("Out of range of number of solutions")
+        field_emplot_mag(ax, np.abs(self.sz.real), self.eps, spacing=self.fdfd.spacing)
+        ax.set_title(rf'Poynting, $n_{idx + 1} = {self.ns[idx]:.4f}$')
+        ax.text(x=0.9, y=0.9, s=rf'$s_z$', color='white', transform=ax.transAxes, fontsize=16)
+        ratio = np.max((self.te_ratios[idx], 1 - self.te_ratios[idx]))
+        polarization = "TE" if np.argmax((self.te_ratios[idx], 1 - self.te_ratios[idx])) > 0 else "TM"
+        ax.text(x=0.05, y=0.9, s=rf'{polarization}[{ratio:.2f}]', color='white', transform=ax[idx].transAxes)
+
+    def plot_field(self, ax, idx: int = 0, axis: int = 1):
+        if idx > self.m - 1:
+            ValueError("Out of range of number of solutions")
+        if not (axis == 0 or axis == 1 or axis == 2):
+            ValueError("Out of range of number of solutions")
+        field_emplot_re(ax, np.abs(self.h[idx][axis].real), self.eps, spacing=self.fdfd.spacing)
+        ax.set_title(rf'Poynting, $n_{idx + 1} = {self.ns[idx]:.4f}$')
+        ax.text(x=0.9, y=0.9, s=rf'$h_y$', color='black', transform=ax.transAxes, fontsize=16)
+        ratio = np.max((self.te_ratios[idx], 1 - self.te_ratios[idx]))
+        polarization = "TE" if np.argmax((self.te_ratios[idx], 1 - self.te_ratios[idx])) > 0 else "TM"
+        ax.text(x=0.05, y=0.9, s=rf'{polarization}[{ratio:.2f}]', color='white', transform=ax[idx].transAxes)
 
 
 class ModeDevice:
@@ -149,13 +172,13 @@ class ModeDevice:
         self.wg = wg
         self.sub = sub
 
-    def solve(self, eps: np.ndarray, save: bool = False, m: int = 6):
+    def solve(self, eps: np.ndarray, m: int = 6) -> Modes:
         self.fdfd.eps = eps
         beta, modes = self.fdfd.wgm_solve(num_modes=m, beta_guess=self.fdfd.k0 * np.sqrt(self.wg.material.eps))
         solution = Modes(beta, modes, self.fdfd)
         return solution
 
-    def single(self, ps: Optional[ModeBlock] = None, sep: float = 0):
+    def single(self, ps: Optional[ModeBlock] = None, sep: float = 0) -> np.ndarray:
         nx, ny = self.nx, self.ny
         center = nx // 2
         wg, sub, dx = self.wg, self.sub, self.fdfd.spacing[0]
@@ -174,7 +197,7 @@ class ModeDevice:
 
         return eps
 
-    def double_ps(self, ps: Optional[ModeBlock] = None, sep: float = 0):
+    def double_ps(self, ps: Optional[ModeBlock] = None, sep: float = 0) -> np.ndarray:
         nx, ny = self.nx, self.ny
         center = nx // 2
         wg, sub, dx = self.wg, self.sub, self.fdfd.spacing[0]
@@ -195,7 +218,7 @@ class ModeDevice:
 
         return eps
 
-    def coupled(self, gap: float, ps: Optional[ModeBlock] = None, seps: Tuple[float, float] = (0, 0)):
+    def coupled(self, gap: float, ps: Optional[ModeBlock] = None, seps: Tuple[float, float] = (0, 0)) -> np.ndarray:
         nx, ny = self.nx, self.ny
         center = nx // 2
         wg, sub, dx = self.wg, self.sub, self.fdfd.spacing[0]
@@ -226,25 +249,24 @@ class ModeDevice:
 
         return eps
 
-    def dc_grid(self, seps: np.ndarray, gap: float, ps: Optional[ModeBlock] = None, store: bool = True,
-                m: int = 6, pbar: Callable = None):
+    def dc_grid(self, seps: np.ndarray, gap: float, ps: Optional[ModeBlock] = None, m: int = 6,
+                pbar: Callable = None) -> List[Modes]:
         solutions = []
         pbar = range if pbar is None else pbar
         for sep_1 in pbar(seps):
             for sep_2 in pbar(seps):
-                ps_height_1 = self.wg.y + self.wg_height + sep_1
-                ps_height_2 = self.wg.y + self.wg_height + sep_2
-                eps = self.coupled(gap, ps, seps=(ps_height_1, ps_height_2))
-                solutions.append(copy.deepcopy(self.solve(eps, store, m)))
+                eps = self.coupled(gap, ps, seps=(sep_1, sep_2))
+                solutions.append(copy.deepcopy(self.solve(eps, m)))
+        return solutions
 
-    def ps_sweep(self, seps: np.ndarray, ps: Optional[ModeBlock] = None, store: bool = True,
-                 m: int = 6, pbar: Callable = None):
+    def ps_sweep(self, seps: np.ndarray, ps: Optional[ModeBlock] = None, m: int = 6,
+                 pbar: Callable = None) -> List[Modes]:
         solutions = []
         pbar = range if pbar is None else pbar
         for sep in pbar(seps):
-            eps = self.single(ps, sep=self.wg.y + self.wg_height + sep)
-            solutions.append(copy.deepcopy(self.solve(eps, store, m)))
-
+            eps = self.single(ps, sep=sep)
+            solutions.append(copy.deepcopy(self.solve(eps, m)))
+        return solutions
 
 
 def dispersion_sweep(device: ModeDevice, lmbdas: np.ndarray, pbar: Callable):
