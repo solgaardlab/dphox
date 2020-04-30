@@ -124,5 +124,5 @@ AIM_STACK = {
     }
 }
 
-AIM_PDK_PASSIVE_PATH = '../../aim_lib/APSUNY_v35a_passive.gds'
-AIM_PDK_WAVEGUIDE_PATH = '../../aim_lib/APSUNY_v35_waveguides.gds'
+AIM_PDK_PASSIVE_PATH = '../../aim_lib/APSUNY_v35a_passive.design'
+AIM_PDK_WAVEGUIDE_PATH = '../../aim_lib/APSUNY_v35_waveguides.design'

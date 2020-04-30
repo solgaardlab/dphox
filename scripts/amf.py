@@ -1,6 +1,6 @@
 import nazca as nd
 import numpy as np
-from simphox.gds.nazca import PhotonicChip, NazcaVisualizer
+from simphox.design.amf import AMFPhotonicChip, NazcaVisualizer
 from simphox.constants import AMF_STACK
 
 if __name__ == 'main':
@@ -41,7 +41,7 @@ if __name__ == 'main':
         'radius': radius_id
     }
 
-    chip = PhotonicChip(AMF_STACK, waveguide_w)
+    chip = AMFPhotonicChip(AMF_STACK, waveguide_w)
     CHIPLET_SEP = 150
 
     with nd.Cell('meshes_chiplet') as meshes_chiplet:
@@ -199,7 +199,7 @@ if __name__ == 'main':
                                   input_phase_shift=False, interaction_block=True).put(0, 0)
             coupler_invdes = chip.coupler(**idcp_kwargs, interaction_block=True, with_gratings=False).put(0, 300)
 
-            coupler = nd.netlist.load_gds('coupler_jv3.gds', newcellname='coupler_id')
+            coupler = nd.netlist.load_gds('coupler_jv3.design', newcellname='coupler_id')
 
             for i in range(4):
                 chip.grating.put(0, (i + 2) * 50, flop=True)
@@ -429,7 +429,7 @@ if __name__ == 'main':
             splitter_tree.bbox[2] + splitter_tree_x - 0.214, 0)
         drop_port_l = chip.drop_port_array([1, 3, 5, 7], period=70, final_taper_width=0.2).put(0, flop=True)
 
-        invdes_chiplet = nd.netlist.load_gds('invdes_chiplet.gds', newcellname='invdes_chiplet', cellname='Design2')
+        invdes_chiplet = nd.netlist.load_gds('invdes_chiplet.design', newcellname='invdes_chiplet', cellname='Design2')
         invdes_chiplet.put(-invdes_chiplet.bbox[0] + invdes_chiplet.bbox[2] + splitter_tree.bbox[2] - 550,
                            22 * interport_w - invdes_chiplet.bbox[3] + 25.109, flop=True)
 
@@ -439,13 +439,13 @@ if __name__ == 'main':
     sensor_and_inv_design_chiplet.put(sensor_and_inv_design_chiplet_x - sensor_and_inv_design_chiplet.bbox[2],
                                       -sensor_and_inv_design_chiplet.bbox[1] + 200)
 
-    post_processing_chiplet = nd.netlist.load_gds('amf_post_processing_chiplet_full_V0.4_merged.gds',
+    post_processing_chiplet = nd.netlist.load_gds('amf_post_processing_chiplet_full_V0.4_merged.design',
                                                   newcellname='post_processing_chiplet')
     post_processing_chiplet_x = -post_processing_chiplet.bbox[
         0] + sensor_and_inv_design_chiplet_x + 2 * CHIPLET_SEP + 11
     post_processing_chiplet.put(post_processing_chiplet_x - 5, 175)
 
-    achip_chiplet = nd.netlist.load_gds('ACHIP_CHIP_20200413_Time1604_v6.gds', newcellname='achip_chiplet')
+    achip_chiplet = nd.netlist.load_gds('ACHIP_CHIP_20200413_Time1604_v6.design', newcellname='achip_chiplet')
     achip_chiplet_x = post_processing_chiplet_x + post_processing_chiplet.bbox[2] - post_processing_chiplet.bbox[
         0] + CHIPLET_SEP
     achip_chiplet.put(achip_chiplet_x + 2 * CHIPLET_SEP + 15, -achip_chiplet.bbox[1] + 100)
@@ -458,9 +458,9 @@ if __name__ == 'main':
 
     from datetime import date, datetime
 
-    # nd.export_gds(filename=f'amf-{datetime.now().strftime("%Y-%m-%d_%I-%M")}.gds')
-    # nd.export_gds(filename=f'amf-{str(date.today())}.gds')
-    nd.export_gds(filename=f'amf-{str(date.today())}_submission.gds')
+    # nd.export_gds(filename=f'amf-{datetime.now().strftime("%Y-%m-%d_%I-%M")}.design')
+    # nd.export_gds(filename=f'amf-{str(date.today())}.design')
+    nd.export_gds(filename=f'amf-{str(date.today())}_submission.design')
 
     # import matplotlib.pyplot as plt
     # plt.figure(dpi=500, figsize=(8, 3))
