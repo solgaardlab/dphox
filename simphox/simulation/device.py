@@ -63,7 +63,7 @@ class Modes:
     @property
     @lru_cache()
     def sz(self):
-        return poynting_z(self.e, self.h)
+        return poynting_z(self.e, self.h).squeeze()
 
     @property
     @lru_cache()
@@ -136,24 +136,25 @@ class Modes:
     def plot_sz(self, ax, idx: int):
         if idx > self.m - 1:
             ValueError("Out of range of number of solutions")
-        field_emplot_mag(ax, np.abs(self.sz.real), self.eps, spacing=self.fdfd.spacing)
+        field_emplot_mag(ax, np.abs(self.sz.real), self.eps, spacing=self.fdfd.spacing[0])
         ax.set_title(rf'Poynting, $n_{idx + 1} = {self.ns[idx]:.4f}$')
         ax.text(x=0.9, y=0.9, s=rf'$s_z$', color='white', transform=ax.transAxes, fontsize=16)
         ratio = np.max((self.te_ratios[idx], 1 - self.te_ratios[idx]))
         polarization = "TE" if np.argmax((self.te_ratios[idx], 1 - self.te_ratios[idx])) > 0 else "TM"
-        ax.text(x=0.05, y=0.9, s=rf'{polarization}[{ratio:.2f}]', color='white', transform=ax[idx].transAxes)
+        ax.text(x=0.05, y=0.9, s=rf'{polarization}[{ratio:.2f}]', color='white', transform=ax.transAxes)
 
-    def plot_field(self, ax, idx: int = 0, axis: int = 1):
+    def plot_field(self, ax, idx: int = 0, axis: int = 1, use_e: bool = True):
+        field = self.e if use_e else self.h
         if idx > self.m - 1:
             ValueError("Out of range of number of solutions")
         if not (axis == 0 or axis == 1 or axis == 2):
             ValueError("Out of range of number of solutions")
-        field_emplot_re(ax, np.abs(self.h[idx][axis].real), self.eps, spacing=self.fdfd.spacing)
+        field_emplot_re(ax, np.abs(field[idx][axis].real), self.eps, spacing=self.fdfd.spacing[0])
         ax.set_title(rf'Poynting, $n_{idx + 1} = {self.ns[idx]:.4f}$')
         ax.text(x=0.9, y=0.9, s=rf'$h_y$', color='black', transform=ax.transAxes, fontsize=16)
         ratio = np.max((self.te_ratios[idx], 1 - self.te_ratios[idx]))
         polarization = "TE" if np.argmax((self.te_ratios[idx], 1 - self.te_ratios[idx])) > 0 else "TM"
-        ax.text(x=0.05, y=0.9, s=rf'{polarization}[{ratio:.2f}]', color='white', transform=ax[idx].transAxes)
+        ax.text(x=0.05, y=0.9, s=rf'{polarization}[{ratio:.2f}]', color='white', transform=ax.transAxes)
 
 
 class ModeDevice:

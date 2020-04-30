@@ -8,7 +8,7 @@ Created on Thu Apr 23 17:19:16 2020
 
 import nazca as nd
 import numpy as np
-from ..constants import AIM_PDK_PASSIVE_PATH, AIM_PDK_WAVEGUIDE_PATH
+import nazca.geometries as geom
 from ..typing import Optional, List, Tuple
 
 
@@ -16,8 +16,8 @@ class AIMPhotonicChip:
     def __init__(self, passive_filepath: str, waveguides_filepath: str, waveguide_w: float = 0.48,
                  accuracy: float = 0.001):
         self.waveguide_w = waveguide_w
-        self.passive = nd.load_gds(AIM_PDK_PASSIVE_PATH, asdict=True, topcellsonly=False)
-        self.waveguides = nd.load_gds(AIM_PDK_WAVEGUIDE_PATH, asdict=True, topcellsonly=False)
+        self.passive = nd.load_gds(passive_filepath, asdict=True, topcellsonly=False)
+        self.waveguides = nd.load_gds(waveguides_filepath, asdict=True, topcellsonly=False)
         # Define layers
         # todo(sunil): use AIM_STACK instead of hardcoding
         nd.add_layer(name='ZLAM', layer=(701, 727), overwrite=True, accuracy=accuracy)
@@ -38,6 +38,12 @@ class AIMPhotonicChip:
         nd.add_layer(name='METKOAM', layer=(803, 727), overwrite=True, accuracy=accuracy)
         nd.add_layer(name='ABSTRACTAM', layer=(804, 727), overwrite=True, accuracy=accuracy)
 
+        self._pdk()
+
+    def _mzi_angle(self, gap_w: float, interport_w: float, radius: float):
+        return np.arccos(1 - (interport_w - gap_w - self.waveguide_w) / 4 / radius) * 180 / np.pi
+
+    def _pdk(self):
         # Add pins
         # silicon level device
         # 1. silicon low loss waveguide
@@ -67,13 +73,15 @@ class AIMPhotonicChip:
             # Notice: for edge coupler, x=0 of the cell has to put at the edge of the design area
         with nd.Cell(name='nazca_cl_band_edge_coupler_si') as self.cl_band_edge_coupler_si:
             self.passive['cl_band_edge_coupler_si'].put()
-            self.passive['cl_band_edge_coupler_si'].pin['a0'] = nd.Pin('a0').put(0, 0, 180)
-            self.passive['cl_band_edge_coupler_si'].pin['b0'] = nd.Pin('b0').put(400, 0, 0)
+            # self.passive['cl_band_edge_coupler_si'].pin['a0'] = nd.Pin('a0').put(0, 0, 180)
+            # self.passive['cl_band_edge_coupler_si'].pin['b0'] = nd.Pin('b0').put(400, 0, 0)
+            self.passive['cl_band_edge_coupler_si'].pin['b0'] = nd.Pin('b0').put(0, 0, 180)
+            self.passive['cl_band_edge_coupler_si'].pin['a0'] = nd.Pin('a0').put(400, 0, 0)
 
         # 3. silicon 4 port 50/50 splitter
         with nd.Cell(name='nazca_cl_band_splitter_4port_si') as self.cl_band_splitter_4port_si:
             self.passive['cl_band_splitter_4port_si'].put()
-            self.passive['cl_band_splitter_4port_si'].pin['b0'] = nd.Pin('a0').put(0, 5, 180)
+            self.passive['cl_band_splitter_4port_si'].pin['a0'] = nd.Pin('a0').put(0, 5, 180)
             self.passive['cl_band_splitter_4port_si'].pin['a1'] = nd.Pin('a1').put(0, -5, 180)
             self.passive['cl_band_splitter_4port_si'].pin['b0'] = nd.Pin('b0').put(200, 5, 0)
             self.passive['cl_band_splitter_4port_si'].pin['b1'] = nd.Pin('b1').put(200, -5, 0)
@@ -108,13 +116,15 @@ class AIMPhotonicChip:
             # Notice: for edge coupler, x=0 of the cell has to put at the edge of the design area
         with nd.Cell(name='nazca_cl_band_edge_coupler_FN') as self.cl_band_edge_coupler_FN:
             self.passive['cl_band_edge_coupler_FN'].put()
-            self.passive['cl_band_edge_coupler_FN'].pin['a0'] = nd.Pin('a0').put(0, 0, 180)
-            self.passive['cl_band_edge_coupler_FN'].pin['b0'] = nd.Pin('b0').put(300, 0, 0)
+            # self.passive['cl_band_edge_coupler_FN'].pin['a0'] = nd.Pin('a0').put(0, 0, 180)
+            # self.passive['cl_band_edge_coupler_FN'].pin['b0'] = nd.Pin('b0').put(300, 0, 0)
+            self.passive['cl_band_edge_coupler_FN'].pin['a0'] = nd.Pin('a0').put(300, 0, 0)
+            self.passive['cl_band_edge_coupler_FN'].pin['b0'] = nd.Pin('b0').put(0, 0, 180)
 
         # 3b. nitride 4 port 50/50 splitter
-        with nd.Cell(name='nazca_cl_band_splitter_4port_si') as self.cl_band_splitter_4port_FN:
+        with nd.Cell(name='nazca_cl_band_splitter_4port_FN') as self.cl_band_splitter_4port_FN:
             self.passive['cl_band_splitter_4port_FN'].put()
-            self.passive['cl_band_splitter_4port_FN'].pin['b0'] = nd.Pin('a0').put(0, 5, 180)
+            self.passive['cl_band_splitter_4port_FN'].pin['a0'] = nd.Pin('a0').put(0, 5, 180)
             self.passive['cl_band_splitter_4port_FN'].pin['a1'] = nd.Pin('a1').put(0, -5, 180)
             self.passive['cl_band_splitter_4port_FN'].pin['b0'] = nd.Pin('b0').put(400, 5, 0)
             self.passive['cl_band_splitter_4port_FN'].pin['b1'] = nd.Pin('b1').put(400, -5, 0)
@@ -133,9 +143,16 @@ class AIMPhotonicChip:
             self.waveguides['si_480nm_offset_30um'].pin['b0'] = nd.Pin('b0').put(50, -30, 0)
             nd.put_stub()
 
+        with nd.Cell(name='nazca_cl_band_1p_tap_si') as self.cl_band_1p_tap_si:
+            self.passive['cl_band_1p_tap_si'].put()
+            self.passive['cl_band_1p_tap_si'].pin['a0'] = nd.Pin('a0').put(0, 5, 180)
+            self.passive['cl_band_1p_tap_si'].pin['a1'] = nd.Pin('a1').put(0, -5, 180)
+            self.passive['cl_band_1p_tap_si'].pin['b0'] = nd.Pin('b0').put(40, 5, 0)
+            self.passive['cl_band_1p_tap_si'].pin['b1'] = nd.Pin('b1').put(40, -5, 0)
+
     # parameterized single mode waveguide for silicon and nitride
     # 6a. silicon single mode waveguide
-    def cl_band_waveguide_si(self, length=30, turn=False, angle=90, radius=None):
+    def cl_band_waveguide_si(self, length: float = 30, angle: float = 0, radius: Optional[float] = None):
         """Create a length parameterized silicon SM WG
 
         Args:
@@ -149,25 +166,19 @@ class AIMPhotonicChip:
                 radius = 10um
                 width = 0.48um
         """
-        if radius == None:
-            radius = 10
-
-        with nd.Cell(name='nazca_cl_band_waveguide_si') as C:
+        with nd.Cell(name='nazca_cl_band_waveguide_si') as cl_band_waveguide_si:
             nd.add_xsection('xs_si')
             nd.add_layer2xsection(xsection='xs_si', layer='SEAM')
-            ic = nd.interconnects.Interconnect(xs='xs_si', radius=radius, width=self.waveguide_w)
-            if turn:
-                i1 = ic.bend(angle=angle, arrow=False).put()
-            else:
-                i1 = ic.strt(length=length, arrow=False).put()
+            ic = nd.interconnects.Interconnect(xs='xs_si', radius=10 if radius is None else radius,
+                                               width=self.waveguide_w)
+            i1 = ic.bend(angle=angle, arrow=False).put() if angle != 0 else ic.strt(length=length, arrow=False).put()
             # add pin
             nd.Pin('a0', pin=i1.pin['a0']).put()
             nd.Pin('b0', pin=i1.pin['b0']).put()
-        return C
+        return cl_band_waveguide_si
 
     # 6b. first layer nitride single mode waveguide
-    def cl_band_waveguide_FN(self, length: float = 30, turn: bool = False, angle: float = 90,
-                             radius: Optional[float] = None):
+    def cl_band_waveguide_FN(self, length: float = 30, angle: float = 0, radius: Optional[float] = None):
         """Create a length parameterized silicon SM WG
 
         Args:
@@ -182,16 +193,16 @@ class AIMPhotonicChip:
                 width = 1.5um
         """
 
-        with nd.Cell(name='nazca_cl_band_waveguide_FN') as C:
+        with nd.Cell(name='nazca_cl_band_waveguide_FN') as cl_band_waveguide_FN:
             nd.add_xsection('xs_FN')
             nd.add_layer2xsection(xsection='xs_FN', layer='FNAM')
             ic = nd.interconnects.Interconnect(xs='xs_FN', radius=100 if radius is None else radius, width=1.5)
-            i1 = ic.bend(angle=angle, arrow=False).put() if turn else ic.strt(length=length, arrow=False).put()
+            i1 = ic.bend(angle=angle, arrow=False).put() if angle != 0 else ic.strt(length=length, arrow=False).put()
 
             # add pin
             nd.Pin('a0', pin=i1.pin['a0']).put()
             nd.Pin('b0', pin=i1.pin['b0']).put()
-        return C
+        return cl_band_waveguide_FN
 
     # 6c. first layer nitride single mode waveguide
     def cl_band_waveguide_FNSN(self, length: float = 30, turn: bool = False, angle: float = 90,
@@ -210,7 +221,7 @@ class AIMPhotonicChip:
                 width = 1.1um
         """
 
-        with nd.Cell(name='nazca_cl_band_waveguide_FNSN') as C:
+        with nd.Cell(name='nazca_cl_band_waveguide_FNSN') as cl_band_waveguide_FNSN:
             nd.add_xsection('xs_FNSN')
             nd.add_layer2xsection(xsection='xs_FNSN', layer='FNAM')
             nd.add_layer2xsection(xsection='xs_FNSN', layer='SNAM')
@@ -219,17 +230,15 @@ class AIMPhotonicChip:
             # add pin
             nd.Pin('a0', pin=i1.pin['a0']).put()
             nd.Pin('b0', pin=i1.pin['b0']).put()
-        return C
+        return cl_band_waveguide_FNSN
 
-    # Define taper length
     def taper_length(self, start_width, end_width, wavelength):
         if start_width > end_width:
             start_width, end_width = end_width, start_width
         return (end_width ** 2 - start_width ** 2) / (2 * wavelength)
 
-    # Define horn taper
     def horntaper_si(self, start_width, end_width, wavelength, n=500, name=None, xya=None):
-        with nd.Cell(name='{}'.format('cl_band_horntaper_si' if name is None else name)) as taper:
+        with nd.Cell(name=f"{'cl_band_horntaper_si' if name is None else name}") as taper:
             if start_width < end_width:
                 small_width, large_width = start_width, end_width
             else:
@@ -256,3 +265,104 @@ class AIMPhotonicChip:
             nd.put_stub()
 
         return taper
+
+    def dc(self, gap_w: float, interaction_l: float, interport_w: float, end_l: float, radius: float):
+        with nd.Cell(name='dc') as dc:
+            nd.add_xsection('xs_si')
+            nd.add_layer2xsection(xsection='xs_si', layer='SEAM')
+            ic = nd.interconnects.Interconnect(xs='xs_si', radius=radius,
+                                               width=self.waveguide_w)
+            angle = self._mzi_angle(gap_w, interport_w, radius)
+            # upper path
+            nd.Pin('a0').put(0, 0, -180)
+            ic.strt(length=end_l).put(0, 0, 0)
+            _, iw, _ = coupler_path(ic, angle, interaction_l, radius)
+            nd.Pin('c0').put(iw.pin['a0'])
+            ic.strt(length=end_l).put()
+            nd.Pin('b0').put()
+
+            # lower path
+            nd.Pin('a1').put(0, interport_w, -180)
+            ic.strt(length=end_l).put(0, interport_w, 0)
+            _, iw, _ = coupler_path(ic, -angle, interaction_l, radius)
+            nd.Pin('c1').put(iw.pin['a0'])
+            ic.strt(length=end_l).put()
+            nd.Pin('b1').put()
+
+        return dc
+
+    def mzi(self, gap_w: float, interaction_l: float, interport_w: float, arm_l: float, end_l: float, radius: float):
+        with nd.Cell(name='mzi') as mzi:
+            nd.add_xsection('xs_si')
+            nd.add_layer2xsection(xsection='xs_si', layer='SEAM')
+            ic = nd.interconnects.Interconnect(xs='xs_si', radius=radius,
+                                               width=self.waveguide_w)
+            angle = self._mzi_angle(gap_w, interport_w, radius)
+
+            # upper path
+            nd.Pin('a0').put(0, 0, -180)
+            ic.strt(length=end_l).put(0, 0, 0)
+            coupler_path(ic, angle, interaction_l, radius)
+            nd.Pin('c0').put()
+            ic.strt(length=arm_l).put()
+            coupler_path(ic, angle, interaction_l, radius)
+            ic.strt(length=end_l).put()
+            nd.Pin('b0').put()
+
+            # lower path
+            nd.Pin('a1').put(0, interport_w, -180)
+            ic.strt(length=end_l).put(0, interport_w, 0)
+            coupler_path(ic, -angle, interaction_l, radius)
+            nd.Pin('c1').put()
+            ic.strt(length=arm_l).put()
+            coupler_path(ic, -angle, interaction_l, radius)
+            ic.strt(length=end_l).put()
+            nd.Pin('b1').put()
+
+        return mzi
+
+    def microbridge_ps(self, bridge_w: float, bridge_l: float, tether_w: float,
+                        tether_l: float, block_w: float, block_l: float,
+                        radius: float = 10, ring_shape: bool = True):
+        with nd.Cell(name='microbridge_ps') as microbridge_ps:
+            nd.add_xsection('xs_sin')
+            nd.add_layer2xsection(xsection='xs_sin', layer='FNAM')
+            ic = nd.interconnects.Interconnect(xs='xs_sin', radius=radius,
+                                               width=block_w)
+
+            if ring_shape:
+                ic.strt(block_l).put(0, 0)
+                ic.bend(angle=180).put()
+                ic.strt(block_l).put()
+                ic.bend(angle=180).put()
+            else:
+                ic.strt(block_l).put(0, 0)
+
+            tether_points = geom.box(length=tether_l, width=tether_w)
+            bridge_points = geom.box(length=bridge_l, width=bridge_w)
+
+            block_len = 2 * radius * ring_shape + block_w / 2
+
+            nd.Polygon(points=tether_points, layer='FNAM').put(block_l / 2 - tether_l / 2,
+                                                               block_len + tether_w / 2)
+            nd.Polygon(points=bridge_points, layer='FNAM').put(block_l / 2 - bridge_l / 2,
+                                                               block_len + tether_w + bridge_w / 2)
+
+        return microbridge_ps
+
+
+def coupler_path(ic: nd.interconnects.Interconnect, angle: float, interaction_l: float, radius: float = 35):
+    input_waveguide = ic.bend(radius=radius, angle=angle).put()
+    ic.bend(radius=radius, angle=-angle).put()
+    interaction_waveguide = ic.strt(length=interaction_l).put()
+    ic.bend(radius=radius, angle=-angle).put()
+    output_waveguide = ic.bend(radius=radius, angle=angle).put()
+    return input_waveguide, interaction_waveguide, output_waveguide
+
+
+def trombone(ic: nd.interconnects.Interconnect, height: float, radius: float = 10):
+    ic.bend(radius, 90).put()
+    ic.strt(height).put()
+    ic.bend(radius, -180).put()
+    ic.strt(height).put()
+    ic.bend(radius, 90).put()
