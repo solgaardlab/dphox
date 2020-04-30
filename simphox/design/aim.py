@@ -48,20 +48,19 @@ class AIMPhotonicChip:
         # silicon level device
         # 1. silicon low loss waveguide
         # 1mm
-        with nd.Cell(name='nazca_cl_band_low_loss_wg_1_mm') as self.cl_band_low_loss_wg_1_mm:
-            self.passive['cl_band_low_loss_wg_1_mm'].put()
-            self.passive['cl_band_low_loss_wg_1_mm'].pin['a0'] = nd.Pin('a0').put(0, 0, 180)
-            self.passive['cl_band_low_loss_wg_1_mm'].pin['b0'] = nd.Pin('b0').put(1000, 0, 0)
-            # 2mm
-        with nd.Cell(name='nazca_cl_band_low_loss_wg_2_mm') as self.cl_band_low_loss_wg_2_mm:
-            self.passive['cl_band_low_loss_wg_2_mm'].put()
-            self.passive['cl_band_low_loss_wg_2_mm'].pin['a0'] = nd.Pin('a0').put(0, 0, 180)
-            self.passive['cl_band_low_loss_wg_2_mm'].pin['b0'] = nd.Pin('b0').put(2000, 0, 0)
-            # 0.5mm
-        with nd.Cell(name='nazca_cl_band_low_loss_wg_0p5_mm') as self.cl_band_low_loss_wg_0p5_mm:
-            self.passive['cl_band_low_loss_wg_0p5_mm'].put()
-            self.passive['cl_band_low_loss_wg_0p5_mm'].pin['a0'] = nd.Pin('a0').put(0, 0, 180)
-            self.passive['cl_band_low_loss_wg_0p5_mm'].pin['b0'] = nd.Pin('b0').put(500, 0, 0)
+        # with nd.Cell(name='nazca_cl_band_low_loss_wg_1_mm') as self.cl_band_low_loss_wg_1_mm:
+        # self.passive['cl_band_low_loss_wg_1_mm'].put()
+        # self.passive['cl_band_low_loss_wg_1_mm'].pin['a0'] = nd.Pin('a0').put(0, 0, 180)
+        # self.passive['cl_band_low_loss_wg_1_mm'].pin['b0'] = nd.Pin('b0').put(1000, 0, 0)
+        # # 2mm
+        # self.cl_band_low_loss_wg_2_mm = self.passive['cl_band_low_loss_wg_2_mm']
+        # self.cl_band_low_loss_wg_2_mm.pin['a0'] = nd.Pin('a0').put(0, 0, 180)
+        # self.cl_band_low_loss_wg_2_mm.pin['b0'] = nd.Pin('b0').put(2000, 0, 0)
+        # # 0.5mm
+        # self.cl_band_low_loss_wg_0p5_mm = self.passive['cl_band_low_loss_wg_0p5_mm']
+        # self.cl_band_low_loss_wg_0p5_mm.put()
+        # self.cl_band_low_loss_wg_0p5_mm.pin['a0'] = nd.Pin('a0').put(0, 0, 180)
+        # self.cl_band_low_loss_wg_0p5_mm.pin['b0'] = nd.Pin('b0').put(500, 0, 0)
 
         # 2. silicon coupler
         # grating coupler (vertical couple)
@@ -351,46 +350,72 @@ class AIMPhotonicChip:
         return microbridge_ps
 
     def comb_drive_ps(self, cblock_dim: Tuple[float, float],
-                   teeth_locs: List[float], big_spring_locs: List[float], anchor_spring_locs: List[float], n_teeth: int,
-                   big_spring_dim: Tuple[float, float] = (65, 2), anchor_spring_dim: Tuple[float, float] = (15, 9.4),
-                   pad_l: float = 100, pad_connect_dim: Tuple[float, float] = (10, 5),
-                   anchorblock_w: float = 1, spring_w: float = 0.15, tooth_dim: Tuple[float, float] = (0.15, 2),
-                   tooth_pitch: float = 0.6, radius: float = 10):
-
-        # NOT YET FUNCTIONAL
+                      teeth_ys: List[float], big_spring_ys: List[float], anchor_spring_ys: List[float], n_teeth: int,
+                      teeth_vert_sep: float, ps_dim: Tuple[float, float], anchor_l: float = 6,
+                      big_spring_dim: Tuple[float, float] = (65, 2), anchor_spring_dim: Tuple[float, float] = (15, 9.4),
+                      pad_l: float = 100, pad_connect_dim: Tuple[float, float] = (10, 5),
+                      spring_edge_w: float = 1, spring_w: float = 0.15, tooth_dim: Tuple[float, float] = (0.15, 2),
+                      tooth_pitch: float = 0.6, radius: float = 10):
 
         with nd.Cell(name='comb_drive') as comb_drive_ps:
             nd.add_xsection('xs_si')
             nd.add_layer2xsection(xsection='xs_si', layer='SEAM')
             ic = nd.interconnects.Interconnect(xs='xs_si', radius=radius, width=spring_w)
 
-            def soft_spring(ss_dim: Tuple[float, float], y: float):
-                ic.strt(ss_dim[0], width=spring_w).put(-cblock_dim[0] / 2, y, 180)
-                ic.strt(ss_dim[1], width=anchorblock_w).put(nd.cp.x() + anchorblock_w / 2, nd.cp.y() - spring_w / 2, -90)
-                ic.strt(ss_dim[0], width=spring_w).put(nd.cp.x() - anchorblock_w / 2, nd.cp.y(), -90)
-                ic.strt(ss_dim[0], width=spring_w).put(cblock_dim[0] / 2, y)
-                ic.strt(ss_dim[1], width=anchorblock_w).put(nd.cp.x() + anchorblock_w / 2, nd.cp.y() - spring_w / 2, 90)
-                ic.strt(ss_dim[0], width=spring_w).put(nd.cp.x() - anchorblock_w / 2, nd.cp.y(), 90)
+            cblock = nd.Polygon(geom.box(length=cblock_dim[0], width=cblock_dim[1]), layer='SEAM')
+            connector = nd.Polygon(geom.box(length=pad_connect_dim[0], width=pad_connect_dim[1]), layer='SEAM')
+            pad = nd.Polygon(geom.box(length=pad_l, width=pad_l), layer='SEAM')
+            ps = ic.strt(length=ps_dim[0], width=ps_dim[1])
 
-            for loc in teeth_locs:
-                ic.strt(tooth_pitch * n_teeth).put(-cblock_dim[0] / 2, loc)
+            ps.put(0, 0)
+            cx, cy = ps.bbox[2] / 2, ps.bbox[3] + pad_connect_dim[1] / 2
+            connector.put(cx - connector.bbox[2] / 2, cy)
+            cblock.put(cx - cblock.bbox[2] / 2, cy + connector.bbox[3] + cblock_dim[1] / 2)
+            connector.put(cx - connector.bbox[2] / 2, cy + connector.bbox[3] + cblock_dim[1] + pad_connect_dim[1] / 2)
+            pad.put(cx - pad.bbox[2] / 2, cy + connector.bbox[3] + cblock_dim[1] + pad_connect_dim[1] + pad_l / 2)
+
+            def soft_spring(ss_dim: Tuple[float, float], y: float, with_anchor: bool = False):
+                ic.strt(-ss_dim[0], width=spring_w).put(-cblock_dim[0] / 2 + ps.bbox[2] / 2, y)
+                ic.strt(ss_dim[1], width=spring_edge_w).put(nd.cp.x() - spring_edge_w / 2, nd.cp.y() - spring_w / 2,
+                                                            90)
+                ic.strt(ss_dim[0], width=spring_w).put(nd.cp.x() + spring_edge_w / 2, nd.cp.y() - spring_w / 2)
+                anchor_x, anchor_y = nd.cp.x() - spring_w, nd.cp.y() - spring_w / 2 - anchor_spring_dim[1] / 2
+                if with_anchor:
+                    ic.strt(width=anchor_l, length=-anchor_l).put(anchor_x, anchor_y)
+                    ic.strt(width=spring_w, length=-ss_dim[1]).put(anchor_x - anchor_l, anchor_y - anchor_l / 2 + spring_w / 2)
+                    ic.strt(width=spring_w, length=-ss_dim[1]).put(anchor_x - anchor_l, anchor_y + anchor_l / 2 - spring_w / 2)
+                ic.strt(ss_dim[0], width=spring_w).put(cblock_dim[0] / 2 + ps.bbox[2] / 2, y)
+                ic.strt(ss_dim[1], width=spring_edge_w).put(nd.cp.x() + spring_edge_w / 2, nd.cp.y() - spring_w / 2, 90)
+                ic.strt(ss_dim[0], width=spring_w).put(nd.cp.x() - spring_edge_w / 2, nd.cp.y() - spring_w / 2, -180)
+                anchor_x, anchor_y = nd.cp.x() + spring_w, nd.cp.y() - spring_w / 2 - anchor_spring_dim[1] / 2
+                if with_anchor:
+                    ic.strt(width=anchor_l, length=anchor_l).put(anchor_x, anchor_y)
+                    ic.strt(width=spring_w, length=ss_dim[1]).put(anchor_x + anchor_l, anchor_y - anchor_l / 2 + spring_w / 2)
+                    ic.strt(width=spring_w, length=ss_dim[1]).put(anchor_x + anchor_l, anchor_y + anchor_l / 2 - spring_w / 2)
+
+            for y in teeth_ys:
+                ic.strt(tooth_pitch * n_teeth + tooth_dim[0]).put(cblock_dim[0] / 2 + ps.bbox[2] / 2, y + cy)
+                x = nd.cp.x()
                 for idx in range(n_teeth):
-                    ic.strt(width=tooth_dim[1], length=tooth_dim[0]).put(np.cp.x() + tooth_pitch, loc)
+                    ic.strt(width=tooth_dim[1], length=-tooth_dim[0]).put(x - idx * tooth_pitch,
+                                                                          y + cy - tooth_dim[1] / 2 - spring_w / 2)
+                    ic.strt(width=tooth_dim[1], length=-tooth_dim[0]).put(x - idx * tooth_pitch - tooth_pitch / 2,
+                                                                          y + cy - tooth_dim[1] / 2 - spring_w / 2 -
+                                                                          teeth_vert_sep)
+                ic.strt(tooth_pitch * n_teeth + tooth_dim[0]).put(-cblock_dim[0] / 2 + ps.bbox[2] / 2, y + cy, 180)
+                x = nd.cp.x()
+                for idx in range(n_teeth):
+                    ic.strt(width=tooth_dim[1], length=tooth_dim[0]).put(x + idx * tooth_pitch,
+                                                                         y + cy - tooth_dim[1] / 2 - spring_w / 2, 0)
+                    ic.strt(width=tooth_dim[1], length=-tooth_dim[0]).put(x + idx * tooth_pitch - tooth_pitch / 2,
+                                                                          y + cy - tooth_dim[1] / 2 - spring_w / 2 -
+                                                                          teeth_vert_sep)
 
-            for loc in anchor_spring_locs:
-                soft_spring(anchor_spring_dim, loc)
+            for y in anchor_spring_ys:
+                soft_spring(anchor_spring_dim, y + cy, with_anchor=True)
 
-            for loc in big_spring_locs:
-                soft_spring(big_spring_dim, loc)
-
-            cblock_points = geom.box(length=cblock_dim[0], width=cblock_dim[1])
-            connector_points = geom.box(length=pad_connect_dim[0], width=pad_connect_dim[1])
-            pad_points = geom.box(length=pad_l, width=pad_l)
-
-            # block_len = 2 * radius * ring_shape + block_w / 2
-
-            connector = nd.Polygon(points=connector_points, layer='SEAK').put()
-            cblock = nd.Polygon(points=cblock_points, layer='SEAM').put()
+            for y in big_spring_ys:
+                soft_spring(big_spring_dim, y + cy)
 
         return comb_drive_ps
 
