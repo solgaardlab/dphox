@@ -1,21 +1,23 @@
 # Use AIM PDK component with pins
 
-first import the python file include all the PDK component:
+This code was primarily written by Yu Miao and JP Macclean. First, import the aim pdk module from `simphox`.
 ```python
-  import AIM_PDK_component as AIM_PDK
+from simphox.gds import aim
 ```
 
-## adding AIM PDK component
+You will also need to have a folder in 
+
+## Adding AIM PDK component
 all the component cell name is the same as the cell name from the PDK
 for example, in order to draw a silicon Y spliter (the cell name of silicon Y junction in AIM PDK is cl_band_splitter_3port_si), type:
 ```python
-  AIM_PDK.cl_band_splitter_3port_si.put()
+aim.cl_band_splitter_3port_si.put()
 ```
 
 All the pins have been added to the cells, in order to utilize the pin connection, for example connecting a grating coupler to a silicon Y junction:
 ```python
-  si_GC = AIM_PDK.cl_band_vertical_coupler_si.put()
-  AIM_PDK.cl_band_splitter_3port_si.put('a0',si_GC.pin['b0'])
+si_gc = aim.cl_band_vertical_coupler_si.put()
+aim.cl_band_splitter_3port_si.put('a0',si_GC.pin['b0'])
 ```
 
 ## adding single mode waveguide
@@ -23,12 +25,12 @@ In AIM_PDK_component python file, defines the single mode waveguide for silicon 
 
 Python file parameterized the waveguide by its length, whether need a turn and turn angle. By default, we assume a straight waveguide. If need a turn, set 'turn = True'. To add a waveguide is same as adding other component, but with input argument waveguide length, turn and angle. For example, adding a silicon 20um long straight silicon single mode waveguide
 ```python
-  AIM_PDK.cl_band_waveguide_si(length = 20).put()
+aim.cl_band_waveguide_si(length = 20).put()
 ```
 
 Add a turn of 90 degree turn of the silicon waveguide
 ```python
-  AIM_PDK.cl_band_waveguide_si(turn = True, angle = 90).put()
+aim.cl_band_waveguide_si(turn = True, angle = 90).put()
 ```
 
 ## All the building block should be ready now

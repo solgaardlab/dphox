@@ -16,8 +16,8 @@ from matplotlib.collections import PatchCollection
 # permission of the authors of this file and that of the Polimi group.
 
 
-class PhotonicChip:
-    def __init__(self, process_stack: dict, waveguide_w: float, accuracy: float = 0.001):
+class AMFPhotonicChip:
+    def __init__(self, waveguide_w: float, accuracy: float = 0.001, process_stack: dict = AMF_STACK):
         """
 
         Args:
