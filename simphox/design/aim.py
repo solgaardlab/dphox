@@ -322,8 +322,8 @@ class AIMPhotonicChip:
         return mzi
 
     def microbridge_ps(self, bridge_w: float, bridge_l: float, tether_w: float,
-                        tether_l: float, block_w: float, block_l: float,
-                        radius: float = 10, ring_shape: bool = True):
+                       tether_l: float, block_w: float, block_l: float,
+                       radius: float = 10, ring_shape: bool = True):
         with nd.Cell(name='microbridge_ps') as microbridge_ps:
             nd.add_xsection('xs_sin')
             nd.add_layer2xsection(xsection='xs_sin', layer='FNAM')
@@ -349,6 +349,50 @@ class AIMPhotonicChip:
                                                                block_len + tether_w + bridge_w / 2)
 
         return microbridge_ps
+
+    def comb_drive_ps(self, cblock_dim: Tuple[float, float],
+                   teeth_locs: List[float], big_spring_locs: List[float], anchor_spring_locs: List[float], n_teeth: int,
+                   big_spring_dim: Tuple[float, float] = (65, 2), anchor_spring_dim: Tuple[float, float] = (15, 9.4),
+                   pad_l: float = 100, pad_connect_dim: Tuple[float, float] = (10, 5),
+                   anchorblock_w: float = 1, spring_w: float = 0.15, tooth_dim: Tuple[float, float] = (0.15, 2),
+                   tooth_pitch: float = 0.6, radius: float = 10):
+
+        # NOT YET FUNCTIONAL
+
+        with nd.Cell(name='comb_drive') as comb_drive_ps:
+            nd.add_xsection('xs_si')
+            nd.add_layer2xsection(xsection='xs_si', layer='SEAM')
+            ic = nd.interconnects.Interconnect(xs='xs_si', radius=radius, width=spring_w)
+
+            def soft_spring(ss_dim: Tuple[float, float], y: float):
+                ic.strt(ss_dim[0], width=spring_w).put(-cblock_dim[0] / 2, y, 180)
+                ic.strt(ss_dim[1], width=anchorblock_w).put(nd.cp.x() + anchorblock_w / 2, nd.cp.y() - spring_w / 2, -90)
+                ic.strt(ss_dim[0], width=spring_w).put(nd.cp.x() - anchorblock_w / 2, nd.cp.y(), -90)
+                ic.strt(ss_dim[0], width=spring_w).put(cblock_dim[0] / 2, y)
+                ic.strt(ss_dim[1], width=anchorblock_w).put(nd.cp.x() + anchorblock_w / 2, nd.cp.y() - spring_w / 2, 90)
+                ic.strt(ss_dim[0], width=spring_w).put(nd.cp.x() - anchorblock_w / 2, nd.cp.y(), 90)
+
+            for loc in teeth_locs:
+                ic.strt(tooth_pitch * n_teeth).put(-cblock_dim[0] / 2, loc)
+                for idx in range(n_teeth):
+                    ic.strt(width=tooth_dim[1], length=tooth_dim[0]).put(np.cp.x() + tooth_pitch, loc)
+
+            for loc in anchor_spring_locs:
+                soft_spring(anchor_spring_dim, loc)
+
+            for loc in big_spring_locs:
+                soft_spring(big_spring_dim, loc)
+
+            cblock_points = geom.box(length=cblock_dim[0], width=cblock_dim[1])
+            connector_points = geom.box(length=pad_connect_dim[0], width=pad_connect_dim[1])
+            pad_points = geom.box(length=pad_l, width=pad_l)
+
+            # block_len = 2 * radius * ring_shape + block_w / 2
+
+            connector = nd.Polygon(points=connector_points, layer='SEAK').put()
+            cblock = nd.Polygon(points=cblock_points, layer='SEAM').put()
+
+        return comb_drive_ps
 
 
 def coupler_path(ic: nd.interconnects.Interconnect, angle: float, interaction_l: float, radius: float = 35):
