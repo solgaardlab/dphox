@@ -15,6 +15,7 @@ AMF_STACK = {
         'heater': 115,
         'slab': 12,
         'pad': 150,
+        'oxide_open':151,
         'trench': 160
     },
     'cross_sections': {
@@ -63,6 +64,11 @@ AMF_STACK = {
         'trench_xs': [
             {
                 'layer': 160  # trench
+            }
+        ],
+        'oxide_open_xs': [
+            {
+                'layer': 151  # oxide opening
             }
         ],
         'slab_xs': [
