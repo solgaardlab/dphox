@@ -349,6 +349,97 @@ class AIMPhotonicChip:
 
         return microbridge_ps
 
+    def static_ps_simple(self ,w1: float, w2: float, offset1: float, offset2: float, length: float = 90,
+                    length_taper: float = 5):
+        ''' 
+        added by Nate to lay down static phase shifters 05/01/2020 1:30am
+        '''
+        with nd.Cell(name='static_ps_simple') as static_ps_simple:
+            l=(length+2*length_taper)
+            wg=self.cl_band_waveguide_si(length=l)
+            wg.put()
+            taper_in1=geom.taper(length=length_taper,width1=0,width2=w1)
+            taper_out1=geom.taper(length=length_taper,width1=w1,width2=0)
+            ps1=geom.box(length=length, width=w1)
+            nd.Polygon(points=taper_in1, layer='FNAM').put(0,offset1)
+            nd.Polygon(points=ps1, layer='FNAM').put(length_taper,offset1)
+            nd.Polygon(points=taper_out1, layer='FNAM').put(length+length_taper,offset1)
+
+            taper_in2=geom.taper(length=length_taper,width1=0,width2=w2)
+            taper_out2=geom.taper(length=length_taper,width1=w2,width2=0)
+            ps2=geom.box(length=length, width=w2)
+            nd.Polygon(points=taper_in2, layer='SNAM').put(0,offset2)
+            nd.Polygon(points=ps2, layer='SNAM').put(length_taper,offset2)
+            nd.Polygon(points=taper_out2, layer='SNAM').put(length+length_taper,offset2)
+            # add pin
+            nd.Pin('a0', pin=wg.pin['a0']).put()
+            nd.Pin('b0', pin=wg.pin['b0']).put()
+
+        return(static_ps_simple)
+
+
+    def static_ps_3(self , offset1: float = 0, offset2: float = 0, length: float = 90,
+                    length_taper: float = 5):
+        ''' 
+        added by Nate to lay down static phase shifters 05/01/2020 1:30am
+        '''
+        with nd.Cell(name='static_ps_simple') as static_ps_simple:
+            w=0.15
+            sep=0.1
+
+            l=(length+2*length_taper)
+            wg=self.cl_band_waveguide_si(length=l)
+            wg.put()
+
+            taper_in1=geom.taper(length=length_taper,width1=0,width2=w)
+            taper_out1=geom.taper(length=length_taper,width1=w,width2=0)
+            ps1=geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in1, layer='FNAM').put(0,offset1)
+            nd.Polygon(points=ps1, layer='FNAM').put(length_taper,offset1)
+            nd.Polygon(points=taper_out1, layer='FNAM').put(length+length_taper,offset1)
+
+            taper_in12=geom.taper(length=length_taper,width1=0,width2=w)
+            taper_out12=geom.taper(length=length_taper,width1=w,width2=0)
+            ps12=geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in12, layer='FNAM').put(0,offset1+w+sep)
+            nd.Polygon(points=ps12, layer='FNAM').put(length_taper,offset1+w+sep)
+            nd.Polygon(points=taper_out12, layer='FNAM').put(length+length_taper,offset1+w+sep)
+
+            taper_in13=geom.taper(length=length_taper,width1=0,width2=w)
+            taper_out13=geom.taper(length=length_taper,width1=w,width2=0)
+            ps13=geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in13, layer='FNAM').put(0,offset1-w-sep)
+            nd.Polygon(points=ps13, layer='FNAM').put(length_taper,offset1-w-sep)
+            nd.Polygon(points=taper_out13, layer='FNAM').put(length+length_taper,offset1-w-sep)
+
+            taper_in21=geom.taper(length=length_taper,width1=0,width2=w)
+            taper_out21=geom.taper(length=length_taper,width1=w,width2=0)
+            ps21=geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in21, layer='SNAM').put(0,offset2)
+            nd.Polygon(points=ps21, layer='SNAM').put(length_taper,offset2)
+            nd.Polygon(points=taper_out21, layer='SNAM').put(length+length_taper,offset2)
+
+            taper_in22=geom.taper(length=length_taper,width1=0,width2=w)
+            taper_out22=geom.taper(length=length_taper,width1=w,width2=0)
+            ps22=geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in22, layer='SNAM').put(0,offset2+w+sep)
+            nd.Polygon(points=ps22, layer='SNAM').put(length_taper,offset2+w+sep)
+            nd.Polygon(points=taper_out22, layer='SNAM').put(length+length_taper,offset2+w+sep)
+
+            taper_in23=geom.taper(length=length_taper,width1=0,width2=w)
+            taper_out23=geom.taper(length=length_taper,width1=w,width2=0)
+            ps23=geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in23, layer='SNAM').put(0,offset2-w-sep)
+            nd.Polygon(points=ps23, layer='SNAM').put(length_taper,offset2-w-sep)
+            nd.Polygon(points=taper_out23, layer='SNAM').put(length+length_taper,offset2-w-sep)
+
+            # add pin
+            nd.Pin('a0', pin=wg.pin['a0']).put()
+            nd.Pin('b0', pin=wg.pin['b0']).put()
+
+        return(static_ps_simple)
+
+
     def comb_drive_ps(self, cblock_dim: Tuple[float, float], teeth_ys: List[float], big_spring_ys: List[float],
                       anchor_spring_ys: List[float], n_teeth: int, teeth_vert_sep: float,
                       gnd_attachment_dim: Tuple[float, float], ps_dim: Tuple[float, float],
