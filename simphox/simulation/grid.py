@@ -3,7 +3,7 @@ from functools import lru_cache
 import numpy as np
 import scipy.sparse as sp
 
-from simphox.gds.gdspy import Component
+from ..design.gdspy import Component
 from ..typing import Shape, Dim, GridSpacing, Optional, Tuple, List, Union
 from ..utils import d2curl_op, d2curl_fn, grid_average
 
@@ -88,7 +88,7 @@ class Grid:
         """A simple method to reshape flat 3d vec array into the same shape
 
         Args:
-            v: vector of size `(3n,)` to rearrange into array of size `(3n,)`
+            v: vector of size `(3n,)` to rearrange into array of size `(3, n)`
 
         Returns:
 
@@ -99,7 +99,7 @@ class Grid:
 class SimGrid(Grid):
     def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
                  bloch_phase: Union[Dim, float] = 0.0, pml: Optional[Union[int, Shape, Dim]] = None,
-                 pml_eps: float = 1.0, grid_avg: bool = True):
+                 pml_eps: float = 1.0, grid_avg: float = 1):
         super(SimGrid, self).__init__(shape, spacing, eps)
         self.pml_shape = np.asarray(pml, dtype=np.int) if isinstance(pml, tuple) else pml
         self.pml_shape = np.ones(self.ndim, dtype=np.int) * pml if isinstance(pml, int) else pml
@@ -172,21 +172,21 @@ class SimGrid(Grid):
     def curl_b(self):
         return d2curl_op(self.db)
 
-    def curl_e(self, e) -> np.ndarray:
+    def curl_e(self, e, beta: Optional[float] = None) -> np.ndarray:
         dx, _ = self._dxes
 
         def de(e_, d):
             return (np.roll(e_, -1, axis=d) - e_) / dx[d]
 
-        return d2curl_fn(e, de)
+        return d2curl_fn(e, de, beta)
 
-    def curl_h(self, h) -> np.ndarray:
+    def curl_h(self, h, beta: Optional[float] = None) -> np.ndarray:
         _, dx = self._dxes
 
         def dh(h_, d):
             return (h_ - np.roll(h_, 1, axis=d)) / dx[d]
 
-        return d2curl_fn(h, dh)
+        return d2curl_fn(h, dh, beta)
 
     @property
     def _dxes(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
@@ -199,5 +199,5 @@ class SimGrid(Grid):
 
     @property
     def eps_t(self):
-        return grid_average(self.eps) if self.grid_avg else np.stack((self.eps, self.eps, self.eps))
+        return grid_average(self.eps, shift=self.grid_avg) if self.grid_avg > 0 else np.stack((self.eps, self.eps, self.eps))
 

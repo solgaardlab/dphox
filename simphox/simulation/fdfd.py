@@ -21,7 +21,6 @@ class FDFD(SimGrid):
                  grid_avg: bool = True, no_grad: bool = True):
 
         self.wavelength = wavelength
-        self.k0 = 2 * np.pi / self.wavelength  # defines the units for the simulation!
         self.no_grad = no_grad
 
         super(FDFD, self).__init__(
@@ -33,6 +32,10 @@ class FDFD(SimGrid):
             pml_eps=pml_eps,
             grid_avg=grid_avg
         )
+
+    @property
+    def k0(self):
+        return 2 * np.pi / self.wavelength  # defines the units for the simulation!
 
     @property
     def mat(self) -> Union[sp.spmatrix, Tuple[np.ndarray, np.ndarray]]:
@@ -129,7 +132,7 @@ class FDFD(SimGrid):
 
     C = wgm  # C is the matrix for the guided mode eigensolver
 
-    def e2h(self, e: np.ndarray) -> np.ndarray:
+    def e2h(self, e: np.ndarray, beta: Optional[float] = None) -> np.ndarray:
         """
         Convert magnetic field :math:`\mathbf{e}` to electric field :math:`\mathbf{h}`.
 
@@ -144,9 +147,9 @@ class FDFD(SimGrid):
 
         """
         e = self.reshape(e) if e.ndim == 2 else e
-        return self.curl_e(e) / self.k0
+        return self.curl_e(e, beta) / (1j * self.k0)
 
-    def h2e(self, h: np.ndarray) -> np.ndarray:
+    def h2e(self, h: np.ndarray, beta: Optional[float] = None) -> np.ndarray:
         """
         Convert magnetic field :math:`\mathbf{h}` to electric field :math:`\mathbf{e}`.
 
@@ -161,7 +164,7 @@ class FDFD(SimGrid):
 
         """
         h = self.reshape(h) if h.ndim == 2 else h
-        return self.curl_h(h) / (self.k0 * self.eps_t)
+        return self.curl_h(h, beta) / (1j * self.k0 * self.eps_t)
 
     def solve(self, src: np.ndarray, solver_fn: Optional[SpSolve] = None, reshaped: bool = True) -> np.ndarray:
         """FDFD e-field Solver
@@ -187,7 +190,7 @@ class FDFD(SimGrid):
         return self.reshape(e) if reshaped else e
 
     def wgm_solve(self, num_modes: int = 6, beta_guess: Optional[Union[float, Tuple[float, float]]] = None,
-                  tol: float = 1e-5) -> Tuple[np.ndarray, np.ndarray]:
+                  tol: float = 1e-7) -> Tuple[np.ndarray, np.ndarray]:
         """FDFD waveguide mode (WGM) solver
 
         Solve for waveguide modes (x-translational symmetry) by finding the eigenvalues of :math:`C`.
@@ -208,7 +211,8 @@ class FDFD(SimGrid):
 
         """
 
-        db = self.db
+        # db = self.db
+        df = self.df
         if isinstance(beta_guess, float) or beta_guess is None:
             sigma = beta_guess ** 2 if beta_guess else (self.k0 * np.sqrt(np.max(self.eps))) ** 2
             eigvals, eigvecs = eigs(self.wgm, k=num_modes, sigma=sigma, tol=tol)
@@ -219,7 +223,7 @@ class FDFD(SimGrid):
             raise TypeError(f'Expected beta_guess to be None, float, or Tuple[float, float] but got {type(beta_guess)}')
         inds_sorted = np.asarray(np.argsort(np.sqrt(eigvals.real))[::-1])
         if self.ndim > 1:
-            hz = sp.hstack(db[:2]) @ eigvecs / (1j * np.sqrt(eigvals))
+            hz = sp.hstack(df[:2]) @ eigvecs / (1j * np.sqrt(eigvals))
             h = np.vstack((eigvecs, hz))
         else:
             h = eigvecs

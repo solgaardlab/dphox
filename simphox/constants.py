@@ -30,12 +30,22 @@ AMF_STACK = {
                 'growy': 0.001
             }
         ],
+        'metal_xs': [
+            {
+                'layer': 125,  # mt_heater
+            }
+        ],
         'via_heater_xs': [
             {
                 'layer': 120  # via_heater
             },
             {
                 'layer': 125,  # mt_heater
+                'growx': 1.5,
+                'growy': 1.5
+            },
+            {
+                'layer': 115,  # heater
                 'growx': 1.5,
                 'growy': 1.5
             }
@@ -78,3 +88,47 @@ AMF_STACK = {
         ]
     }
 }
+
+
+AIM_STACK = {
+    'layers': {
+        'si_ridge': [707, 727],  # ream
+        'si': [709, 727],  # seam
+        'sin_bot': [733, 727],  # fnam
+        'sin_top': [735, 727],  # snam
+        'sin_ox_open': [737, 727],  # tzam
+        'trench': [726, 727]  # diam
+    },
+    'cross_sections': {
+        'si_ridge_xs': [
+            {
+                'layer': [707, 727],  # rib etch
+                'growy': 0.004
+            }
+        ],
+        'waveguide_xs': [
+            {
+                'layer': [709, 727],  # waveguide
+                'growy': 0.004
+            }
+        ],
+        'sin_bot_xs': [
+            {
+                'layer': [733, 727],  # sin_bot
+            }
+        ],
+        'sin_top_xs': [
+            {
+                'layer': [735, 727],  # sin_top
+            }
+        ],
+        'trench_xs': [
+            {
+                'layer': [726, 727]  # trench
+            }
+        ]
+    }
+}
+
+AIM_PDK_PASSIVE_PATH = '../../aim_lib/APSUNY_v35a_passive.design'
+AIM_PDK_WAVEGUIDE_PATH = '../../aim_lib/APSUNY_v35_waveguides.design'
