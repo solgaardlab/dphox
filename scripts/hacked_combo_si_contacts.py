@@ -670,7 +670,7 @@ interport_w = 70
 arm_l = 150
 arm_l = 210
 end_l = 202
-end_l_dc = 10
+end_l_dc = 10+20
 tdc_interaction_w = 100
 mzi_interation_w = 45
 gap_w = 0.3
@@ -853,6 +853,14 @@ with nd.Cell('mems_phase_shifter_chiplet') as mems_phase_shifter_chiplet:
     tdc.put(0, -1550, flip=True)
     static = nd.load_gds('static.gds')  # insert nate's filepath (or scripted cell) here
     static.put(220, -300, flip=True)
+
+    #TZAM Trenches to be manually placed
+    chip.shallow_trench(200,810).put(-3000,-1550) #for mem ps
+    chip.shallow_trench(225,470).put(-350-3000,-1550) #for mem ps
+    chip.shallow_trench(215,470).put(-2*350-3000,-1550) #for mem ps
+    chip.shallow_trench(200,390).put(-3*350-3000,-1550) #for rebecca tdc
+    chip.shallow_trench(290,550).put(-4*350-3000,-1550) #for rings
+
     
 
 mems_phase_shifter_chiplet.put(0+1500, 0)
@@ -867,5 +875,15 @@ chip.cl_band_waveguide_si(angle=90, radius=5).put()
 chip.cl_band_waveguide_si(length=dx-10).put()
 chip.cl_band_waveguide_si(angle=90,radius=5).put()
 chip.cl_band_waveguide_si(length=dy-10).put()
+## Drawing the alignment marks
+with nd.Cell('alignment mark') as amark:
+    side=100
+    chip.cl_band_waveguide_si(length=side, width=5).put(0,side/2)
+    chip.cl_band_waveguide_si(length=side, width=5).put(side/2,0,90)
+# return amark
+amark.put(-dx/2,-dy/2)
+amark.put(dx/2-side,-dy/2)
+amark.put(dx/2-side,dy/2-side)
+amark.put(-dx/2,dy/2-side)
 
 nd.export_gds(filename='mems_phase_shifter_chiplet.gds')
