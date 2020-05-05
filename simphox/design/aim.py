@@ -163,6 +163,14 @@ class AIMPhotonicChip:
             self.passive['cl_band_1p_tap_si'].pin['a1'] = nd.Pin('a1').put(0, -5, 180)
             self.passive['cl_band_1p_tap_si'].pin['b0'] = nd.Pin('b0').put(40, 5, 0)
             self.passive['cl_band_1p_tap_si'].pin['b1'] = nd.Pin('b1').put(40, -5, 0)
+        
+        # ADD Si Wavguide crossing
+        with nd.Cell(name='nazca_cl_band_crossing') as self.cl_band_crossing:
+            self.passive['cl_band_crossing'].put()
+            self.passive['cl_band_crossing'].pin['a0'] = nd.Pin('a0').put(0, 0, 180)
+            self.passive['cl_band_crossing'].pin['a1'] = nd.Pin('a1').put(50, 50, 90)
+            self.passive['cl_band_crossing'].pin['b0'] = nd.Pin('b0').put(100, 0, 0)
+            self.passive['cl_band_crossing'].pin['b1'] = nd.Pin('b1').put(50, -50, -90)
 
     # parameterized single mode waveguide for silicon and nitride
     # 6z. silicon single mode rib waveguide
@@ -368,11 +376,51 @@ class AIMPhotonicChip:
 
         ### dc_rib, dc with rib waveguide
 
-    def dc_rib(self, gap_w: float, interaction_l: float, interport_w: float, end_l: float, radius: float,
-               waveguide: float):
+    def microbridge_pshack(self, bridge_w: float, bridge_l: float, tether_w: float,
+                       tether_l: float, block_w: float, block_l: float,
+                       radius: float = 10, ring_shape: bool = True,
+                       etch_hole: bool = True):
+        with nd.Cell(name='microbridge_pshack') as microbridge_pshack:
+            nd.add_xsection('xs_sin')
+            ic = nd.interconnects.Interconnect(xs='xs_sin', radius=radius,
+                                               width=block_w)
+            if ring_shape:
+                ic.strt(block_l).put(0, 0)
+                ic.bend(angle=180).put()
+                ic.strt(block_l).put()
+                ic.bend(angle=180).put()
+            else:
+                ic.strt(block_l).put(0, 0)
+            tether_points = geom.box(length=tether_l, width=tether_w)
+            bridge_points = geom.box(length=bridge_l, width=bridge_w)
+            vert_bridge_points = geom.box(length=bridge_w, width=3 * bridge_w)
+            block_len = 2 * radius * ring_shape + block_w / 2
+            nd.Polygon(points=tether_points, layer='FNAM').put(block_l / 2 - tether_l / 2,
+                                                               block_len + tether_w / 2)
+            nd.Polygon(points=bridge_points, layer='FNAM').put(block_l / 2 - bridge_l / 2,
+                                                               block_len + tether_w + bridge_w / 2)
+            if etch_hole:
+                nd.Polygon(points=bridge_points, layer='FNAM').put(block_l / 2 - bridge_l / 2,
+                                                                   block_len + tether_w + bridge_w / 2 + 2 * bridge_w)
+                for idx in range(int(bridge_l // bridge_w / 2)):
+                    offset = idx * 2 * bridge_w
+                    nd.Polygon(points=vert_bridge_points, layer='FNAM').put(block_l / 2 - bridge_l / 2 + offset,
+                                                                            block_len + tether_w + 1.5 * bridge_w)
+                nd.Polygon(points=vert_bridge_points, layer='FNAM').put(block_l / 2 - bridge_l / 2 + 2 * bridge_w + offset,
+                                                                        block_len + tether_w + 1.5 * bridge_w)
+        return microbridge_pshack
+        
+        
+    def dc_rib(self, gap_w: float, interaction_l: float, interport_w: float, end_l: float, radius: float, hat_width: float, edge_width: float):
         with nd.Cell(name='dc_rib') as dc_rib:
-            ic = nd.interconnects.Interconnect(xs='xs_si_rib', radius=radius,
-                                               width=waveguide)
+            nd.add_xsection(name = 'xs_si_ribdc')
+            nd.add_layer2xsection(xsection='xs_si_ribdc', layer='SEAM')
+            nd.add_layer2xsection(xsection='xs_si_ribdc', layer='REAM', leftedge = (0.5,0),
+                                  rightedge = (0, 0.5*hat_width))
+            nd.add_layer2xsection(xsection='xs_si_ribdc', layer='REAM', leftedge=(-0.5, 0),
+                                  rightedge=(0, -0.5 * hat_width))
+            ic = nd.interconnects.Interconnect(xs='xs_si_ribdc', radius=radius,
+                                               width=hat_width + 2*edge_width)
             angle = self._mzi_angle(gap_w, interport_w, radius)
             # upper path
             nd.Pin('a0').put(0, 0, -180)
@@ -391,6 +439,7 @@ class AIMPhotonicChip:
             nd.Pin('b1').put()
 
         return dc_rib
+
 
     def mzi(self, gap_w: float, interaction_l: float, interport_w: float, arm_l: float, end_l: float, radius: float):
         with nd.Cell(name='mzi') as mzi:
@@ -417,6 +466,63 @@ class AIMPhotonicChip:
             coupler_path(ic, -angle, interaction_l, radius)
             ic.strt(length=end_l).put()
             nd.Pin('b1').put()
+
+        return mzi
+
+    def mzi_x_contacts(self, gap_w: float, interaction_l: float, interport_w: float, arm_l: float, end_l: float, radius: float):
+        with nd.Cell(name='mzi') as mzi:
+            ic = nd.interconnects.Interconnect(xs='xs_si', radius=radius,
+                                               width=self.waveguide_w)
+            angle = self._mzi_angle(gap_w, interport_w, radius)
+
+            port_out_w = 110
+            radius_in= port_out_w/2
+            radius_out=radius_in
+
+            del_y_in = (interport_w - gap_w - self.waveguide_w)/2 
+            del_y_out = (port_out_w - gap_w - self.waveguide_w)/2 
+            angle_in = np.arccos(1 - (del_y_in / (radius+radius_in))) * 180 / np.pi      
+            angle_out = np.arccos(1 - (del_y_out / (radius+radius_out))) * 180 / np.pi
+            
+            bend_in_x = (radius+radius_in)*np.absolute(np.sin(angle_in*(np.pi/180)))
+            bend_out_x = (radius+radius_out)*np.absolute(np.sin(angle_out*(np.pi/180)))
+            opening_l=interaction_l+bend_in_x+bend_out_x
+
+            
+            # upper path
+            nd.Pin('a0').put(0, 0, -180)
+            ic.strt(length=end_l).put(0, 0, 0)
+            coupler_path_x(ic, angle_in, interaction_l, angle_out, radius_in, radius_out, radius)
+            ul_x=self.cl_band_crossing.put() #x_si
+            nd.Pin('c0').put()
+            ic.strt(length=arm_l).put() #x_si
+            ur_x=self.cl_band_crossing.put()
+            coupler_path_x(ic, angle_out, interaction_l, angle_in, radius_out, radius_in, radius)
+            ic.strt(length=end_l).put()
+            nd.Pin('b0').put()
+
+            # Adding contacts
+            pad_w=150-20
+            self.si_contact_pad(length=arm_l+120-10,width=pad_w).put(ul_x.pin['b1'].x-5,ul_x.pin['b1'].y-pad_w/2)
+            
+
+            # lower path
+            nd.Pin('a1').put(0, interport_w, -180)
+            ic.strt(length=end_l).put(0, interport_w, 0)
+            coupler_path_x(ic, -angle_in, interaction_l, -angle_out, radius_in, radius_out, radius)
+            ul_x=self.cl_band_crossing.put() #x_si
+            nd.Pin('c1').put()
+            ic.strt(length=arm_l).put()
+            ur_x=self.cl_band_crossing.put() #x_si
+            coupler_path_x(ic, -angle_out, interaction_l, -angle_in, radius_out, radius_in, radius)
+            ic.strt(length=end_l).put()
+            nd.Pin('b1').put()
+
+            # Adding contacts
+            pad_w=150-20
+            self.si_contact_pad(length=arm_l+120-10,width=pad_w).put(ul_x.pin['a1'].x-5,ul_x.pin['a1'].y+pad_w/2)
+            # self.si_contact_pad(length=arm_l+20+120,width=pad_w).put(ll_x.pin['b1'].x-5,ll_x.pin['b1'].y-pad_w/2)
+
 
         return mzi
 
@@ -548,6 +654,12 @@ class AIMPhotonicChip:
 
         return(static_ps_simple)
 
+    def si_contact_pad(self,length=200,width=150):
+        with nd.Cell('si_contact') as si_contact:
+            pad = nd.Polygon(geom.box(length=length, width=width), layer='SEAM')
+            pad.put()
+        return(si_contact)
+
     def comb_drive_ps(self, cblock_dim: Tuple[float, float], teeth_ys: List[float], big_spring_ys: List[float],
                       anchor_spring_ys: List[float], n_teeth: int, teeth_vert_sep: float,
                       gnd_attachment_dim: Tuple[float, float], ps_dim: Tuple[float, float],
@@ -655,6 +767,34 @@ class AIMPhotonicChip:
             ic.bend(radius=radius, angle=interaction_angle).put()
             nd.Pin('b0').put()
         return ring_resonator
+    
+    def ring_resonator_x(self, radius: float, gap_w: float, interaction_l: float,
+                       interaction_angle: float, racetrack_l: float = 0):
+        y_offset = self.waveguide_w + gap_w
+        with nd.Cell(name=f'ring_resonator_{radius}_{racetrack_l}') as ring_resonator:
+            ic = nd.interconnects.Interconnect(xs='xs_si', radius=radius, width=self.waveguide_w)
+            ic.bend(radius=radius, angle=interaction_angle).put(0, 0, 0)
+            ic.bend(radius=radius, angle=-interaction_angle).put()
+            nd.Pin('c0').put()
+            x, y = nd.cp.x(), nd.cp.y()
+            ic.strt(racetrack_l).put(x - racetrack_l / 2, y + y_offset)
+            ic.bend(radius=radius, angle=180).put()
+            
+            ur_x=self.cl_band_crossing.put()
+            ic.strt(racetrack_l-200).put()
+            ul_x=self.cl_band_crossing.put()
+            
+            ic.bend(radius=radius, angle=180).put()
+            ic.strt(length=interaction_l).put(x, y, 0)
+            ic.bend(radius=radius, angle=-interaction_angle).put()
+            ic.bend(radius=radius, angle=interaction_angle).put()
+            nd.Pin('b0').put()
+
+            # Adding contacts
+            pad_w=150-20
+            self.si_contact_pad(length=racetrack_l-200+110,width=pad_w).put(ul_x.pin['b1'].x-5,ul_x.pin['b1'].y+pad_w/2)
+            
+        return ring_resonator
 
 def coupler_path(ic: nd.interconnects.Interconnect, angle: float, interaction_l: float, radius: float = 35):
     input_waveguide = ic.bend(radius=radius, angle=angle).put()
@@ -663,6 +803,23 @@ def coupler_path(ic: nd.interconnects.Interconnect, angle: float, interaction_l:
     ic.bend(radius=radius, angle=-angle).put()
     output_waveguide = ic.bend(radius=radius, angle=angle).put()
     return input_waveguide, interaction_waveguide, output_waveguide
+
+def coupler_path_x(ic: nd.interconnects.Interconnect, angle_in, interaction_l, angle_out, radius_in, radius_out, radius: float = 35):
+    input_waveguide = ic.bend(radius=radius_in, angle=angle_in).put()
+    ic.bend(radius=radius, angle=-angle_in).put()
+    interaction_waveguide = ic.strt(length=interaction_l).put()
+    ic.bend(radius=radius, angle=-angle_out).put()
+    output_waveguide = ic.bend(radius=radius_out, angle=angle_out).put()
+    return input_waveguide, interaction_waveguide, output_waveguide
+
+def coupler_path_n(self, angle_in, interaction_l, angle_out, radius, radius_in, radius_out, x, y):
+        input_waveguide = self.waveguide_ic.bend(radius=radius_in, angle=angle_in).put(x,y)
+        self.waveguide_ic.bend(radius=radius, angle=-angle_in).put()
+        self.waveguide_ic.strt(length=interaction_l).put()
+        self.waveguide_ic.bend(radius=radius, angle=-angle_out).put()
+        output_waveguide = self.waveguide_ic.bend(radius=radius_out, angle=angle_out).put()
+        
+        return input_waveguide.pin['a0'], output_waveguide.pin['b0']
 
 
 def trombone(ic: nd.interconnects.Interconnect, height: float, radius: float = 10):
