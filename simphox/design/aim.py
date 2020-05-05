@@ -163,7 +163,7 @@ class AIMPhotonicChip:
             self.passive['cl_band_1p_tap_si'].pin['a1'] = nd.Pin('a1').put(0, -5, 180)
             self.passive['cl_band_1p_tap_si'].pin['b0'] = nd.Pin('b0').put(40, 5, 0)
             self.passive['cl_band_1p_tap_si'].pin['b1'] = nd.Pin('b1').put(40, -5, 0)
-        
+
         # ADD Si Wavguide crossing
         with nd.Cell(name='nazca_cl_band_crossing') as self.cl_band_crossing:
             self.passive['cl_band_crossing'].put()
@@ -377,9 +377,9 @@ class AIMPhotonicChip:
         ### dc_rib, dc with rib waveguide
 
     def microbridge_pshack(self, bridge_w: float, bridge_l: float, tether_w: float,
-                       tether_l: float, block_w: float, block_l: float,
-                       radius: float = 10, ring_shape: bool = True,
-                       etch_hole: bool = True):
+                           tether_l: float, block_w: float, block_l: float,
+                           radius: float = 10, ring_shape: bool = True,
+                           etch_hole: bool = True):
         with nd.Cell(name='microbridge_pshack') as microbridge_pshack:
             nd.add_xsection('xs_sin')
             ic = nd.interconnects.Interconnect(xs='xs_sin', radius=radius,
@@ -406,21 +406,22 @@ class AIMPhotonicChip:
                     offset = idx * 2 * bridge_w
                     nd.Polygon(points=vert_bridge_points, layer='FNAM').put(block_l / 2 - bridge_l / 2 + offset,
                                                                             block_len + tether_w + 1.5 * bridge_w)
-                nd.Polygon(points=vert_bridge_points, layer='FNAM').put(block_l / 2 - bridge_l / 2 + 2 * bridge_w + offset,
-                                                                        block_len + tether_w + 1.5 * bridge_w)
+                nd.Polygon(points=vert_bridge_points, layer='FNAM').put(
+                    block_l / 2 - bridge_l / 2 + 2 * bridge_w + offset,
+                    block_len + tether_w + 1.5 * bridge_w)
         return microbridge_pshack
-        
-        
-    def dc_rib(self, gap_w: float, interaction_l: float, interport_w: float, end_l: float, radius: float, hat_width: float, edge_width: float):
+
+    def dc_rib(self, gap_w: float, interaction_l: float, interport_w: float, end_l: float, radius: float,
+               hat_width: float, edge_width: float):
         with nd.Cell(name='dc_rib') as dc_rib:
-            nd.add_xsection(name = 'xs_si_ribdc')
+            nd.add_xsection(name='xs_si_ribdc')
             nd.add_layer2xsection(xsection='xs_si_ribdc', layer='SEAM')
-            nd.add_layer2xsection(xsection='xs_si_ribdc', layer='REAM', leftedge = (0.5,0),
-                                  rightedge = (0, 0.5*hat_width))
+            nd.add_layer2xsection(xsection='xs_si_ribdc', layer='REAM', leftedge=(0.5, 0),
+                                  rightedge=(0, 0.5 * hat_width))
             nd.add_layer2xsection(xsection='xs_si_ribdc', layer='REAM', leftedge=(-0.5, 0),
                                   rightedge=(0, -0.5 * hat_width))
             ic = nd.interconnects.Interconnect(xs='xs_si_ribdc', radius=radius,
-                                               width=hat_width + 2*edge_width)
+                                               width=hat_width + 2 * edge_width)
             angle = self._mzi_angle(gap_w, interport_w, radius)
             # upper path
             nd.Pin('a0').put(0, 0, -180)
@@ -439,7 +440,6 @@ class AIMPhotonicChip:
             nd.Pin('b1').put()
 
         return dc_rib
-
 
     def mzi(self, gap_w: float, interaction_l: float, interport_w: float, arm_l: float, end_l: float, radius: float):
         with nd.Cell(name='mzi') as mzi:
@@ -469,60 +469,60 @@ class AIMPhotonicChip:
 
         return mzi
 
-    def mzi_x_contacts(self, gap_w: float, interaction_l: float, interport_w: float, arm_l: float, end_l: float, radius: float):
+    def mzi_x_contacts(self, gap_w: float, interaction_l: float, interport_w: float, arm_l: float, end_l: float,
+                       radius: float):
         with nd.Cell(name='mzi') as mzi:
             ic = nd.interconnects.Interconnect(xs='xs_si', radius=radius,
                                                width=self.waveguide_w)
             angle = self._mzi_angle(gap_w, interport_w, radius)
 
             port_out_w = 110
-            radius_in= port_out_w/2
-            radius_out=radius_in
+            radius_in = port_out_w / 2
+            radius_out = radius_in
 
-            del_y_in = (interport_w - gap_w - self.waveguide_w)/2 
-            del_y_out = (port_out_w - gap_w - self.waveguide_w)/2 
-            angle_in = np.arccos(1 - (del_y_in / (radius+radius_in))) * 180 / np.pi      
-            angle_out = np.arccos(1 - (del_y_out / (radius+radius_out))) * 180 / np.pi
-            
-            bend_in_x = (radius+radius_in)*np.absolute(np.sin(angle_in*(np.pi/180)))
-            bend_out_x = (radius+radius_out)*np.absolute(np.sin(angle_out*(np.pi/180)))
-            opening_l=interaction_l+bend_in_x+bend_out_x
+            del_y_in = (interport_w - gap_w - self.waveguide_w) / 2
+            del_y_out = (port_out_w - gap_w - self.waveguide_w) / 2
+            angle_in = np.arccos(1 - (del_y_in / (radius + radius_in))) * 180 / np.pi
+            angle_out = np.arccos(1 - (del_y_out / (radius + radius_out))) * 180 / np.pi
 
-            
+            bend_in_x = (radius + radius_in) * np.absolute(np.sin(angle_in * (np.pi / 180)))
+            bend_out_x = (radius + radius_out) * np.absolute(np.sin(angle_out * (np.pi / 180)))
+            opening_l = interaction_l + bend_in_x + bend_out_x
+
             # upper path
             nd.Pin('a0').put(0, 0, -180)
             ic.strt(length=end_l).put(0, 0, 0)
             coupler_path_x(ic, angle_in, interaction_l, angle_out, radius_in, radius_out, radius)
-            ul_x=self.cl_band_crossing.put() #x_si
+            ul_x = self.cl_band_crossing.put()  # x_si
             nd.Pin('c0').put()
-            ic.strt(length=arm_l).put() #x_si
-            ur_x=self.cl_band_crossing.put()
+            ic.strt(length=arm_l).put()  # x_si
+            ur_x = self.cl_band_crossing.put()
             coupler_path_x(ic, angle_out, interaction_l, angle_in, radius_out, radius_in, radius)
             ic.strt(length=end_l).put()
             nd.Pin('b0').put()
 
             # Adding contacts
-            pad_w=150-20
-            self.si_contact_pad(length=arm_l+120-10,width=pad_w).put(ul_x.pin['b1'].x-5,ul_x.pin['b1'].y-pad_w/2)
-            
+            pad_w = 150 - 20
+            self.si_contact_pad(length=arm_l + 120 - 10, width=pad_w).put(ul_x.pin['b1'].x - 5,
+                                                                          ul_x.pin['b1'].y - pad_w / 2)
 
             # lower path
             nd.Pin('a1').put(0, interport_w, -180)
             ic.strt(length=end_l).put(0, interport_w, 0)
             coupler_path_x(ic, -angle_in, interaction_l, -angle_out, radius_in, radius_out, radius)
-            ul_x=self.cl_band_crossing.put() #x_si
+            ul_x = self.cl_band_crossing.put()  # x_si
             nd.Pin('c1').put()
             ic.strt(length=arm_l).put()
-            ur_x=self.cl_band_crossing.put() #x_si
+            ur_x = self.cl_band_crossing.put()  # x_si
             coupler_path_x(ic, -angle_out, interaction_l, -angle_in, radius_out, radius_in, radius)
             ic.strt(length=end_l).put()
             nd.Pin('b1').put()
 
             # Adding contacts
-            pad_w=150-20
-            self.si_contact_pad(length=arm_l+120-10,width=pad_w).put(ul_x.pin['a1'].x-5,ul_x.pin['a1'].y+pad_w/2)
+            pad_w = 150 - 20
+            self.si_contact_pad(length=arm_l + 120 - 10, width=pad_w).put(ul_x.pin['a1'].x - 5,
+                                                                          ul_x.pin['a1'].y + pad_w / 2)
             # self.si_contact_pad(length=arm_l+20+120,width=pad_w).put(ll_x.pin['b1'].x-5,ll_x.pin['b1'].y-pad_w/2)
-
 
         return mzi
 
@@ -564,101 +564,100 @@ class AIMPhotonicChip:
 
         return microbridge_ps
 
-    def static_ps_simple(self ,w1: float, w2: float, offset1: float, offset2: float, length: float = 90,
+    def static_ps_simple(self, w1: float, w2: float, offset1: float, offset2: float, length: float = 90,
+                         length_taper: float = 5):
+        '''
+        added by Nate to lay down static phase shifters 05/01/2020 1:30am
+        '''
+        with nd.Cell(name='static_ps_simple') as static_ps_simple:
+            l = (length + 2 * length_taper)
+            wg = self.cl_band_waveguide_si(length=l)
+            wg.put()
+            taper_in1 = geom.taper(length=length_taper, width1=0, width2=w1)
+            taper_out1 = geom.taper(length=length_taper, width1=w1, width2=0)
+            ps1 = geom.box(length=length, width=w1)
+            nd.Polygon(points=taper_in1, layer='FNAM').put(0, offset1)
+            nd.Polygon(points=ps1, layer='FNAM').put(length_taper, offset1)
+            nd.Polygon(points=taper_out1, layer='FNAM').put(length + length_taper, offset1)
+
+            taper_in2 = geom.taper(length=length_taper, width1=0, width2=w2)
+            taper_out2 = geom.taper(length=length_taper, width1=w2, width2=0)
+            ps2 = geom.box(length=length, width=w2)
+            nd.Polygon(points=taper_in2, layer='SNAM').put(0, offset2)
+            nd.Polygon(points=ps2, layer='SNAM').put(length_taper, offset2)
+            nd.Polygon(points=taper_out2, layer='SNAM').put(length + length_taper, offset2)
+            # add pin
+            nd.Pin('a0', pin=wg.pin['a0']).put()
+            nd.Pin('b0', pin=wg.pin['b0']).put()
+
+        return (static_ps_simple)
+
+    def static_ps_3(self, offset1: float = 0, offset2: float = 0, length: float = 90,
                     length_taper: float = 5):
         '''
         added by Nate to lay down static phase shifters 05/01/2020 1:30am
         '''
         with nd.Cell(name='static_ps_simple') as static_ps_simple:
-            l=(length+2*length_taper)
-            wg=self.cl_band_waveguide_si(length=l)
-            wg.put()
-            taper_in1=geom.taper(length=length_taper,width1=0,width2=w1)
-            taper_out1=geom.taper(length=length_taper,width1=w1,width2=0)
-            ps1=geom.box(length=length, width=w1)
-            nd.Polygon(points=taper_in1, layer='FNAM').put(0,offset1)
-            nd.Polygon(points=ps1, layer='FNAM').put(length_taper,offset1)
-            nd.Polygon(points=taper_out1, layer='FNAM').put(length+length_taper,offset1)
+            w = 0.15
+            sep = 0.1
 
-            taper_in2=geom.taper(length=length_taper,width1=0,width2=w2)
-            taper_out2=geom.taper(length=length_taper,width1=w2,width2=0)
-            ps2=geom.box(length=length, width=w2)
-            nd.Polygon(points=taper_in2, layer='SNAM').put(0,offset2)
-            nd.Polygon(points=ps2, layer='SNAM').put(length_taper,offset2)
-            nd.Polygon(points=taper_out2, layer='SNAM').put(length+length_taper,offset2)
-            # add pin
-            nd.Pin('a0', pin=wg.pin['a0']).put()
-            nd.Pin('b0', pin=wg.pin['b0']).put()
-
-        return(static_ps_simple)
-
-
-    def static_ps_3(self , offset1: float = 0, offset2: float = 0, length: float = 90,
-                    length_taper: float = 5):
-        '''
-        added by Nate to lay down static phase shifters 05/01/2020 1:30am
-        '''
-        with nd.Cell(name='static_ps_simple') as static_ps_simple:
-            w=0.15
-            sep=0.1
-
-            l=(length+2*length_taper)
-            wg=self.cl_band_waveguide_si(length=l)
+            l = (length + 2 * length_taper)
+            wg = self.cl_band_waveguide_si(length=l)
             wg.put()
 
-            taper_in1=geom.taper(length=length_taper,width1=0,width2=w)
-            taper_out1=geom.taper(length=length_taper,width1=w,width2=0)
-            ps1=geom.box(length=length, width=w)
-            nd.Polygon(points=taper_in1, layer='FNAM').put(0,offset1)
-            nd.Polygon(points=ps1, layer='FNAM').put(length_taper,offset1)
-            nd.Polygon(points=taper_out1, layer='FNAM').put(length+length_taper,offset1)
+            taper_in1 = geom.taper(length=length_taper, width1=0, width2=w)
+            taper_out1 = geom.taper(length=length_taper, width1=w, width2=0)
+            ps1 = geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in1, layer='FNAM').put(0, offset1)
+            nd.Polygon(points=ps1, layer='FNAM').put(length_taper, offset1)
+            nd.Polygon(points=taper_out1, layer='FNAM').put(length + length_taper, offset1)
 
-            taper_in12=geom.taper(length=length_taper,width1=0,width2=w)
-            taper_out12=geom.taper(length=length_taper,width1=w,width2=0)
-            ps12=geom.box(length=length, width=w)
-            nd.Polygon(points=taper_in12, layer='FNAM').put(0,offset1+w+sep)
-            nd.Polygon(points=ps12, layer='FNAM').put(length_taper,offset1+w+sep)
-            nd.Polygon(points=taper_out12, layer='FNAM').put(length+length_taper,offset1+w+sep)
+            taper_in12 = geom.taper(length=length_taper, width1=0, width2=w)
+            taper_out12 = geom.taper(length=length_taper, width1=w, width2=0)
+            ps12 = geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in12, layer='FNAM').put(0, offset1 + w + sep)
+            nd.Polygon(points=ps12, layer='FNAM').put(length_taper, offset1 + w + sep)
+            nd.Polygon(points=taper_out12, layer='FNAM').put(length + length_taper, offset1 + w + sep)
 
-            taper_in13=geom.taper(length=length_taper,width1=0,width2=w)
-            taper_out13=geom.taper(length=length_taper,width1=w,width2=0)
-            ps13=geom.box(length=length, width=w)
-            nd.Polygon(points=taper_in13, layer='FNAM').put(0,offset1-w-sep)
-            nd.Polygon(points=ps13, layer='FNAM').put(length_taper,offset1-w-sep)
-            nd.Polygon(points=taper_out13, layer='FNAM').put(length+length_taper,offset1-w-sep)
+            taper_in13 = geom.taper(length=length_taper, width1=0, width2=w)
+            taper_out13 = geom.taper(length=length_taper, width1=w, width2=0)
+            ps13 = geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in13, layer='FNAM').put(0, offset1 - w - sep)
+            nd.Polygon(points=ps13, layer='FNAM').put(length_taper, offset1 - w - sep)
+            nd.Polygon(points=taper_out13, layer='FNAM').put(length + length_taper, offset1 - w - sep)
 
-            taper_in21=geom.taper(length=length_taper,width1=0,width2=w)
-            taper_out21=geom.taper(length=length_taper,width1=w,width2=0)
-            ps21=geom.box(length=length, width=w)
-            nd.Polygon(points=taper_in21, layer='SNAM').put(0,offset2)
-            nd.Polygon(points=ps21, layer='SNAM').put(length_taper,offset2)
-            nd.Polygon(points=taper_out21, layer='SNAM').put(length+length_taper,offset2)
+            taper_in21 = geom.taper(length=length_taper, width1=0, width2=w)
+            taper_out21 = geom.taper(length=length_taper, width1=w, width2=0)
+            ps21 = geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in21, layer='SNAM').put(0, offset2)
+            nd.Polygon(points=ps21, layer='SNAM').put(length_taper, offset2)
+            nd.Polygon(points=taper_out21, layer='SNAM').put(length + length_taper, offset2)
 
-            taper_in22=geom.taper(length=length_taper,width1=0,width2=w)
-            taper_out22=geom.taper(length=length_taper,width1=w,width2=0)
-            ps22=geom.box(length=length, width=w)
-            nd.Polygon(points=taper_in22, layer='SNAM').put(0,offset2+w+sep)
-            nd.Polygon(points=ps22, layer='SNAM').put(length_taper,offset2+w+sep)
-            nd.Polygon(points=taper_out22, layer='SNAM').put(length+length_taper,offset2+w+sep)
+            taper_in22 = geom.taper(length=length_taper, width1=0, width2=w)
+            taper_out22 = geom.taper(length=length_taper, width1=w, width2=0)
+            ps22 = geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in22, layer='SNAM').put(0, offset2 + w + sep)
+            nd.Polygon(points=ps22, layer='SNAM').put(length_taper, offset2 + w + sep)
+            nd.Polygon(points=taper_out22, layer='SNAM').put(length + length_taper, offset2 + w + sep)
 
-            taper_in23=geom.taper(length=length_taper,width1=0,width2=w)
-            taper_out23=geom.taper(length=length_taper,width1=w,width2=0)
-            ps23=geom.box(length=length, width=w)
-            nd.Polygon(points=taper_in23, layer='SNAM').put(0,offset2-w-sep)
-            nd.Polygon(points=ps23, layer='SNAM').put(length_taper,offset2-w-sep)
-            nd.Polygon(points=taper_out23, layer='SNAM').put(length+length_taper,offset2-w-sep)
+            taper_in23 = geom.taper(length=length_taper, width1=0, width2=w)
+            taper_out23 = geom.taper(length=length_taper, width1=w, width2=0)
+            ps23 = geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in23, layer='SNAM').put(0, offset2 - w - sep)
+            nd.Polygon(points=ps23, layer='SNAM').put(length_taper, offset2 - w - sep)
+            nd.Polygon(points=taper_out23, layer='SNAM').put(length + length_taper, offset2 - w - sep)
 
             # add pin
             nd.Pin('a0', pin=wg.pin['a0']).put()
             nd.Pin('b0', pin=wg.pin['b0']).put()
 
-        return(static_ps_simple)
+        return (static_ps_simple)
 
-    def si_contact_pad(self,length=200,width=150):
+    def si_contact_pad(self, length=200, width=150):
         with nd.Cell('si_contact') as si_contact:
             pad = nd.Polygon(geom.box(length=length, width=width), layer='SEAM')
             pad.put()
-        return(si_contact)
+        return (si_contact)
 
     def comb_drive_ps(self, cblock_dim: Tuple[float, float], teeth_ys: List[float], big_spring_ys: List[float],
                       anchor_spring_ys: List[float], n_teeth: int, teeth_vert_sep: float,
@@ -750,7 +749,7 @@ class AIMPhotonicChip:
         return comb_drive_ps
 
     def ring_resonator(self, radius: float, gap_w: float, interaction_l: float,
-                       interaction_angle: float, racetrack_l: float = 0):
+                       interaction_angle: float, racetrack_l: float = 0, dia_w: float = 3):
         y_offset = self.waveguide_w + gap_w
         with nd.Cell(name=f'ring_resonator_{radius}_{racetrack_l}') as ring_resonator:
             ic = nd.interconnects.Interconnect(xs='xs_si', radius=radius, width=self.waveguide_w)
@@ -760,16 +759,27 @@ class AIMPhotonicChip:
             x, y = nd.cp.x(), nd.cp.y()
             ic.strt(racetrack_l).put(x - racetrack_l / 2, y + y_offset)
             ic.bend(radius=radius, angle=180).put()
-            ic.strt(racetrack_l).put()
+            if dia_w == 0:
+                ic.strt(racetrack_l).put()
+            else:
+                nd.add_xsection(name='xs_si_rib_dia')
+                nd.add_layer2xsection(xsection='xs_si_rib_dia', layer='SEAM')
+                nd.add_layer2xsection(xsection='xs_si_rib_dia', layer='REAM', leftedge=(0.5, 0),
+                                      rightedge=(0, 0.5 * self.waveguide_w))
+                nd.add_layer2xsection(xsection='xs_si_rib_dia', layer='REAM', leftedge=(-0.5, 0),
+                                      rightedge=(0, -0.5 * self.waveguide_w))
+                ic_rib = nd.interconnects.Interconnect(xs='xs_si_rib_dia', radius=radius,
+                                                       width=dia_w)
+                ic_rib.strt(racetrack_l).put()
             ic.bend(radius=radius, angle=180).put()
             ic.strt(length=interaction_l).put(x, y, 0)
             ic.bend(radius=radius, angle=-interaction_angle).put()
             ic.bend(radius=radius, angle=interaction_angle).put()
             nd.Pin('b0').put()
         return ring_resonator
-    
+
     def ring_resonator_x(self, radius: float, gap_w: float, interaction_l: float,
-                       interaction_angle: float, racetrack_l: float = 0):
+                         interaction_angle: float, racetrack_l: float = 0, dia_w: float = 5):
         y_offset = self.waveguide_w + gap_w
         with nd.Cell(name=f'ring_resonator_{radius}_{racetrack_l}') as ring_resonator:
             ic = nd.interconnects.Interconnect(xs='xs_si', radius=radius, width=self.waveguide_w)
@@ -779,11 +789,22 @@ class AIMPhotonicChip:
             x, y = nd.cp.x(), nd.cp.y()
             ic.strt(racetrack_l).put(x - racetrack_l / 2, y + y_offset)
             ic.bend(radius=radius, angle=180).put()
-            
-            ur_x=self.cl_band_crossing.put()
-            ic.strt(racetrack_l-200).put()
-            ul_x=self.cl_band_crossing.put()
-            
+
+            ur_x = self.cl_band_crossing.put()
+            if dia_w == 0:
+                ic.strt(racetrack_l - 200).put()
+            else:
+                nd.add_xsection(name='xs_si_rib_dia')
+                nd.add_layer2xsection(xsection='xs_si_rib_dia', layer='SEAM')
+                nd.add_layer2xsection(xsection='xs_si_rib_dia', layer='REAM', leftedge=(0.5, 0),
+                                      rightedge=(0, 0.5 * self.waveguide_w))
+                nd.add_layer2xsection(xsection='xs_si_rib_dia', layer='REAM', leftedge=(-0.5, 0),
+                                      rightedge=(0, -0.5 * self.waveguide_w))
+                ic_rib = nd.interconnects.Interconnect(xs='xs_si_rib_dia', radius=radius,
+                                                       width=dia_w)
+                ic_rib.strt(racetrack_l - 200).put()
+            ul_x = self.cl_band_crossing.put()
+
             ic.bend(radius=radius, angle=180).put()
             ic.strt(length=interaction_l).put(x, y, 0)
             ic.bend(radius=radius, angle=-interaction_angle).put()
@@ -791,10 +812,12 @@ class AIMPhotonicChip:
             nd.Pin('b0').put()
 
             # Adding contacts
-            pad_w=150-20
-            self.si_contact_pad(length=racetrack_l-200+110,width=pad_w).put(ul_x.pin['b1'].x-5,ul_x.pin['b1'].y+pad_w/2)
-            
+            pad_w = 150 - 20
+            self.si_contact_pad(length=racetrack_l - 200 + 110, width=pad_w).put(ul_x.pin['b1'].x - 5,
+                                                                                 ul_x.pin['b1'].y + pad_w / 2)
+
         return ring_resonator
+
 
 def coupler_path(ic: nd.interconnects.Interconnect, angle: float, interaction_l: float, radius: float = 35):
     input_waveguide = ic.bend(radius=radius, angle=angle).put()
@@ -804,7 +827,9 @@ def coupler_path(ic: nd.interconnects.Interconnect, angle: float, interaction_l:
     output_waveguide = ic.bend(radius=radius, angle=angle).put()
     return input_waveguide, interaction_waveguide, output_waveguide
 
-def coupler_path_x(ic: nd.interconnects.Interconnect, angle_in, interaction_l, angle_out, radius_in, radius_out, radius: float = 35):
+
+def coupler_path_x(ic: nd.interconnects.Interconnect, angle_in, interaction_l, angle_out, radius_in, radius_out,
+                   radius: float = 35):
     input_waveguide = ic.bend(radius=radius_in, angle=angle_in).put()
     ic.bend(radius=radius, angle=-angle_in).put()
     interaction_waveguide = ic.strt(length=interaction_l).put()
@@ -812,14 +837,15 @@ def coupler_path_x(ic: nd.interconnects.Interconnect, angle_in, interaction_l, a
     output_waveguide = ic.bend(radius=radius_out, angle=angle_out).put()
     return input_waveguide, interaction_waveguide, output_waveguide
 
+
 def coupler_path_n(self, angle_in, interaction_l, angle_out, radius, radius_in, radius_out, x, y):
-        input_waveguide = self.waveguide_ic.bend(radius=radius_in, angle=angle_in).put(x,y)
-        self.waveguide_ic.bend(radius=radius, angle=-angle_in).put()
-        self.waveguide_ic.strt(length=interaction_l).put()
-        self.waveguide_ic.bend(radius=radius, angle=-angle_out).put()
-        output_waveguide = self.waveguide_ic.bend(radius=radius_out, angle=angle_out).put()
-        
-        return input_waveguide.pin['a0'], output_waveguide.pin['b0']
+    input_waveguide = self.waveguide_ic.bend(radius=radius_in, angle=angle_in).put(x, y)
+    self.waveguide_ic.bend(radius=radius, angle=-angle_in).put()
+    self.waveguide_ic.strt(length=interaction_l).put()
+    self.waveguide_ic.bend(radius=radius, angle=-angle_out).put()
+    output_waveguide = self.waveguide_ic.bend(radius=radius_out, angle=angle_out).put()
+
+    return input_waveguide.pin['a0'], output_waveguide.pin['b0']
 
 
 def trombone(ic: nd.interconnects.Interconnect, height: float, radius: float = 10):
