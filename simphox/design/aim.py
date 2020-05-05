@@ -749,7 +749,7 @@ class AIMPhotonicChip:
         return comb_drive_ps
 
     def ring_resonator(self, radius: float, gap_w: float, interaction_l: float,
-                       interaction_angle: float, racetrack_l: float = 0, dia_w: float = 3):
+                       interaction_angle: float, racetrack_l: float = 0, dia_w: float = 5):
         y_offset = self.waveguide_w + gap_w
         with nd.Cell(name=f'ring_resonator_{radius}_{racetrack_l}') as ring_resonator:
             ic = nd.interconnects.Interconnect(xs='xs_si', radius=radius, width=self.waveguide_w)
