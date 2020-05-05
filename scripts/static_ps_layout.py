@@ -37,6 +37,7 @@ def phase_shifter_base(l_ps):
         offset1=0
         offset2=0
         length=l_ps+10
+        l_gc_sep=5
 
         dc_l = chip.cl_band_splitter_4port_si.put(0, 0)
         #Phase Shifter
@@ -53,25 +54,25 @@ def phase_shifter_base(l_ps):
         dc_r = chip.cl_band_splitter_4port_si.put(upper_arm.pin['b0'])
 
         chip.cl_band_waveguide_si(angle=-90).put(dc_r.pin['b1'])
-        chip.cl_band_waveguide_si(length=10).put()
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
         chip.cl_band_waveguide_si(angle=90).put()
-        
+
         chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
 
         chip.cl_band_waveguide_si(angle=90).put(dc_r.pin['b0'])
-        chip.cl_band_waveguide_si(length=10).put()
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
         chip.cl_band_waveguide_si(angle=-90).put()
 
         chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
 
         chip.cl_band_waveguide_si(angle=-90).put(dc_l.pin['a0'])
-        chip.cl_band_waveguide_si(length=10).put()
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
         chip.cl_band_waveguide_si(angle=90).put()
         chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(),90)
         chip.cl_band_waveguide_si(angle=90).put(dc_l.pin['a1'])
-        chip.cl_band_waveguide_si(length=10).put()
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
         chip.cl_band_waveguide_si(angle=-90).put()
-        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(),90)
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(),90) 
     return(phase_shifter_base)
 
 def phase_shifter_opt(l_ps):
@@ -81,6 +82,7 @@ def phase_shifter_opt(l_ps):
         offset1=-.008
         offset2=0.539
         length=l_ps+10
+        l_gc_sep=5
 
         dc_l = chip.cl_band_splitter_4port_si.put(0, 0)
         #Phase Shifter
@@ -98,25 +100,25 @@ def phase_shifter_opt(l_ps):
         dc_r = chip.cl_band_splitter_4port_si.put(upper_arm.pin['b0'])
 
         chip.cl_band_waveguide_si(angle=-90).put(dc_r.pin['b1'])
-        chip.cl_band_waveguide_si(length=10).put()
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
         chip.cl_band_waveguide_si(angle=90).put()
-        
+
         chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
 
         chip.cl_band_waveguide_si(angle=90).put(dc_r.pin['b0'])
-        chip.cl_band_waveguide_si(length=10).put()
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
         chip.cl_band_waveguide_si(angle=-90).put()
 
         chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
 
         chip.cl_band_waveguide_si(angle=-90).put(dc_l.pin['a0'])
-        chip.cl_band_waveguide_si(length=10).put()
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
         chip.cl_band_waveguide_si(angle=90).put()
         chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(),90)
         chip.cl_band_waveguide_si(angle=90).put(dc_l.pin['a1'])
-        chip.cl_band_waveguide_si(length=10).put()
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
         chip.cl_band_waveguide_si(angle=-90).put()
-        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(),90)
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(),90) 
     return phase_shifter_opt
 
 def phase_shifter_3(l_ps):
@@ -124,6 +126,7 @@ def phase_shifter_3(l_ps):
         offset1=0
         offset2=0
         length=l_ps+10
+        l_gc_sep=5
 
         dc_l = chip.cl_band_splitter_4port_si.put(0, 0)
         #Phase Shifter
@@ -139,30 +142,86 @@ def phase_shifter_3(l_ps):
         dc_r = chip.cl_band_splitter_4port_si.put(upper_arm.pin['b0'])
 
         chip.cl_band_waveguide_si(angle=-90).put(dc_r.pin['b1'])
-        chip.cl_band_waveguide_si(length=10).put()
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
         chip.cl_band_waveguide_si(angle=90).put()
 
         chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
 
         chip.cl_band_waveguide_si(angle=90).put(dc_r.pin['b0'])
-        chip.cl_band_waveguide_si(length=10).put()
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
         chip.cl_band_waveguide_si(angle=-90).put()
 
         chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
 
         chip.cl_band_waveguide_si(angle=-90).put(dc_l.pin['a0'])
-        chip.cl_band_waveguide_si(length=10).put()
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
         chip.cl_band_waveguide_si(angle=90).put()
         chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(),90)
         chip.cl_band_waveguide_si(angle=90).put(dc_l.pin['a1'])
-        chip.cl_band_waveguide_si(length=10).put()
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
         chip.cl_band_waveguide_si(angle=-90).put()
         chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(),90) 
     return phase_shifter_3
 
+def test1(l_ps):
+    with nd.Cell('test1') as test1:
+        offset1=0
+        offset2=0
+        length=l_ps+10
+        l_gc_sep=0
+        chip.cl_band_vertical_coupler_si.put(0,0,-90) 
+        chip.cl_band_waveguide_si(length=length).put()
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(),90) 
+    return test1
+
+def test2(l_ps):
+    with nd.Cell('test2') as test2:
+        w1=0.75
+        w2=0
+        offset1=0
+        offset2=0
+        length=l_ps+10
+        l_gc_sep=5
+
+        dc_l = chip.cl_band_splitter_4port_si.put(0, 0)
+        # #Phase Shifter
+
+        # if l_ps <= 1:
+        #     upper_arm = chip.cl_band_waveguide_si(length=length).put(dc_l.pin['b0'])
+        # else:
+        #     upper_arm = chip.static_ps_simple(w1=w1, w2=w2, offset1=offset1, offset2=offset2, length=l_ps,
+        #                 length_taper=5).put(dc_l.pin['b0'])
+
+
+        # lower_arm = chip.cl_band_waveguide_si(length=length).put(dc_l.pin['b1'])
+    
+        # dc_r = chip.cl_band_splitter_4port_si.put(upper_arm.pin['b0'])
+
+        chip.cl_band_waveguide_si(angle=-90).put(dc_l.pin['b1'])
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
+        chip.cl_band_waveguide_si(angle=90).put()
+
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
+
+        chip.cl_band_waveguide_si(angle=90).put(dc_l.pin['b0'])
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
+        chip.cl_band_waveguide_si(angle=-90).put()
+
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
+
+        chip.cl_band_waveguide_si(angle=-90).put(dc_l.pin['a0'])
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
+        chip.cl_band_waveguide_si(angle=90).put()
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(),90)
+        chip.cl_band_waveguide_si(angle=90).put(dc_l.pin['a1'])
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
+        chip.cl_band_waveguide_si(angle=-90).put()
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(),90) 
+    return test2
+
 ### Pararmeters and placing on the layout ###
 
-N=5
+N=6
 phis=np.linspace(0,2*np.pi,N)
 amps=np.linspace(-1,1,N)
 
@@ -170,25 +229,32 @@ l_2p_0=130 #get from sims
 l_2p_1=128
 l_2p_3=266
 
-chip_sep=140
+chip_sep=130
 
 l_bases=l_2p_0*np.arccos(amps)/(2*np.pi)
 l_opt=l_2p_1*np.arccos(amps)/(2*np.pi)
 l_3=l_2p_3*np.arccos(amps)/(2*np.pi)
 
 i1=0
-for l in l_bases:
-    phase_shifter_base(l_ps=l).put(0, i1*chip_sep)
-    i1+=1
+# for l in l_bases:
+#     phase_shifter_base(l_ps=l).put(0, i1*chip_sep)
+#     i1+=1
 
-i2=0
+i2=i1
 for l in l_opt:
-    phase_shifter_opt(l_ps=l).put(1e3, i2*chip_sep)
+    phase_shifter_opt(l_ps=l).put(0, i2*chip_sep)
     i2+=1
-i3=0
+i3=i2
 for l in l_3:
-    phase_shifter_3(l_ps=l).put(2e3, i3*chip_sep)
+    phase_shifter_3(l_ps=l).put(0, i3*chip_sep)
     i3+=1
+
+### Grating test structures
+test1(l_bases[0]).put(250,3.5*chip_sep)
+test1(l_opt[0]).put(250,(3.5+N)*chip_sep)
+test2(10).put(0,i3*chip_sep)
+
+# test1(l_3[0]).put(250,(3.5+2*N)*chip_sep)
 # phase_shifter_opt.put(0, 140)
 # phase_shifter_3.put(0, 280)
 nd.export_gds(filename='phase_shifter_chiplet.gds')
