@@ -526,6 +526,63 @@ class AIMPhotonicChip:
 
         return mzi
 
+    def mzi_x_test(self, gap_w: float, interaction_l: float, interport_w: float, arm_l: float, end_l: float,
+                       radius: float):
+        with nd.Cell(name='mzi') as mzi:
+            ic = nd.interconnects.Interconnect(xs='xs_si', radius=radius,
+                                               width=self.waveguide_w)
+            angle = self._mzi_angle(gap_w, interport_w, radius)
+
+            port_out_w = 110
+            radius_in = port_out_w / 2
+            radius_out = radius_in
+
+            del_y_in = (interport_w - gap_w - self.waveguide_w) / 2
+            del_y_out = (port_out_w - gap_w - self.waveguide_w) / 2
+            angle_in = np.arccos(1 - (del_y_in / (radius + radius_in))) * 180 / np.pi
+            angle_out = np.arccos(1 - (del_y_out / (radius + radius_out))) * 180 / np.pi
+
+            bend_in_x = (radius + radius_in) * np.absolute(np.sin(angle_in * (np.pi / 180)))
+            bend_out_x = (radius + radius_out) * np.absolute(np.sin(angle_out * (np.pi / 180)))
+            opening_l = interaction_l + bend_in_x + bend_out_x
+
+            # upper path
+            nd.Pin('a0').put(0, 0, -180)
+            ic.strt(length=end_l).put(0, 0, 0)
+            coupler_path_x(ic, angle_in, interaction_l, angle_out, radius_in, radius_out, radius)
+            # ul_x = self.cl_band_crossing.put()  # x_si
+            # nd.Pin('c0').put()
+            # ic.strt(length=arm_l).put()  # x_si
+            # ur_x = self.cl_band_crossing.put()
+            # coupler_path_x(ic, angle_out, interaction_l, angle_in, radius_out, radius_in, radius)
+            ic.strt(length=end_l).put()
+            nd.Pin('b0').put()
+
+            # Adding contacts
+            # pad_w = 150 - 20
+            # self.si_contact_pad(length=arm_l + 120 - 10, width=pad_w).put(ul_x.pin['b1'].x - 5,
+            #                                                               ul_x.pin['b1'].y - pad_w / 2)
+
+            # lower path
+            nd.Pin('a1').put(0, interport_w, -180)
+            ic.strt(length=end_l).put(0, interport_w, 0)
+            coupler_path_x(ic, -angle_in, interaction_l, -angle_out, radius_in, radius_out, radius)
+            # ul_x = self.cl_band_crossing.put()  # x_si
+            # nd.Pin('c1').put()
+            # ic.strt(length=arm_l).put()
+            # ur_x = self.cl_band_crossing.put()  # x_si
+            # coupler_path_x(ic, -angle_out, interaction_l, -angle_in, radius_out, radius_in, radius)
+            ic.strt(length=end_l).put()
+            nd.Pin('b1').put()
+
+            # Adding contacts
+            # pad_w = 150 - 20
+            # self.si_contact_pad(length=arm_l + 120 - 10, width=pad_w).put(ul_x.pin['a1'].x - 5,
+            #                                                               ul_x.pin['a1'].y + pad_w / 2)
+            # self.si_contact_pad(length=arm_l+20+120,width=pad_w).put(ll_x.pin['b1'].x-5,ll_x.pin['b1'].y-pad_w/2)
+
+        return mzi
+
     def microbridge_ps(self, bridge_w: float, bridge_l: float, tether_w: float,
                        tether_l: float, block_w: float, block_l: float,
                        radius: float = 10, ring_shape: bool = True,

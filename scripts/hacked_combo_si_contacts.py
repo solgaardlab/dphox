@@ -1,11 +1,15 @@
 from simphox.design.aim import *
 import nazca as nd
 
-chip = AIMPhotonicChip(
-    passive_filepath='/Users/sunilpai/Documents/research/aim_lib/APSUNY_v35a_passive.gds',
-    waveguides_filepath='/Users/sunilpai/Documents/research/aim_lib/APSUNY_v35_waveguides.gds'
-)
+# chip = AIMPhotonicChip(
+#     passive_filepath='/Users/sunilpai/Documents/research/aim_lib/APSUNY_v35a_passive.gds',
+#     waveguides_filepath='/Users/sunilpai/Documents/research/aim_lib/APSUNY_v35_waveguides.gds'
+# )
 
+chip = AIMPhotonicChip(
+    passive_filepath='/mnt/c/Users/nsabe/Nate/Research/Solgaard_lab/20200501_aim_run/aim_lib/APSUNY_v35a_passive.gds',
+    waveguides_filepath='/mnt/c/Users/nsabe/Nate/Research/Solgaard_lab/20200501_aim_run/aim_lib/APSUNY_v35_waveguides.gds'
+)
 ################ Nate's gds code ##########################
 waveguide_w = 0.5
 interport_w = 70
@@ -412,6 +416,62 @@ def test2(l_ps):
         chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), 90)
     return test2
 
+def test3(l_ps):
+    with nd.Cell('test3') as test3:
+        w1 = 0.75
+        w2 = 0
+        offset1 = 0
+        offset2 = 0
+        length = l_ps + 10
+        l_gc_sep = 5
+
+        # dc_l = chip.cl_band_splitter_4port_si.put(0, 0)
+        dc_l = chip.cl_band_1p_tap_si.put(0,0)
+        # #Phase Shifter
+
+        # if l_ps <= 1:
+        #     upper_arm = chip.cl_band_waveguide_si(length=length).put(dc_l.pin['b0'])
+        # else:
+        #     upper_arm = chip.static_ps_simple(w1=w1, w2=w2, offset1=offset1, offset2=offset2, length=l_ps,
+        #                 length_taper=5).put(dc_l.pin['b0'])
+
+        # lower_arm = chip.cl_band_waveguide_si(length=length).put(dc_l.pin['b1'])
+
+        # dc_r = chip.cl_band_splitter_4port_si.put(upper_arm.pin['b0'])
+
+        chip.cl_band_waveguide_si(angle=-90).put(dc_l.pin['b1'])
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
+        chip.cl_band_waveguide_si(angle=90).put()
+
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
+
+        chip.cl_band_waveguide_si(angle=90).put(dc_l.pin['b0'])
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
+        chip.cl_band_waveguide_si(angle=-90).put()
+
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
+
+        chip.cl_band_waveguide_si(angle=-90).put(dc_l.pin['a0'])
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
+        chip.cl_band_waveguide_si(angle=90).put()
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), 90)
+        chip.cl_band_waveguide_si(angle=90).put(dc_l.pin['a1'])
+        chip.cl_band_waveguide_si(length=l_gc_sep).put()
+        chip.cl_band_waveguide_si(angle=-90).put()
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), 90)
+    return test3
+
+def test4(l_ps):
+    with nd.Cell('test4') as test4:
+        offset1 = 0
+        offset2 = 0
+        length = l_ps + 10
+        l_gc_sep = 0
+        chip.cl_band_vertical_coupler_si.put(0, 0, -90)
+        chip.cl_band_crossing.put()
+        # chip.cl_band_waveguide_si(length=length).put()
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), 90)
+    return test4
 
 ### Trying out waveguide crossings
 
@@ -428,6 +488,11 @@ phase_shifter_3_MEMS(l_ps=l_ps).put(0, 0)
 # chip.shallow_trench(length=210, width=500).put()
 phase_shifter_1_MEMS(l_ps=l_ps).put(0, ps_sep)
 
+test1(100).put(0, 1*100+1.5*ps_sep)
+test2(100).put(0, 2*100+1.5*ps_sep)
+test3(100).put(0, 3*100+1.5*ps_sep)
+test4(100).put(0, 4*100+1.5*ps_sep)
+
 # test1(l_3[0]).put(250,(3.5+2*N)*chip_sep)
 # phase_shifter_opt.put(0, 140)
 # phase_shifter_3.put(0, 280)
@@ -443,9 +508,11 @@ hat_width = 0.48
 edge_width = 0.25
 interport_w = 70
 arm_l = 150
-end_l = 10
+end_l = 10+20
 tdc_interaction_w = 60
+tdc_interaction_w = 40
 gap_w = .52  # gapw = 2, gap between edges = 1.23, g= 0.77, get that brims are touching
+gap_w = .4
 cp_radius = 35
 dc_kwargs = {
     'gap_w': gap_w,
@@ -459,13 +526,16 @@ dc_kwargs = {
 
 ### TDC #2
 hat_width2 = 0.75
+hat_width2 = 0.48
 edge_width2 = 0.25
 interport_w2 = 70
 arm_l2 = 150
 end_l2 = 200
-end_l2 = 10
+end_l2 = 10+15
 tdc_interaction_w2 = 55
+tdc_interaction_w2 = 30
 gap_w2 = .52  # gapw = 2, gap between edges = 1.23, g= 0.77, get that brims are touching
+gap_w2 = .4 
 cp_radius2 = 35
 dc_kwargs2 = {
     'gap_w': gap_w2,
@@ -520,8 +590,8 @@ with nd.Cell('mems_tdc_rib_chiplet1') as mems_tdc_rib_chiplet1:
     mtdc = chip.microbridge_pshack(**mb_kwargs)
     mtdc.put(dc_rib.pin['c1'], flip=True, flop=True)
     # add tapers
-    taper_ina = geom.taper(length=length_taper, width1=0.75, width2=0.48)
-    taper_outa = geom.taper(length=length_taper, width1=0.48, width2=0.75)
+    taper_ina = geom.taper(length=length_taper, width1=0.48, width2=0.48)
+    taper_outa = geom.taper(length=length_taper, width1=0.48, width2=0.48)
     nd.Polygon(points=taper_ina, layer='SEAM').put(dc_rib.pin['a0'], dc_rib.pin['a0'].y)
     nd.Polygon(points=taper_ina, layer='SEAM').put(dc_rib.pin['a1'], dc_rib.pin['a1'].y)
     nd.Polygon(points=taper_ina, layer='SEAM').put(dc_rib.pin['b0'], dc_rib.pin['b0'].y, -90)
@@ -558,8 +628,8 @@ with nd.Cell('mems_tdc_rib_chiplet2') as mems_tdc_rib_chiplet2:
     mtdc = chip.microbridge_pshack(**mb_kwargs2)
     mtdc.put(dc_rib.pin['c1'], flip=True, flop=True)
     # add tapers and grating couplers
-    taper_ina = geom.taper(length=length_taper, width1=0.75, width2=0.48)
-    taper_outa = geom.taper(length=length_taper, width1=0.48, width2=0.75)
+    taper_ina = geom.taper(length=length_taper, width1=0.48, width2=0.48)
+    taper_outa = geom.taper(length=length_taper, width1=0.48, width2=0.48)
     nd.Polygon(points=taper_ina, layer='SEAM').put(dc_rib.pin['a0'], dc_rib.pin['a0'].y)
     nd.Polygon(points=taper_ina, layer='SEAM').put(dc_rib.pin['a1'], dc_rib.pin['a1'].y)
     nd.Polygon(points=taper_ina, layer='SEAM').put(dc_rib.pin['b0'], dc_rib.pin['b0'].y, -90)
@@ -587,8 +657,8 @@ with nd.Cell('tdc_rib_chiplet1') as tdc_rib_chiplet1:
     # mtdc = chip.microbridge_pshack(**mb_kwargs)
     # mtdc.put(dc_rib.pin['c1'], flip=True, flop=True)
     # add grating couplers
-    taper_ina = geom.taper(length=length_taper, width1=0.75, width2=0.48)
-    taper_outa = geom.taper(length=length_taper, width1=0.48, width2=0.75)
+    taper_ina = geom.taper(length=length_taper, width1=0.48, width2=0.48)
+    taper_outa = geom.taper(length=length_taper, width1=0.48, width2=0.48)
     nd.Polygon(points=taper_ina, layer='SEAM').put(dc_rib.pin['a0'], dc_rib.pin['a0'].y)
     nd.Polygon(points=taper_ina, layer='SEAM').put(dc_rib.pin['a1'], dc_rib.pin['a1'].y)
     nd.Polygon(points=taper_ina, layer='SEAM').put(dc_rib.pin['b0'], dc_rib.pin['b0'].y, -90)
@@ -617,8 +687,8 @@ with nd.Cell('tdc_rib_chiplet2') as tdc_rib_chiplet2:
     # mtdc = chip.microbridge_pshack(**mb_kwargs)
     # mtdc.put(dc_rib.pin['c1'], flip=True, flop=True)
     # add grating couplers
-    taper_ina = geom.taper(length=length_taper, width1=0.75, width2=0.48)
-    taper_outa = geom.taper(length=length_taper, width1=0.48, width2=0.75)
+    taper_ina = geom.taper(length=length_taper, width1=0.48, width2=0.48)
+    taper_outa = geom.taper(length=length_taper, width1=0.48, width2=0.48)
     nd.Polygon(points=taper_ina, layer='SEAM').put(dc_rib.pin['a0'], dc_rib.pin['a0'].y)
     nd.Polygon(points=taper_ina, layer='SEAM').put(dc_rib.pin['a1'], dc_rib.pin['a1'].y)
     nd.Polygon(points=taper_ina, layer='SEAM').put(dc_rib.pin['b0'], dc_rib.pin['b0'].y, -90)
@@ -779,6 +849,15 @@ with nd.Cell('mems_phase_shifter_chiplet') as mems_phase_shifter_chiplet:
     mtdc.put(dc.pin['c1'], flip=True, flop=True)
     mtdc.put(dc.pin['c0'], flop=True)
 
+
+    ## Nate's test structure of Sunil's MZI
+
+    mzi = chip.mzi_x_test(**mzi_kwargs).put(200, 2000)
+    chip.cl_band_vertical_coupler_si.put(mzi.pin['a0'].x, mzi.pin['a0'].y, 90)
+    chip.cl_band_vertical_coupler_si.put(mzi.pin['a1'].x, mzi.pin['a1'].y, 90)
+    chip.cl_band_vertical_coupler_si.put(mzi.pin['b0'].x, mzi.pin['b0'].y, -90)
+    chip.cl_band_vertical_coupler_si.put(mzi.pin['b1'].x, mzi.pin['b1'].y, -90)
+
     use_mps = [False, False, False]
     use_bus = [True, True, False]
     # use_bus = [False, False, False]
@@ -825,7 +904,6 @@ with nd.Cell('mems_phase_shifter_chiplet') as mems_phase_shifter_chiplet:
     tdc.put(0, -1550, flip=True)
     static = nd.load_gds('static.gds')  # insert nate's filepath (or scripted cell) here
     static.put(220, -300, flip=True)
-<<<<<<< HEAD
 
     #TZAM Trenches to be manually placed
     chip.shallow_trench(200,810).put(-3000,-1550) #for mem ps
@@ -833,10 +911,9 @@ with nd.Cell('mems_phase_shifter_chiplet') as mems_phase_shifter_chiplet:
     chip.shallow_trench(215,470).put(-2*350-3000,-1550) #for mem ps
     chip.shallow_trench(200,390).put(-3*350-3000,-1550) #for rebecca tdc
     chip.shallow_trench(290,550).put(-4*350-3000,-1550) #for rings
+    chip.shallow_trench(500,200).put(-4*350-600-3000,-1550) #for rings
 
     
-=======
->>>>>>> 9fdaf8e5330cc902d4c90341bdc09ea4323f87f7
 
 mems_phase_shifter_chiplet.put(0 + 1500, 0)
 ## Drawing the bounding box
@@ -848,9 +925,6 @@ chip.cl_band_waveguide_si(angle=90, radius=5).put()
 chip.cl_band_waveguide_si(length=dy - 10).put()
 chip.cl_band_waveguide_si(angle=90, radius=5).put()
 chip.cl_band_waveguide_si(length=dx - 10).put()
-chip.cl_band_waveguide_si(angle=90, radius=5).put()
-<<<<<<< HEAD
-chip.cl_band_waveguide_si(length=dx-10).put()
 chip.cl_band_waveguide_si(angle=90,radius=5).put()
 chip.cl_band_waveguide_si(length=dy-10).put()
 ## Drawing the alignment marks
@@ -863,8 +937,5 @@ amark.put(-dx/2,-dy/2)
 amark.put(dx/2-side,-dy/2)
 amark.put(dx/2-side,dy/2-side)
 amark.put(-dx/2,dy/2-side)
-=======
-chip.cl_band_waveguide_si(length=dy - 10).put()
->>>>>>> 9fdaf8e5330cc902d4c90341bdc09ea4323f87f7
 
 nd.export_gds(filename='mems_phase_shifter_chiplet.gds')
