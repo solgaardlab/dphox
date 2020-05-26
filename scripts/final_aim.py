@@ -747,164 +747,183 @@ mzi_kwargs = {
     'radius': cp_radius
 }
 
-with nd.Cell('mems_phase_shifter_chiplet') as mems_phase_shifter_chiplet:
-    ### Placing the topmost element ###
-    # Left edge is zeroed now
-    dc_l = chip.cl_band_splitter_4port_si.put(20 + 200, 1700)
-    # Insert si crossing for contact
-    chip.cl_band_waveguide_si(angle=90).put(dc_l.pin['b0'])
-    chip.cl_band_waveguide_si(length=l_x_sep).put()
-    chip.cl_band_waveguide_si(angle=-90).put()
-    ul_x = chip.cl_band_crossing.put()
+with nd.Cell('sunil_chiplet') as mems_phase_shifter_chiplet:
+    with nd.Cell('mem_ps_with taps') as memps_taps:
+        ### Placing the topmost element ###
+        # Left edge is zeroed now
+        dc_l = chip.cl_band_splitter_4port_si.put(20 + 200, 1700)
+        # Insert si crossing for contact
+        chip.cl_band_waveguide_si(angle=90).put(dc_l.pin['b0'])
+        chip.cl_band_waveguide_si(length=l_x_sep).put()
+        chip.cl_band_waveguide_si(angle=-90).put()
+        ul_x = chip.cl_band_crossing.put()
 
-    upper_arm = chip.cl_band_waveguide_si(length=arm_l + 20).put(ul_x.pin['b0'])
-    # Insert si crossing for contact
+        upper_arm = chip.cl_band_waveguide_si(length=arm_l + 20).put(ul_x.pin['b0'])
+        # Insert si crossing for contact
 
-    ur_x = chip.cl_band_crossing.put()
-    chip.cl_band_waveguide_si(angle=-90).put(ur_x.pin['b0'])
-    chip.cl_band_waveguide_si(length=l_x_sep).put()
-    chip.cl_band_waveguide_si(angle=90).put()
+        ur_x = chip.cl_band_crossing.put()
+        chip.cl_band_waveguide_si(angle=-90).put(ur_x.pin['b0'])
+        chip.cl_band_waveguide_si(length=l_x_sep).put()
+        chip.cl_band_waveguide_si(angle=90).put()
 
-    tap_upper = chip.cl_band_1p_tap_si.put(flip=True)
-    # Insert si crossing for contact
-    chip.cl_band_waveguide_si(angle=-90).put(dc_l.pin['b1'])
-    chip.cl_band_waveguide_si(length=l_x_sep).put()
-    chip.cl_band_waveguide_si(angle=90).put()
-    ll_x = chip.cl_band_crossing.put()
+        tap_upper = chip.cl_band_1p_tap_si.put(flip=True)
+        # Insert si crossing for contact
+        chip.cl_band_waveguide_si(angle=-90).put(dc_l.pin['b1'])
+        chip.cl_band_waveguide_si(length=l_x_sep).put()
+        chip.cl_band_waveguide_si(angle=90).put()
+        ll_x = chip.cl_band_crossing.put()
 
-    lower_arm = chip.cl_band_waveguide_si(length=arm_l + 20).put(ll_x.pin['b0'])
-    # Insert si crossing for contact
-    lr_x = chip.cl_band_crossing.put()
-    chip.cl_band_waveguide_si(angle=90).put(lr_x.pin['b0'])
-    chip.cl_band_waveguide_si(length=l_x_sep).put()
-    chip.cl_band_waveguide_si(angle=-90).put()
+        lower_arm = chip.cl_band_waveguide_si(length=arm_l + 20).put(ll_x.pin['b0'])
+        # Insert si crossing for contact
+        lr_x = chip.cl_band_crossing.put()
+        chip.cl_band_waveguide_si(angle=90).put(lr_x.pin['b0'])
+        chip.cl_band_waveguide_si(length=l_x_sep).put()
+        chip.cl_band_waveguide_si(angle=-90).put()
 
-    tap_lower = chip.cl_band_1p_tap_si.put()
+        tap_lower = chip.cl_band_1p_tap_si.put()
 
-    chip.cl_band_waveguide_si(angle=90).put(tap_upper.pin['b1'])
-    chip.cl_band_waveguide_si(length=25).put()
-    chip.cl_band_waveguide_si(angle=-90).put()
-    chip.cl_band_waveguide_si(length=200).put()
-    chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
-    chip.cl_band_waveguide_si(angle=-90).put(tap_lower.pin['b1'])
-    chip.cl_band_waveguide_si(length=25).put()
-    chip.cl_band_waveguide_si(angle=90).put()
-    chip.cl_band_waveguide_si(length=200).put()
-    chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
-    dc_r = chip.cl_band_splitter_4port_si.put(tap_upper.pin['b0'])
-    chip.cl_band_waveguide_si(angle=-90).put(dc_l.pin['a0'])
-    chip.cl_band_waveguide_si(angle=90).put()
-    chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), 90)
-    chip.cl_band_waveguide_si(angle=90).put(dc_l.pin['a1'])
-    chip.cl_band_waveguide_si(angle=-90).put()
-    chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), 90)
-    chip.cl_band_waveguide_si(angle=90).put(dc_r.pin['b0'])
-    chip.cl_band_waveguide_si(angle=-90).put()
-    chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
-    chip.cl_band_waveguide_si(angle=-90).put(dc_r.pin['b1'])
-    chip.cl_band_waveguide_si(angle=90).put()
-    chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
+        chip.cl_band_waveguide_si(angle=90).put(tap_upper.pin['b1'])
+        chip.cl_band_waveguide_si(length=25).put()
+        chip.cl_band_waveguide_si(angle=-90).put()
+        chip.cl_band_waveguide_si(length=200).put()
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
+        chip.cl_band_waveguide_si(angle=-90).put(tap_lower.pin['b1'])
+        chip.cl_band_waveguide_si(length=25).put()
+        chip.cl_band_waveguide_si(angle=90).put()
+        chip.cl_band_waveguide_si(length=200).put()
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
+        dc_r = chip.cl_band_splitter_4port_si.put(tap_upper.pin['b0'])
+        chip.cl_band_waveguide_si(angle=-90).put(dc_l.pin['a0'])
+        chip.cl_band_waveguide_si(angle=90).put()
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), 90)
+        chip.cl_band_waveguide_si(angle=90).put(dc_l.pin['a1'])
+        chip.cl_band_waveguide_si(angle=-90).put()
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), 90)
+        chip.cl_band_waveguide_si(angle=90).put(dc_r.pin['b0'])
+        chip.cl_band_waveguide_si(angle=-90).put()
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
+        chip.cl_band_waveguide_si(angle=-90).put(dc_r.pin['b1'])
+        chip.cl_band_waveguide_si(angle=90).put()
+        chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
 
-    # Adding contacts
-    chip.si_contact_pad(length=arm_l + 10 + 120, width=pad_w).put(ul_x.pin['a1'].x - 5, ul_x.pin['a1'].y + pad_w / 2)
-    chip.si_contact_pad(length=arm_l + 10 + 120, width=pad_w).put(ll_x.pin['b1'].x - 5, ll_x.pin['b1'].y - pad_w / 2)
-
-    ###TDC SUNIL ###
-
-    ##left edge is zeroed
-    dc = chip.dc(**dc_kwargs).put(100 + 200, 1200)
-    # Insert Si X for contacts
-    ul_x = chip.cl_band_crossing.put(dc.pin['a1'])
-    ur_x = chip.cl_band_crossing.put(dc.pin['b1'])
-    ll_x = chip.cl_band_crossing.put(dc.pin['a0'])
-    lr_x = chip.cl_band_crossing.put(dc.pin['b0'])
-
-    chip.cl_band_vertical_coupler_si.put(ul_x.pin['b0'].x, ul_x.pin['b0'].y, 90)
-    chip.cl_band_vertical_coupler_si.put(ll_x.pin['b0'].x, ll_x.pin['b0'].y, 90)
-    chip.cl_band_vertical_coupler_si.put(ur_x.pin['b0'].x, ur_x.pin['b0'].y, -90)
-    chip.cl_band_vertical_coupler_si.put(lr_x.pin['b0'].x, lr_x.pin['b0'].y, -90)
-
-    ### MZI SUNIL ###
-    # mzi = chip.mzi(**mzi_kwargs).put(0, -120)
-    # Left edge is zeroed now
-    mzi = chip.mzi_x_contacts(**mzi_kwargs).put(200, 800)
-
-    chip.cl_band_vertical_coupler_si.put(mzi.pin['a0'].x, mzi.pin['a0'].y, 90)
-    chip.cl_band_vertical_coupler_si.put(mzi.pin['a1'].x, mzi.pin['a1'].y, 90)
-    chip.cl_band_vertical_coupler_si.put(mzi.pin['b0'].x, mzi.pin['b0'].y, -90)
-    chip.cl_band_vertical_coupler_si.put(mzi.pin['b1'].x, mzi.pin['b1'].y, -90)
-    mps = chip.microbridge_ps(bridge_w=5, bridge_l=100,
+        # Adding contacts
+        chip.si_contact_pad(length=arm_l + 10 + 120, width=pad_w).put(ul_x.pin['a1'].x - 5, ul_x.pin['a1'].y + pad_w / 2)
+        chip.si_contact_pad(length=arm_l + 10 + 120, width=pad_w).put(ll_x.pin['b1'].x - 5, ll_x.pin['b1'].y - pad_w / 2)
+        
+        #Adding microbridges
+        mps = chip.microbridge_ps(bridge_w=5, bridge_l=100,
                               tether_l=10, tether_w=5,
                               block_w=1, block_l=arm_l, radius=2)
-    mps.put(mzi.pin['c1'].x + 5, mzi.pin['c1'].y, flip=True)
-    mps.put(mzi.pin['c0'].x + 5, mzi.pin['c0'].y)
+        mps.put(upper_arm.pin['a0'].x + 10, upper_arm.pin['a0'].y)  # edit refs for this
+        mps.put(lower_arm.pin['a0'].x + 10, lower_arm.pin['a0'].y, flip=True)  # edit refs for this
+    memps_taps.put(0,0)
 
-    mps.put(upper_arm.pin['a0'].x + 10, upper_arm.pin['a0'].y)  # edit refs for this
-    mps.put(lower_arm.pin['a0'].x + 10, lower_arm.pin['a0'].y, flip=True)  # edit refs for this
 
-    bridge_l = 100
-    mtdc = chip.microbridge_ps(bridge_w=5, bridge_l=bridge_l,
-                               tether_l=10, tether_w=5,
-                               block_w=0.48, block_l=tdc_interaction_w, radius=1)
-    mtdc.put(dc.pin['c1'], flip=True, flop=True)
-    mtdc.put(dc.pin['c0'], flop=True)
+    with nd.Cell('tdc') as tdc:
+        ###TDC SUNIL ###
+        ##left edge is zeroed
+        dc = chip.dc(**dc_kwargs).put(100 + 200, 1200)
+        # Insert Si X for contacts
+        ul_x = chip.cl_band_crossing.put(dc.pin['a1'])
+        ur_x = chip.cl_band_crossing.put(dc.pin['b1'])
+        ll_x = chip.cl_band_crossing.put(dc.pin['a0'])
+        lr_x = chip.cl_band_crossing.put(dc.pin['b0'])
+
+        chip.cl_band_vertical_coupler_si.put(ul_x.pin['b0'].x, ul_x.pin['b0'].y, 90)
+        chip.cl_band_vertical_coupler_si.put(ll_x.pin['b0'].x, ll_x.pin['b0'].y, 90)
+        chip.cl_band_vertical_coupler_si.put(ur_x.pin['b0'].x, ur_x.pin['b0'].y, -90)
+        chip.cl_band_vertical_coupler_si.put(lr_x.pin['b0'].x, lr_x.pin['b0'].y, -90)
+
+        bridge_l = 100
+        mtdc = chip.microbridge_ps(bridge_w=5, bridge_l=bridge_l,
+                                tether_l=10, tether_w=5,
+                                block_w=0.48, block_l=tdc_interaction_w, radius=1)
+        mtdc.put(dc.pin['c1'], flip=True, flop=True)
+        mtdc.put(dc.pin['c0'], flop=True)
+    tdc.put(0,0)
+
+    with nd.Cell('mzi_with_mems') as mzi_mems:
+        ### MZI SUNIL ###
+        # mzi = chip.mzi(**mzi_kwargs).put(0, -120)
+        # Left edge is zeroed now
+        mzi = chip.mzi_x_contacts(**mzi_kwargs).put(200, 800)
+
+        chip.cl_band_vertical_coupler_si.put(mzi.pin['a0'].x, mzi.pin['a0'].y, 90)
+        chip.cl_band_vertical_coupler_si.put(mzi.pin['a1'].x, mzi.pin['a1'].y, 90)
+        chip.cl_band_vertical_coupler_si.put(mzi.pin['b0'].x, mzi.pin['b0'].y, -90)
+        chip.cl_band_vertical_coupler_si.put(mzi.pin['b1'].x, mzi.pin['b1'].y, -90)
+        mps = chip.microbridge_ps(bridge_w=5, bridge_l=100,
+                                tether_l=10, tether_w=5,
+                                block_w=1, block_l=arm_l, radius=2)
+        mps.put(mzi.pin['c1'].x + 5, mzi.pin['c1'].y, flip=True)
+        mps.put(mzi.pin['c0'].x + 5, mzi.pin['c0'].y)
+    mzi_mems.put(0,0)
+
+    # mps.put(upper_arm.pin['a0'].x + 10, upper_arm.pin['a0'].y)  # edit refs for this
+    # mps.put(lower_arm.pin['a0'].x + 10, lower_arm.pin['a0'].y, flip=True)  # edit refs for this
+
+    # bridge_l = 100
+    # mtdc = chip.microbridge_ps(bridge_w=5, bridge_l=bridge_l,
+    #                            tether_l=10, tether_w=5,
+    #                            block_w=0.48, block_l=tdc_interaction_w, radius=1)
+    # mtdc.put(dc.pin['c1'], flip=True, flop=True)
+    # mtdc.put(dc.pin['c0'], flop=True)
 
 
     ## Nate's test structure of Sunil's MZI
-
-    mzi = chip.mzi_x_test(**mzi_kwargs).put(200, 2000)
-    chip.cl_band_vertical_coupler_si.put(mzi.pin['a0'].x, mzi.pin['a0'].y, 90)
-    chip.cl_band_vertical_coupler_si.put(mzi.pin['a1'].x, mzi.pin['a1'].y, 90)
-    chip.cl_band_vertical_coupler_si.put(mzi.pin['b0'].x, mzi.pin['b0'].y, -90)
-    chip.cl_band_vertical_coupler_si.put(mzi.pin['b1'].x, mzi.pin['b1'].y, -90)
-
-    use_mps = [False, False, False]
-    use_bus = [True, True, False]
-    # use_bus = [False, False, False]
-    use_crossing = [False, False, True]
-    positions = [(200, 0), (200, 100), (200, 200)]
-    flip = [False, True, False]
-    for idx, racetrack_l in enumerate((100, 500, 300)):
-        if use_crossing[idx]:
-            interaction_l = 5
-            radius = 30
-            waveguide = chip.cl_band_waveguide_si(length=300).put(positions[idx][0], positions[idx][1])
-            chip.cl_band_vertical_coupler_si.put(waveguide.pin['a0'].x, waveguide.pin['a0'].y, 90)
-            rr = chip.ring_resonator_x(radius=radius, gap_w=0.2, racetrack_l=racetrack_l + 200,
-                                       interaction_l=interaction_l,
-                                       interaction_angle=30).put(waveguide.pin['b0'])
-            waveguide = chip.cl_band_waveguide_si(length=300).put(rr.pin['b0'])
-            chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
-        else:
-            interaction_l = 5
-            radius = 30
-            waveguide = chip.cl_band_waveguide_si(length=300).put(positions[idx][0], positions[idx][1])
-            chip.cl_band_vertical_coupler_si.put(waveguide.pin['a0'].x, waveguide.pin['a0'].y, 90)
-            rr = chip.ring_resonator(radius=radius, gap_w=0.2, racetrack_l=racetrack_l, interaction_l=interaction_l,
-                                     interaction_angle=30).put(waveguide.pin['b0'])
-            waveguide = chip.cl_band_waveguide_si(length=300).put(rr.pin['b0'])
-            chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
-        if use_mps[idx]:
-            # phase shifter
-            mps.put(rr.pin['c0'].x + interaction_l / 2 - arm_l / 2,
-                    rr.pin['c0'].y + waveguide_w + 2 * radius + gap_w / 2, flip=True)
-        if use_bus[idx]:
-            # bus
-            gap_w = 0.2
-            chip.cl_band_waveguide_si(length=5).put(rr.pin['c0'].x + interaction_l / 2 + 0.35 * racetrack_l,
-                                                    rr.pin['c0'].y + 2 * waveguide_w + 2 * gap_w)
+    with nd.Cell('test_mzi_sunil') as test_mzi:
+        mzi = chip.mzi_x_test(**mzi_kwargs).put(200, 2000)
+        chip.cl_band_vertical_coupler_si.put(mzi.pin['a0'].x, mzi.pin['a0'].y, 90)
+        chip.cl_band_vertical_coupler_si.put(mzi.pin['a1'].x, mzi.pin['a1'].y, 90)
+        chip.cl_band_vertical_coupler_si.put(mzi.pin['b0'].x, mzi.pin['b0'].y, -90)
+        chip.cl_band_vertical_coupler_si.put(mzi.pin['b1'].x, mzi.pin['b1'].y, -90)
+    
+    test_mzi.put(0,0)
+    
+    with nd.Cell('ring_resonators') as rings:
+        use_mps = [False, False, False]
+        use_bus = [True, True, False]
+        # use_bus = [False, False, False]
+        use_crossing = [False, False, True]
+        positions = [(200, 0), (200, 100), (200, 200)]
+        flip = [False, True, False]
+        for idx, racetrack_l in enumerate((100, 500, 300)):
+            if use_crossing[idx]:
+                interaction_l = 5
+                radius = 30
+                waveguide = chip.cl_band_waveguide_si(length=300).put(positions[idx][0], positions[idx][1])
+                chip.cl_band_vertical_coupler_si.put(waveguide.pin['a0'].x, waveguide.pin['a0'].y, 90)
+                rr = chip.ring_resonator_x(radius=radius, gap_w=0.2, racetrack_l=racetrack_l + 200,
+                                        interaction_l=interaction_l,
+                                        interaction_angle=30).put(waveguide.pin['b0'])
+                waveguide = chip.cl_band_waveguide_si(length=300).put(rr.pin['b0'])
+                chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
+            else:
+                interaction_l = 5
+                radius = 30
+                waveguide = chip.cl_band_waveguide_si(length=300).put(positions[idx][0], positions[idx][1])
+                chip.cl_band_vertical_coupler_si.put(waveguide.pin['a0'].x, waveguide.pin['a0'].y, 90)
+                rr = chip.ring_resonator(radius=radius, gap_w=0.2, racetrack_l=racetrack_l, interaction_l=interaction_l,
+                                        interaction_angle=30).put(waveguide.pin['b0'])
+                waveguide = chip.cl_band_waveguide_si(length=300).put(rr.pin['b0'])
+                chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
+            if use_mps[idx]:
+                # phase shifter
+                mps.put(rr.pin['c0'].x + interaction_l / 2 - arm_l / 2,
+                        rr.pin['c0'].y + waveguide_w + 2 * radius + gap_w / 2, flip=True)
+            if use_bus[idx]:
+                # bus
+                gap_w = 0.2
+                chip.cl_band_waveguide_si(length=5).put(rr.pin['c0'].x + interaction_l / 2 + 0.35 * racetrack_l,
+                                                        rr.pin['c0'].y + 2 * waveguide_w + 2 * gap_w)
+    rings.put(0,0)
 
     # shallow_trench = chip.shallow_trench(length=500, width=900)
     # shallow_trench2 = chip.shallow_trench(length=500, width=600)
     # shallow_trench.put(65, shallow_trench.bbox[3] / 2 + 100)
     # shallow_trench2.put(35, -shallow_trench.bbox[3] / 2 - 480)
 
-    # tdc = nd.load_gds('tdc_v2.gds')  # insert rebecca's filepath (or scripted cell) here
-    tdc = nd.load_gds('rib_dc_layout.gds')
-    tdc.put(0, -1550, flip=True)
-    static = nd.load_gds('static.gds')  # insert nate's filepath (or scripted cell) here
-    static.put(220, -300, flip=True)
-
+with nd.Cell('trenches') as trenches:
     #TZAM Trenches to be manually placed
     chip.shallow_trench(200,810).put(-3000,-1550) #for mem ps
     chip.shallow_trench(225,470).put(-350-3000,-1550) #for mem ps
@@ -912,33 +931,44 @@ with nd.Cell('mems_phase_shifter_chiplet') as mems_phase_shifter_chiplet:
     chip.shallow_trench(200,390).put(-3*350-3000,-1550) #for rebecca tdc
     chip.shallow_trench(290,550).put(-4*350-3000,-1550) #for rings
     chip.shallow_trench(500,200).put(-4*350-600-3000,-1550) #for rings
+trenches.put(0,0)
 
-    
+
+
+
 
 mems_phase_shifter_chiplet.put(0 + 1500, 0)
-## Drawing the bounding box
-dx = 2150
-dy = 1850
-chip.cl_band_waveguide_si(angle=90, radius=5).put(-dx / 2, -dy / 2 + 5, -90)
-chip.cl_band_waveguide_si(length=dx - 10).put()
-chip.cl_band_waveguide_si(angle=90, radius=5).put()
-chip.cl_band_waveguide_si(length=dy - 10).put()
-chip.cl_band_waveguide_si(angle=90, radius=5).put()
-chip.cl_band_waveguide_si(length=dx - 10).put()
-chip.cl_band_waveguide_si(angle=90,radius=5).put()
-chip.cl_band_waveguide_si(length=dy-10).put()
+with nd.Cell('bounding_box') as bb:
 
+    ## Drawing the bounding box
+    dx = 2150
+    dy = 1850
+    chip.cl_band_waveguide_si(angle=90, radius=5).put(-dx / 2, -dy / 2 + 5, -90)
+    chip.cl_band_waveguide_si(length=dx - 10).put()
+    chip.cl_band_waveguide_si(angle=90, radius=5).put()
+    chip.cl_band_waveguide_si(length=dy - 10).put()
+    chip.cl_band_waveguide_si(angle=90, radius=5).put()
+    chip.cl_band_waveguide_si(length=dx - 10).put()
+    chip.cl_band_waveguide_si(angle=90,radius=5).put()
+    chip.cl_band_waveguide_si(length=dy-10).put()
+bb.put(0,0)
 ## Drawing the alignment marks Creates a top level cell
-with nd.Cell('alignment mark') as amark:
+with nd.Cell('alignment_mark') as amark:
     side=100
     chip.cl_band_waveguide_si(length=side, width=5).put(0,side/2)
     chip.cl_band_waveguide_si(length=side, width=5).put(side/2,0,90)
-    chip.cl_band_waveguide_FNSN(length=side, width=5).put(0,side/2)
-    chip.cl_band_waveguide_FNSN(length=side, width=5).put(side/2,0,90)
+    # chip.cl_band_waveguide_FNSN(length=side, width=5).put(0,side/2)
+    # chip.cl_band_waveguide_FNSN(length=side, width=5).put(side/2,0,90)
 # return amark
 amark.put(-dx/2,-dy/2)
 amark.put(dx/2-side,-dy/2)
 amark.put(dx/2-side,dy/2-side)
 amark.put(-dx/2,dy/2-side)
 
+
+##Loading The cells that contain Rebecca's and Nate's experiments
+tdc = nd.load_gds('rib_dc_layout.gds')
+tdc.put(0, -1.2*dy/2, flip=True)
+static = nd.load_gds('static.gds')  # insert nate's filepath (or scripted cell) here
+static.put(-dx*1.2, 0, flip=True)
 nd.export_gds(filename='mems_phase_shifter_chiplet.gds')

@@ -8,5 +8,6 @@ __pycache__
 .env*
 .idea
 .DS_Store
+*.gds
 data/*
 aim_lib/*
