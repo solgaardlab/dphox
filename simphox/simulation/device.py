@@ -133,33 +133,33 @@ class Modes:
         e_o, h_o = other_modes.e, other_modes.h
         return np.sum(poynting_z(e_o, h_i) + poynting_z(e_i, h_o)).real
 
-    def plot_sz(self, ax, idx: int = 0):
+    def plot_sz(self, ax, idx: int = 0, title: str = "Poynting"):
         if idx > self.m - 1:
             ValueError("Out of range of number of solutions")
         field_emplot_mag(ax, np.abs(self.szs[idx].real), self.eps, spacing=self.fdfd.spacing[0])
-        ax.set_title(rf'Poynting, $n_{idx + 1} = {self.ns[idx]:.4f}$')
+        ax.set_title(rf'{title}, $n_{idx + 1} = {self.ns[idx]:.4f}$')
         ax.text(x=0.9, y=0.9, s=rf'$s_z$', color='white', transform=ax.transAxes, fontsize=16)
         ratio = np.max((self.te_ratios[idx], 1 - self.te_ratios[idx]))
         polarization = "TE" if np.argmax((self.te_ratios[idx], 1 - self.te_ratios[idx])) > 0 else "TM"
         ax.text(x=0.05, y=0.9, s=rf'{polarization}[{ratio:.2f}]', color='white', transform=ax.transAxes)
 
-    def plot_field(self, ax, idx: int = 0, axis: int = 1, use_e: bool = True):
+    def plot_field(self, ax, idx: int = 0, axis: int = 1, use_e: bool = False, title: str = "Field"):
         field = self.es if use_e else self.hs
         if idx > self.m - 1:
             ValueError("Out of range of number of solutions")
         if not (axis == 0 or axis == 1 or axis == 2):
             ValueError("Out of range of number of solutions")
-        field_emplot_re(ax, np.abs(field[idx][axis].real), self.eps, spacing=self.fdfd.spacing[0])
-        ax.set_title(rf'Poynting, $n_{idx + 1} = {self.ns[idx]:.4f}$')
-        ax.text(x=0.9, y=0.9, s=rf'$h_y$', color='black', transform=ax.transAxes, fontsize=16)
+        field_emplot_re(ax, field[idx][axis].real, self.eps, spacing=self.fdfd.spacing[0])
+        ax.set_title(rf'{title}, $n_{idx + 1} = {self.ns[idx]:.4f}$')
+        ax.text(x=0.9, y=0.9, s=rf'$e_y$' if use_e else rf'$h_y$', color='black', transform=ax.transAxes, fontsize=16)
         ratio = np.max((self.te_ratios[idx], 1 - self.te_ratios[idx]))
         polarization = "TE" if np.argmax((self.te_ratios[idx], 1 - self.te_ratios[idx])) > 0 else "TM"
-        ax.text(x=0.05, y=0.9, s=rf'{polarization}[{ratio:.2f}]', color='white', transform=ax.transAxes)
+        ax.text(x=0.05, y=0.9, s=rf'{polarization}[{ratio:.2f}]', color='black', transform=ax.transAxes)
 
 
 class ModeDevice:
     def __init__(self, wg: ModeBlock, sub: ModeBlock, size: Tuple[float, float], wg_height: float,
-                 wavelength: float = 1.55, spacing: float = 0.01):
+                 wavelength: float = 1.55, spacing: float = 0.01, rib_y: float = 0):
         self.size = size
         self.spacing = spacing
         self.nx = int(self.size[0] / spacing)
@@ -172,6 +172,7 @@ class ModeDevice:
         self.wg_height = wg_height
         self.wg = wg
         self.sub = sub
+        self.rib_y = rib_y
 
     def solve(self, eps: np.ndarray, m: int = 6) -> Modes:
         self.fdfd.eps = eps
@@ -189,6 +190,7 @@ class ModeDevice:
         eps = np.ones((nx, ny))
         eps[:, :int(self.sub.y / dx)] = sub.material.eps
         eps[xr_wg[0]:xr_wg[1], yr_wg[0]:yr_wg[1]] = wg.material.eps
+        eps[:, int(self.sub.y / dx):int(self.sub.y / dx) + int(self.rib_y / dx)] = wg.material.eps
 
         if ps is not None:
             ps_y = (self.wg.y + self.wg_height + sep, self.wg.y + self.wg_height + sep + ps.y)
@@ -208,6 +210,7 @@ class ModeDevice:
         eps = np.ones((nx, ny))
         eps[:, :int(self.sub.y / dx)] = sub.material.eps
         eps[xr_wg[0]:xr_wg[1], yr_wg[0]:yr_wg[1]] = wg.material.eps
+        eps[:, int(self.sub.y / dx):int(self.sub.y / dx) + int(self.rib_y / dx)] = wg.material.eps
 
         if ps is not None:
             ps_y = (self.wg.y + self.wg_height + sep, self.wg.y + self.wg_height + sep + ps.y)
@@ -233,6 +236,7 @@ class ModeDevice:
         eps[:, :int(sub.y / dx)] = sub.eps
         eps[xr_l[0]:xr_l[1], yr[0]:yr[1]] = wg.eps
         eps[xr_r[0]:xr_r[1], yr[0]:yr[1]] = wg.eps
+        eps[:, int(self.sub.y / dx):int(self.sub.y / dx) + int(self.rib_y / dx)] = wg.material.eps
 
         if ps is not None:
             ps_y = (self.wg.y + self.wg_height + seps[0], self.wg.y + self.wg_height + seps[0] + ps.y)

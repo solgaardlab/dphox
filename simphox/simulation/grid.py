@@ -3,8 +3,8 @@ from functools import lru_cache
 import numpy as np
 import scipy.sparse as sp
 
-from ..design.gdspy import Component
-from ..typing import Shape, Dim, GridSpacing, Optional, Tuple, List, Union
+from ..design.component import Component
+from ..typing import Shape, Dim, Dim2, GridSpacing, Optional, Tuple, List, Union
 from ..utils import d2curl_op, d2curl_fn, grid_average
 
 
@@ -45,6 +45,43 @@ class Grid:
                                      :self.size[2]:self.spacing[2]], axis=0)
         self.components = []
 
+    @classmethod
+    def from_2d_component(cls, comp: Component, comp_eps: float, sub_eps: float, spacing: float, boundary: Dim,
+                          comp_t: float = 0, comp_z: Optional[float] = None, rib_t: float = 0,
+                          sub_z: float = 0, height: float = 0, bg_eps: float = 1):
+        """
+
+        Args:
+            comp: 2d component
+            comp_eps: component epsilon
+            sub_eps: substrate epsilon
+            spacing: spacing required
+            boundary: boundary size around component
+            height: height for 3d simulation
+            sub_z: substrate minimum height
+            comp_z: component height (defaults to substrate_z)
+            comp_t: component thickness
+            rib_t: rib thickness for component (partial etch)
+            bg_eps: background epsilon (usually 1 or air)
+
+        Returns:
+            A Grid object for the component
+
+        """
+        b = comp.size
+        x = b[0] + 2 * boundary[0]
+        y = b[1] + 2 * boundary[1]
+        comp_z = sub_z if comp_z is None else comp_z
+        spacing = spacing * np.ones(2 + (comp_t > 0)) if isinstance(spacing, float) else np.asarray(spacing)
+        if height > 0:
+            shape = (np.asarray((x, y, height)) / spacing).astype(np.int)
+        else:
+            shape = (np.asarray((x, y)) / spacing).astype(np.int)
+        grid = cls(shape, spacing)
+        grid.fill(comp_eps, comp_z + rib_t)
+        grid.fill(sub_eps, sub_z)
+        grid.add(comp, comp_eps, comp_z, comp_t)
+        return grid
 
     def _check_bounds(self, component) -> bool:
         b = component.bounds
@@ -82,7 +119,7 @@ class Grid:
             self.eps[mask == 1] = eps
         else:
             zidx = (int(zmin / self.spacing[0]), int((zmin + thickness) / self.spacing[1]))
-            self.eps[:, :, zidx[0]:zidx[1]] += (mask * eps)[..., np.newaxis] - self.eps[:, :, zidx[0]:zidx[1]]
+            self.eps[mask == 1, zidx[0]:zidx[1]] = eps
 
     def reshape(self, v: np.ndarray) -> np.ndarray:
         """A simple method to reshape flat 3d vec array into the same shape
@@ -99,7 +136,7 @@ class Grid:
 class SimGrid(Grid):
     def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
                  bloch_phase: Union[Dim, float] = 0.0, pml: Optional[Union[int, Shape, Dim]] = None,
-                 pml_eps: float = 1.0, grid_avg: float = 1):
+                 pml_eps: float = 1.0, grid_avg: int = 1):
         super(SimGrid, self).__init__(shape, spacing, eps)
         self.pml_shape = np.asarray(pml, dtype=np.int) if isinstance(pml, tuple) else pml
         self.pml_shape = np.ones(self.ndim, dtype=np.int) * pml if isinstance(pml, int) else pml
@@ -117,9 +154,9 @@ class SimGrid(Grid):
         if not len(self.bloch) == len(self.shape):
             raise AttributeError(f'Need len(bloch_phase) == len(grid_shape),'
                                  f'got ({len(self.bloch)}, {len(self.shape)}).')
-        self.dtype = np.float64 if not pml and bloch_phase == 0 else np.complex128
+        self.dtype = np.float64 if pml is None and bloch_phase == 0 else np.complex128
 
-    @lru_cache()
+    # @lru_cache()
     def deriv(self, back: bool = False) -> List[sp.spmatrix]:
         """Calculate directional derivative (cached, since this does not depend on any params)
 
@@ -153,22 +190,22 @@ class SimGrid(Grid):
         return d
 
     @property
-    @lru_cache()
+    # @lru_cache()
     def df(self):
         return self.deriv()
 
     @property
-    @lru_cache()
+    # @lru_cache()
     def db(self):
         return self.deriv(back=True)
 
     @property
-    @lru_cache()
+    # @lru_cache()
     def curl_f(self):
         return d2curl_op(self.df)
 
     @property
-    @lru_cache()
+    # @lru_cache()
     def curl_b(self):
         return d2curl_op(self.db)
 
@@ -188,6 +225,40 @@ class SimGrid(Grid):
 
         return d2curl_fn(h, dh, beta)
 
+    def e2h(self, e: np.ndarray, beta: Optional[float] = None) -> np.ndarray:
+        """
+        Convert magnetic field :math:`\mathbf{e}` to electric field :math:`\mathbf{h}`.
+
+        Usage is: `h = grid.e2h(e)`, where `e` is grid-shaped (not flattened)
+
+        Mathematically, this represents rearranging the Maxwell equation in the frequency domain:
+        ..math::
+            i \omega \mu \mathbf{h} = \nabla \times \mathbf{e}
+
+        Returns:
+            The h-field converted from the e-field
+
+        """
+        e = self.reshape(e) if e.ndim == 2 else e
+        return self.curl_e(e, beta) / (1j * self.k0)
+
+    def h2e(self, h: np.ndarray, beta: Optional[float] = None) -> np.ndarray:
+        """
+        Convert magnetic field :math:`\mathbf{h}` to electric field :math:`\mathbf{e}`.
+
+        Usage is: `e = grid.h2e(h)`, where `h` is grid-shaped (not flattened)
+
+        Mathematically, this represents rearranging the Maxwell equation in the frequency domain:
+        ..math::
+            -i \omega \epsilon \mathbf{e} = \nabla \times \mathbf{h}
+
+        Returns:
+            Function to convert h-field to e-field
+
+        """
+        h = self.reshape(h) if h.ndim == 2 else h
+        return self.curl_h(h, beta) / (1j * self.k0 * self.eps_t)
+
     @property
     def _dxes(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
         """Conditional transformation of self.dxes (will need to be extended by some other class)
@@ -199,5 +270,5 @@ class SimGrid(Grid):
 
     @property
     def eps_t(self):
-        return grid_average(self.eps, shift=self.grid_avg) if self.grid_avg > 0 else np.stack((self.eps, self.eps, self.eps))
-
+        return grid_average(self.eps, shift=self.grid_avg) if self.grid_avg > 0 else np.stack(
+            (self.eps, self.eps, self.eps))

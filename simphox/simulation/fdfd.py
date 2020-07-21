@@ -3,10 +3,10 @@ from functools import lru_cache
 import numpy as np
 import scipy.sparse as sp
 from scipy.sparse.linalg import eigs
-
+from typing import Callable
 
 from .grid import SimGrid
-from ..typing import Shape, Dim, GridSpacing, Optional, Tuple, List, Union, SpSolve, Op
+from ..typing import Shape, Dim, GridSpacing, Optional, Tuple, List, Union, SpSolve, Op, Shape2, Dim2
 
 try:  # pardiso (using Intel MKL) is much faster than scipy's solver
     from .mkl import spsolve, feast_eigs
@@ -166,13 +166,16 @@ class FDFD(SimGrid):
         h = self.reshape(h) if h.ndim == 2 else h
         return self.curl_h(h, beta) / (1j * self.k0 * self.eps_t)
 
-    def solve(self, src: np.ndarray, solver_fn: Optional[SpSolve] = None, reshaped: bool = True) -> np.ndarray:
+    def solve(self, src: np.ndarray, solver_fn: Optional[SpSolve] = None, reshaped: bool = True,
+              iterative: int = -1, callback: Optional[Callable] = None) -> np.ndarray:
         """FDFD e-field Solver
 
         Args:
             src: normalized source (can be wgm or tfsf)
             solver_fn: any function that performs a sparse linalg solve
             reshaped: reshape into the grid shape (instead of vectorized/flattened form)
+            iterative: default = -1, direct = 0, gmres = 1, bicgstab
+            callback: a function to run during the solve (only applies in 3d iterative solver case)
 
         Returns:
             Electric fields that solve the problem :math:`A\mathbf{e} = \mathbf{b} = i \omega \mathbf{j}`
@@ -180,7 +183,12 @@ class FDFD(SimGrid):
         """
         b = self.k0 * src.flatten()
         if b.size == self.n * 3:
-            e = solver_fn(self.mat, b) if solver_fn else spsolve(self.mat, b)
+            if iterative == -1 and solver_fn is None and self.ndim == 3:
+                # use iterative solver for 3d sims by default
+                M = sp.linalg.LinearOperator(self.mat.shape, sp.linalg.spilu(self.mat).solve)
+                e = sp.linalg.gmres(self.mat, b, M=M) if iterative == 1 else sp.linalg.bicgstab(self.mat, b, M=M)
+            else:
+                e = solver_fn(self.mat, b) if solver_fn else spsolve(self.mat, b)
         elif b.size == self.n:  # assume only the z component
             ez = solver_fn(self.matz, b) if solver_fn else spsolve(self.matz, b)
             o = np.zeros_like(ez)
@@ -211,7 +219,6 @@ class FDFD(SimGrid):
 
         """
 
-        # db = self.db
         df = self.df
         if isinstance(beta_guess, float) or beta_guess is None:
             sigma = beta_guess ** 2 if beta_guess else (self.k0 * np.sqrt(np.max(self.eps))) ** 2
@@ -233,7 +240,8 @@ class FDFD(SimGrid):
         return np.sqrt(eigvals[inds_sorted]), h[:, inds_sorted].T
 
     def src(self, axis: int = 0, mode_idx: int = 0, power: float = 1,
-            beta_guess: Optional[float] = None, tol: float = 1e-5) -> np.ndarray:
+            beta_guess: Optional[float] = None, tol: float = 1e-5,
+            return_beta: bool = False) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """Define waveguide mode source using waveguide mode solver (incl. pml if part of the mode solver!)
 
         Args:
@@ -243,6 +251,7 @@ class FDFD(SimGrid):
             and if negative, the source moves in opposite direction (polarity is encoded in sign of power).
             beta_guess: Guess for propagation constant :math:`\beta`
             tol: Tolerance of the mode solver
+            return_beta: Also return beta
 
         Returns:
             Grid-shaped waveguide mode (wgm) source (normalized h-mode for 1d, spins-b source for 2d)
@@ -265,15 +274,46 @@ class FDFD(SimGrid):
             j = np.stack((np.zeros(self.shape), -h[idx[2]], h[idx[1]])) * phasor[np.newaxis, ...]
             m = np.stack((np.zeros(self.shape), -e[idx[2]], e[idx[1]]))
             jm = self.curl_h(m) / self.k0
-
-            return (j + jm) / dx[axis] * polarity * np.sqrt(p)
+            src = (j + jm) / dx[axis] * polarity * np.sqrt(p)
         else:
             if self.ndim == 1 and self.pml_shape:
                 raise NotImplementedError("PML for 1d wgm source must be None.")
-            return h * polarity * np.sqrt(p)
+            if self.ndim == 1:
+                src = h[mode_idx] * polarity * np.sqrt(p)
+            else:
+                src = self.reshape(h[mode_idx]) * polarity * np.sqrt(p)
+        return beta, src if return_beta else src
+
+    def xs_src(self, slice_x, slice_y, mode_idx=0):
+        """Cross-section source (for 2d and 3d)
+
+        Args:
+            slice_x: Cross section at x
+            slice_y: Cross section at y
+            mode_idx: Mode index for the source (0 for fundamental mode)
+
+        Returns:
+            a cross-section (xs) source :code:`xs_src` that can be used to call :code:`fdfd.solve(src)`.
+
+        """
+
+        if self.ndim == 1:
+            raise ValueError(f"Simulation dimension ndim must be 2 or 3 but got {self.ndim}.")
+
+        mode_eps = self.eps[slice_x, slice_y]
+        src_fdfd = FDFD(
+            shape=mode_eps.shape,
+            spacing=self.spacing[0],  # TODO (sunil): handle this...
+            eps=mode_eps
+        )
+        xs_src = np.zeros(self.eps_t.shape, dtype=np.complex128)
+        beta, mode = src_fdfd.src(mode_idx=mode_idx, return_beta=True)
+        xs_src[:, slice_x, slice_y] = mode.squeeze()
+        if self.ndim == 3:
+            xs_src = np.stack((xs_src[2], xs_src[1], xs_src[0]))  # re-orient the source directions
+        return beta, xs_src
 
     @property
-    @lru_cache()
     def _dxes(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
         """Conditional transformation of self.dxes based on stretched-coordinated perfectly matched layers (SC-PML)
 
@@ -308,6 +348,44 @@ class FDFD(SimGrid):
             return 1 + 1j * (exp_scale + 1) * (d_pml ** exp_scale) * log_reflection / (2 * absorption_corr)
         return _scpml(pe), _scpml(ph)
 
+    def effective_fdfd2d(self, x: Union[Shape2, Dim2], y: Union[Shape2, Dim2]):
+        # get slab index
+        if not self.ndim == 3:
+            raise RuntimeError("Require ndim = 3 for 2d variational effective index method.")
+        x_cen = x if not isinstance(x, tuple) else int((x[0] + x[1]) / 2)
+        y_cen = y if not isinstance(y, tuple) else int((y[0] + y[1]) / 2)
+        slab_mode_eps = self.eps[x_cen, y_cen]
+        beta, slab_mode = FDFD(
+            shape=slab_mode_eps.shape,
+            spacing=self.spacing[-1],
+            eps=slab_mode_eps
+        ).src(return_beta=True)
+        eps_diff = self.eps - slab_mode_eps[np.newaxis, np.newaxis, :]
+        eps_effective = (beta[0] / self.k0) ** 2 + eps_diff @ np.abs(slab_mode) ** 2 / np.sum(np.abs(slab_mode) ** 2)
+        fdfd = FDFD(
+            shape=eps_effective.shape,
+            spacing=self.spacing[:2],
+            eps=eps_effective,
+            pml=self.pml_shape[:2]
+        )
+        if not isinstance(x, tuple):
+            mode_eps = fdfd.eps[x, y[0]:y[1]]
+            spacing = fdfd.spacing[1]
+        else:
+            mode_eps = fdfd.eps[x[0]:x[1], y]
+            spacing = fdfd.spacing[0]
+        src_fdfd = FDFD(
+            shape=mode_eps.shape,
+            spacing=spacing,
+            eps=mode_eps
+        )
+        src_mode = np.zeros(fdfd.shape, dtype=np.complex128)
+        if not isinstance(x, tuple):
+            src_beta, src_mode[x, y[0]:y[1]] = src_fdfd.src(return_beta=True)
+        else:
+            src_beta, src_mode[x[0]:x[1], y] = src_fdfd.src(return_beta=True)
+        return src_beta, src_mode, slab_mode, fdfd
+
     @property
     @lru_cache()
     def curl_curl(self) -> sp.spmatrix:
@@ -316,7 +394,6 @@ class FDFD(SimGrid):
         return curl_curl
 
     @property
-    @lru_cache()
     def ddz(self) -> sp.spmatrix:
         df, db = self.df, self.db
         ddz = -db[0] @ df[0] - db[1] @ df[1]
@@ -336,4 +413,3 @@ class FDFD(SimGrid):
         ddz: sp.coo_matrix = self.ddz.tocoo()
         rc_curl_curl = np.vstack((ddz.row, ddz.col))
         return ddz.data, rc_curl_curl
-

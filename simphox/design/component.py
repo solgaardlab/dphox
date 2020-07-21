@@ -1,4 +1,5 @@
 import gdspy as gy
+import nazca as nd
 import copy
 from shapely.vectorized import contains
 from shapely.geometry import Polygon, MultiPolygon
@@ -7,8 +8,6 @@ from descartes import PolygonPatch
 
 try:
     import plotly.graph_objects as go
-    import fatamorgana
-    import fatamorgana.records as oasis
 except ImportError:
     pass
 
@@ -138,13 +137,19 @@ class Component:
         return self
 
     def to_gds(self, cell: gy.Cell):
+        """
+
+        Args:
+            cell: GDSPY cell to add polygon
+
+        Returns:
+
+        """
         for path in self.polys:
             cell.add(gy.Polygon(np.asarray(path.exterior.coords.xy).T)) if isinstance(path, Polygon) else cell.add(path)
 
-    # def to_oasis(self, cell: fatamorgana.Cell, grid_cells_per_um: int = 1000):
-    #     for shapely_poly in self.pattern:
-    #         coords: np.ndarray = (shapely_poly.coords.xy * grid_cells_per_um).astype(np.int)
-    #         cell.geometry.append(oasis.Polygon((coords[1:] - coords[:-1]).tolist(), x=coords[0, 0], y=coords[0, 1]))
+    def to_nazca_polys(self):
+        return [nd.Polygon(np.asarray(poly.exterior.coords.xy).T) for poly in self.polys]
 
     def plotly3d(self, thickness: float, color: str, floor: float = 0, resolution: Union[int, Dim3] = (1000, 1000, 10)):
         resolution = (resolution, resolution, resolution) if isinstance(resolution, float) else resolution
@@ -204,12 +209,12 @@ class Component:
         return np.asarray([])
 
 
-class Slab(Component):
+class Box(Component):
     def __init__(self, box_dim: Dim2, shift: Dim2 = (0, 0), layer: int = 0):
         self.box_dim = box_dim
 
-        super(Slab, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2), shift=shift,
-                                   layer=layer)
+        super(Box, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2), shift=shift,
+                                  layer=layer)
 
 
 class GratingPad(Component):

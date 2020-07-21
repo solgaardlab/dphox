@@ -12,6 +12,13 @@ def poynting_z(e: np.ndarray, h: np.ndarray):
                         (h[1] + np.roll(h[1], shift=1, axis=1)) / 2])
     return e_cross[0] * h_cross.conj()[1] - e_cross[1] * h_cross.conj()[0]
 
+def poynting_x(e: np.ndarray, h: np.ndarray):
+    e_cross = np.stack([(e[1] + np.roll(e[1], shift=1, axis=1)) / 2,
+                        (e[2] + np.roll(e[2], shift=1, axis=0)) / 2])
+    h_cross = np.stack([(h[1] + np.roll(h[1], shift=1, axis=0)) / 2,
+                        (h[2] + np.roll(h[2], shift=1, axis=1)) / 2])
+    return e_cross[1] * h_cross.conj()[2] - e_cross[2] * h_cross.conj()[1]
+
 
 def overlap(e1: np.ndarray, h1: np.ndarray, e2: np.ndarray, h2: np.ndarray):
     return (np.sum(poynting_z(e1, h2)) * np.sum(poynting_z(e2, h1)) /
@@ -46,49 +53,32 @@ def grid_average(params: np.ndarray, shift: int = 1) -> np.ndarray:
     return np.stack([p_x, p_y, p_z])
 
 
-# def grid_average_e(e: np.ndarray) -> np.ndarray:
-#     if len(e.shape) == 1:
-#         p = (e + np.roll(e, shift=1)) / 3
-#         return np.stack((p, p, p))
-#     e = e[..., np.newaxis] if len(e.shape) == 2 else e
-#     return np.stack([(e[0] + np.roll(e[0], shift=1, axis=0)) / 2,
-#                      (e[1] + np.roll(e[1], shift=1, axis=1)) / 2])
-#
-#
-# def grid_average_h(h: np.ndarray) -> np.ndarray:
-#     if len(h.shape) == 1:
-#         p = (h + np.roll(h, shift=1)) / 3
-#         return np.stack((p, p, p))
-#     h = h[..., np.newaxis] if len(h.shape) == 2 else h
-#     return np.stack([(h[0] + np.roll(h[0], shift=1, axis=0)) / 2,
-#                      (h[1] + np.roll(h[1], shift=1, axis=1)) / 2])
-
-
-def emplot(ax, val, eps, spacing: Optional[float] = None, field_cmap: str = 'RdBu', mat_cmap='gray', alpha=0.8,
-           div_norm=False,
-           clim=None):
-    nx, ny = val.shape
+def emplot(ax, eps: np.ndarray, val: Optional[np.ndarray] = None,
+           spacing: Optional[float] = None, field_cmap: str = 'RdBu', mat_cmap='gray', alpha=0.8,
+           div_norm=False, clim=None):
+    nx, ny = eps.shape
     extent = (0, nx * spacing, 0, ny * spacing) if spacing else (0, nx, 0, ny)
     ax.imshow(eps.T, cmap=mat_cmap, origin='lower left', alpha=1, extent=extent)
-    if div_norm:
-        im_val = val * np.sign(val.flat[np.abs(val).argmax()])
-        norm = mcolors.DivergingNorm(vcenter=0, vmin=-im_val.max(), vmax=im_val.max())
-        ax.imshow(im_val.T, cmap=field_cmap, origin='lower left', alpha=alpha, extent=extent, norm=norm)
-    else:
-        if clim:
-            ax.imshow(val.T, cmap=field_cmap, origin='lower left', alpha=alpha, extent=extent, clim=clim)
+    if val is not None:
+        if div_norm:
+            im_val = val * np.sign(val.flat[np.abs(val).argmax()])
+            norm = mcolors.DivergingNorm(vcenter=0, vmin=-im_val.max(), vmax=im_val.max())
+            ax.imshow(im_val.T, cmap=field_cmap, origin='lower left', alpha=alpha, extent=extent, norm=norm)
         else:
-            ax.imshow(val.T, cmap=field_cmap, origin='lower left', alpha=alpha, extent=extent)
+            if clim:
+                ax.imshow(val.T, cmap=field_cmap, origin='lower left', alpha=alpha, extent=extent, clim=clim)
+            else:
+                ax.imshow(val.T, cmap=field_cmap, origin='lower left', alpha=alpha, extent=extent)
     if spacing:  # in microns!
         ax.set_ylabel(r'$y$ ($\mu$m)')
         ax.set_xlabel(r'$x$ ($\mu$m)')
 
 
 def field_emplot_re(ax, field: np.ndarray, eps: np.ndarray, spacing: Optional[float] = None, div_norm: bool = True):
-    emplot(ax, field.real, eps, spacing, field_cmap='RdBu', mat_cmap='gray', div_norm=div_norm)
+    emplot(ax, eps, field.real, spacing, field_cmap='RdBu', mat_cmap='gray', div_norm=div_norm)
 
 
 def field_emplot_mag(ax, field: np.ndarray, eps: np.ndarray, spacing: Optional[float] = None, cmax=None,
                      field_cmap='hot', mat_cmap='nipy_spectral'):
-    emplot(ax, np.abs(field), eps, spacing, field_cmap=field_cmap, mat_cmap=mat_cmap, alpha=0.8, clim=(0, cmax))
+    emplot(ax, eps, np.abs(field), spacing, field_cmap=field_cmap, mat_cmap=mat_cmap, alpha=0.8, clim=(0, cmax))
 
