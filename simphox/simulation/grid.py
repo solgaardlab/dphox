@@ -225,40 +225,6 @@ class SimGrid(Grid):
 
         return d2curl_fn(h, dh, beta)
 
-    def e2h(self, e: np.ndarray, beta: Optional[float] = None) -> np.ndarray:
-        """
-        Convert magnetic field :math:`\mathbf{e}` to electric field :math:`\mathbf{h}`.
-
-        Usage is: `h = grid.e2h(e)`, where `e` is grid-shaped (not flattened)
-
-        Mathematically, this represents rearranging the Maxwell equation in the frequency domain:
-        ..math::
-            i \omega \mu \mathbf{h} = \nabla \times \mathbf{e}
-
-        Returns:
-            The h-field converted from the e-field
-
-        """
-        e = self.reshape(e) if e.ndim == 2 else e
-        return self.curl_e(e, beta) / (1j * self.k0)
-
-    def h2e(self, h: np.ndarray, beta: Optional[float] = None) -> np.ndarray:
-        """
-        Convert magnetic field :math:`\mathbf{h}` to electric field :math:`\mathbf{e}`.
-
-        Usage is: `e = grid.h2e(h)`, where `h` is grid-shaped (not flattened)
-
-        Mathematically, this represents rearranging the Maxwell equation in the frequency domain:
-        ..math::
-            -i \omega \epsilon \mathbf{e} = \nabla \times \mathbf{h}
-
-        Returns:
-            Function to convert h-field to e-field
-
-        """
-        h = self.reshape(h) if h.ndim == 2 else h
-        return self.curl_h(h, beta) / (1j * self.k0 * self.eps_t)
-
     @property
     def _dxes(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
         """Conditional transformation of self.dxes (will need to be extended by some other class)

@@ -74,11 +74,20 @@ def emplot(ax, eps: np.ndarray, val: Optional[np.ndarray] = None,
         ax.set_xlabel(r'$x$ ($\mu$m)')
 
 
-def field_emplot_re(ax, field: np.ndarray, eps: np.ndarray, spacing: Optional[float] = None, div_norm: bool = True):
+def plot_re(ax, field: np.ndarray, eps: np.ndarray, spacing: Optional[float] = None, div_norm: bool = True):
     emplot(ax, eps, field.real, spacing, field_cmap='RdBu', mat_cmap='gray', div_norm=div_norm)
 
 
-def field_emplot_mag(ax, field: np.ndarray, eps: np.ndarray, spacing: Optional[float] = None, cmax=None,
-                     field_cmap='hot', mat_cmap='nipy_spectral'):
+def plot_mag(ax, field: np.ndarray, eps: np.ndarray, spacing: Optional[float] = None, cmax=None,
+             field_cmap='hot', mat_cmap='nipy_spectral'):
     emplot(ax, eps, np.abs(field), spacing, field_cmap=field_cmap, mat_cmap=mat_cmap, alpha=0.8, clim=(0, cmax))
 
+
+def sigma(pos: np.ndarray, t: int, exp_scale: float, log_reflection: float, absorption_corr: float):
+    d = np.hstack((pos[:-1] + pos[1:]) / 2, pos[:-1]).T
+    d_pml = np.vstack((
+        (d[t] - d[:t]) / (d[t] - pos[0]),
+        np.zeros_like(d[t:-t]),
+        (d[-t:] - d[-t]) / (pos[-1] - d[-t])
+    )).T
+    return (exp_scale + 1) * (d_pml ** exp_scale) * log_reflection / (2 * absorption_corr)

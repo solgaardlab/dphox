@@ -5,7 +5,7 @@ import scipy.sparse as sp
 from scipy.sparse.linalg import eigs
 
 from .grid import SimGrid
-from .fdfd import FDFD
+from .sources import xs_src
 from ..typing import Shape, Dim, GridSpacing, Optional, Tuple, List, Union, SpSolve, Op
 
 try:  # pardiso (using Intel MKL) is much faster than scipy's solver
@@ -43,22 +43,7 @@ class BPM(SimGrid):
         # initial scalar fields for fdtd
         slice_y = slice_y if slice_y is not None else slice(None, None)
         self.x = init_x
-        self.beta, self.e, self.h = self.xs_src(init_x, slice_y)
-
-    def xs_src(self, init_x: int, slice_y: Union[slice, int]):
-        mode_eps = self.eps[init_x, slice_y]
-        src_fdfd = FDFD(
-            shape=mode_eps.shape,
-            spacing=self.spacing[0],  # TODO (sunil): handle this...
-            eps=mode_eps
-        )
-        xs_e = np.zeros(self.eps_t.shape, dtype=np.complex128)
-        beta, mode = src_fdfd.src(return_beta=True)
-        xs_e[:, init_x, slice_y] = mode.squeeze()
-        if self.ndim == 3:
-            xs_e = np.hstack((xs_e[2], xs_e[1], xs_e[0]))  # re-orient the source directions
-        return beta, xs_e, src_fdfd.e2h(xs_e)
-
+        self.beta, _, self.e, self.h = xs_src(self, init_x, slice_y)
     def adi_polarized(self, te: bool = True):
         """The ADI step for beam propagation method based on https://publik.tuwien.ac.at/files/PubDat_195610.pdf
 
@@ -117,40 +102,3 @@ class BPM(SimGrid):
             else:
                 self.e[0, self.x, :, :].flat, self.h[1, self.x, :, :].flat = np.hsplit(new_phi, 2)
             self.x += 1
-    #
-    # @property
-    # @lru_cache()
-    # def _dxes(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
-    #     """Conditional transformation of self.dxes based on stretched-coordinated perfectly matched layers (SC-PML)
-    #
-    #     Returns:
-    #         SC-PML transformation of dxes for the e-fields and h-fields, respectively
-    #     """
-    #
-    #     if self.pml_shape is None:
-    #         return np.meshgrid(*self.cell_sizes, indexing='ij'), np.meshgrid(*self.cell_sizes, indexing='ij')
-    #     else:
-    #         dxes_pml_e, dxes_pml_h = [], []
-    #         for ax, p in enumerate(self.pos):
-    #             scpml_e, scpml_h = self.scpml(ax)
-    #             dxes_pml_e.append(self.cell_sizes[ax] * scpml_e)
-    #             dxes_pml_h.append(self.cell_sizes[ax] * scpml_h)
-    #         return np.meshgrid(*dxes_pml_e, indexing='ij'), np.meshgrid(*dxes_pml_h, indexing='ij')
-    #
-    # def scpml(self, ax: int, exp_scale: float = 4, log_reflection: float = -16) -> Tuple[np.ndarray, np.ndarray]:
-    #     if self.cell_sizes[ax].size == 1:
-    #         return np.ones(1), np.ones(1)
-    #     p = self.pos[ax]
-    #     pe, ph = (p[:-1] + p[1:]) / 2, p[:-1]
-    #     absorption_corr = self.k0 * self.pml_eps
-    #     t = self.pml_shape[ax]
-    #
-    #     def _scpml(d: np.ndarray):
-    #         d_pml = np.hstack((
-    #             (d[t] - d[:t]) / (d[t] - p[0]),
-    #             np.zeros_like(d[t:-t]),
-    #             (d[-t:] - d[-t]) / (p[-1] - d[-t])
-    #         ))
-    #         return 1 + 1j * (exp_scale + 1) * (d_pml ** exp_scale) * log_reflection / (2 * absorption_corr)
-    #
-    #     return _scpml(pe), _scpml(ph)

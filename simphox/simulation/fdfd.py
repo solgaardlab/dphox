@@ -284,35 +284,6 @@ class FDFD(SimGrid):
                 src = self.reshape(h[mode_idx]) * polarity * np.sqrt(p)
         return beta, src if return_beta else src
 
-    def xs_src(self, slice_x, slice_y, mode_idx=0):
-        """Cross-section source (for 2d and 3d)
-
-        Args:
-            slice_x: Cross section at x
-            slice_y: Cross section at y
-            mode_idx: Mode index for the source (0 for fundamental mode)
-
-        Returns:
-            a cross-section (xs) source :code:`xs_src` that can be used to call :code:`fdfd.solve(src)`.
-
-        """
-
-        if self.ndim == 1:
-            raise ValueError(f"Simulation dimension ndim must be 2 or 3 but got {self.ndim}.")
-
-        mode_eps = self.eps[slice_x, slice_y]
-        src_fdfd = FDFD(
-            shape=mode_eps.shape,
-            spacing=self.spacing[0],  # TODO (sunil): handle this...
-            eps=mode_eps
-        )
-        xs_src = np.zeros(self.eps_t.shape, dtype=np.complex128)
-        beta, mode = src_fdfd.src(mode_idx=mode_idx, return_beta=True)
-        xs_src[:, slice_x, slice_y] = mode.squeeze()
-        if self.ndim == 3:
-            xs_src = np.stack((xs_src[2], xs_src[1], xs_src[0]))  # re-orient the source directions
-        return beta, xs_src
-
     @property
     def _dxes(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
         """Conditional transformation of self.dxes based on stretched-coordinated perfectly matched layers (SC-PML)
