@@ -1,7 +1,8 @@
 import numpy as np
 from ..typing import Tuple, Dim2, Optional, Callable, List
 from .fdfd import FDFD
-from ..utils import poynting_z, plot_mag, plot_re
+from ..utils import poynting_z
+from .viz import plot_field_2d, plot_power_2d
 from functools import lru_cache
 import copy
 
@@ -136,7 +137,7 @@ class Modes:
     def plot_sz(self, ax, idx: int = 0, title: str = "Poynting"):
         if idx > self.m - 1:
             ValueError("Out of range of number of solutions")
-        plot_mag(ax, np.abs(self.szs[idx].real), self.eps, spacing=self.fdfd.spacing[0])
+        plot_power_2d(ax, np.abs(self.szs[idx].real), self.eps, spacing=self.fdfd.spacing[0])
         ax.set_title(rf'{title}, $n_{idx + 1} = {self.ns[idx]:.4f}$')
         ax.text(x=0.9, y=0.9, s=rf'$s_z$', color='white', transform=ax.transAxes, fontsize=16)
         ratio = np.max((self.te_ratios[idx], 1 - self.te_ratios[idx]))
@@ -149,7 +150,7 @@ class Modes:
             ValueError("Out of range of number of solutions")
         if not (axis == 0 or axis == 1 or axis == 2):
             ValueError("Out of range of number of solutions")
-        plot_re(ax, field[idx][axis].real, self.eps, spacing=self.fdfd.spacing[0])
+        plot_field_2d(ax, field[idx][axis].real, self.eps, spacing=self.fdfd.spacing[0])
         ax.set_title(rf'{title}, $n_{idx + 1} = {self.ns[idx]:.4f}$')
         ax.text(x=0.9, y=0.9, s=rf'$e_y$' if use_e else rf'$h_y$', color='black', transform=ax.transAxes, fontsize=16)
         ratio = np.max((self.te_ratios[idx], 1 - self.te_ratios[idx]))

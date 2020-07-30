@@ -5,7 +5,7 @@ import scipy.sparse as sp
 
 from ..design.component import Component
 from ..typing import Shape, Dim, Dim2, GridSpacing, Optional, Tuple, List, Union
-from ..utils import d2curl_op, d2curl_fn, grid_average
+from ..utils import d2curl_op, d2curl, yee_avg
 
 
 class Grid:
@@ -136,12 +136,12 @@ class Grid:
 class SimGrid(Grid):
     def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
                  bloch_phase: Union[Dim, float] = 0.0, pml: Optional[Union[int, Shape, Dim]] = None,
-                 pml_eps: float = 1.0, grid_avg: int = 1):
+                 pml_eps: float = 1.0, yee_avg: int = 1):
         super(SimGrid, self).__init__(shape, spacing, eps)
         self.pml_shape = np.asarray(pml, dtype=np.int) if isinstance(pml, tuple) else pml
         self.pml_shape = np.ones(self.ndim, dtype=np.int) * pml if isinstance(pml, int) else pml
         self.pml_eps = pml_eps
-        self.grid_avg = grid_avg
+        self.yee_avg = yee_avg
         self.field_shape = np.hstack((3, self.shape))
         if self.pml_shape is not None:
             if np.any(self.pml_shape <= 3) or np.any(self.pml_shape >= self.shape // 2):
@@ -190,22 +190,18 @@ class SimGrid(Grid):
         return d
 
     @property
-    # @lru_cache()
     def df(self):
         return self.deriv()
 
     @property
-    # @lru_cache()
     def db(self):
         return self.deriv(back=True)
 
     @property
-    # @lru_cache()
     def curl_f(self):
         return d2curl_op(self.df)
 
     @property
-    # @lru_cache()
     def curl_b(self):
         return d2curl_op(self.db)
 
@@ -215,7 +211,7 @@ class SimGrid(Grid):
         def de(e_, d):
             return (np.roll(e_, -1, axis=d) - e_) / dx[d]
 
-        return d2curl_fn(e, de, beta)
+        return d2curl(e, de, beta)
 
     def curl_h(self, h, beta: Optional[float] = None) -> np.ndarray:
         _, dx = self._dxes
@@ -223,7 +219,7 @@ class SimGrid(Grid):
         def dh(h_, d):
             return (h_ - np.roll(h_, 1, axis=d)) / dx[d]
 
-        return d2curl_fn(h, dh, beta)
+        return d2curl(h, dh, beta)
 
     @property
     def _dxes(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
@@ -236,5 +232,4 @@ class SimGrid(Grid):
 
     @property
     def eps_t(self):
-        return grid_average(self.eps, shift=self.grid_avg) if self.grid_avg > 0 else np.stack(
-            (self.eps, self.eps, self.eps))
+        return yee_avg(self.eps, shift=self.yee_avg) if self.yee_avg > 0 else np.stack((self.eps, self.eps, self.eps))

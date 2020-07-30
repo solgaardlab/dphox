@@ -18,7 +18,20 @@ class FDFD(SimGrid):
     def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
                  wavelength: float = 1.55, bloch_phase: Union[Dim, float] = 0.0,
                  pml: Optional[Union[Shape, Dim]] = None, pml_eps: float = 1.0,
-                 grid_avg: bool = True, no_grad: bool = True):
+                 yee_avg: bool = True, no_grad: bool = True):
+        """
+
+        Args:
+            shape:
+            spacing:
+            eps:
+            wavelength:
+            bloch_phase:
+            pml:
+            pml_eps:
+            yee_avg:
+            no_grad:
+        """
 
         self.wavelength = wavelength
         self.no_grad = no_grad
@@ -30,7 +43,7 @@ class FDFD(SimGrid):
             bloch_phase=bloch_phase,
             pml=pml,
             pml_eps=pml_eps,
-            grid_avg=grid_avg
+            yee_avg=yee_avg
         )
 
     @property

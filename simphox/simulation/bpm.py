@@ -19,7 +19,7 @@ class BPM(SimGrid):
     def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
                  wavelength: float = 1.55, bloch_phase: Union[Dim, float] = 0.0,
                  pml: Optional[Union[Shape, Dim]] = None, pml_eps: float = 1.0,
-                 grid_avg: bool = True, no_grad: bool = True):
+                 yee_avg: bool = True, no_grad: bool = True):
 
         self.wavelength = wavelength
         self.k0 = 2 * np.pi / self.wavelength  # defines the units for the simulation!
@@ -32,7 +32,7 @@ class BPM(SimGrid):
             bloch_phase=bloch_phase,
             pml=pml,
             pml_eps=pml_eps,
-            grid_avg=grid_avg
+            yee_avg=yee_avg
         )
 
         if self.ndim == 1:

@@ -1,8 +1,7 @@
 import numpy as np
 import scipy.sparse as sp
-import matplotlib.colors as mcolors
 
-from .typing import List, Callable, Optional
+from .typing import List, Callable
 
 
 def poynting_z(e: np.ndarray, h: np.ndarray):
@@ -32,7 +31,7 @@ def d2curl_op(d: List[sp.spmatrix]) -> sp.spmatrix:
                     [-d[1], d[0], o]])
 
 
-def d2curl_fn(f: np.ndarray, df: Callable[[np.ndarray, int], np.ndarray], beta: float = None):
+def d2curl(f: np.ndarray, df: Callable[[np.ndarray, int], np.ndarray], beta: float = None):
     if beta is not None:
         return np.stack([df(f[2], 1) + 1j * beta * f[1],
                          -1j * beta * f[0] - df(f[2], 0),
@@ -42,7 +41,7 @@ def d2curl_fn(f: np.ndarray, df: Callable[[np.ndarray, int], np.ndarray], beta: 
                      df(f[1], 0) - df(f[0], 1)])
 
 
-def grid_average(params: np.ndarray, shift: int = 1) -> np.ndarray:
+def yee_avg(params: np.ndarray, shift: int = 1) -> np.ndarray:
     if len(params.shape) == 1:
         p = (params + np.roll(params, shift=shift) + np.roll(params, shift=-shift)) / 3
         return np.stack((p, p, p))
@@ -53,41 +52,17 @@ def grid_average(params: np.ndarray, shift: int = 1) -> np.ndarray:
     return np.stack([p_x, p_y, p_z])
 
 
-def emplot(ax, eps: np.ndarray, val: Optional[np.ndarray] = None,
-           spacing: Optional[float] = None, field_cmap: str = 'RdBu', mat_cmap='gray', alpha=0.8,
-           div_norm=False, clim=None):
-    nx, ny = eps.shape
-    extent = (0, nx * spacing, 0, ny * spacing) if spacing else (0, nx, 0, ny)
-    ax.imshow(eps.T, cmap=mat_cmap, origin='lower left', alpha=1, extent=extent)
-    if val is not None:
-        if div_norm:
-            im_val = val * np.sign(val.flat[np.abs(val).argmax()])
-            norm = mcolors.DivergingNorm(vcenter=0, vmin=-im_val.max(), vmax=im_val.max())
-            ax.imshow(im_val.T, cmap=field_cmap, origin='lower left', alpha=alpha, extent=extent, norm=norm)
-        else:
-            if clim:
-                ax.imshow(val.T, cmap=field_cmap, origin='lower left', alpha=alpha, extent=extent, clim=clim)
-            else:
-                ax.imshow(val.T, cmap=field_cmap, origin='lower left', alpha=alpha, extent=extent)
-    if spacing:  # in microns!
-        ax.set_ylabel(r'$y$ ($\mu$m)')
-        ax.set_xlabel(r'$x$ ($\mu$m)')
-
-
-def plot_re(ax, field: np.ndarray, eps: np.ndarray, spacing: Optional[float] = None, div_norm: bool = True):
-    emplot(ax, eps, field.real, spacing, field_cmap='RdBu', mat_cmap='gray', div_norm=div_norm)
-
-
-def plot_mag(ax, field: np.ndarray, eps: np.ndarray, spacing: Optional[float] = None, cmax=None,
-             field_cmap='hot', mat_cmap='nipy_spectral'):
-    emplot(ax, eps, np.abs(field), spacing, field_cmap=field_cmap, mat_cmap=mat_cmap, alpha=0.8, clim=(0, cmax))
-
-
-def sigma(pos: np.ndarray, t: int, exp_scale: float, log_reflection: float, absorption_corr: float):
+def pml_params(pos: np.ndarray, t: int, exp_scale: float, log_reflection: float, absorption_corr: float, central_wavelength: float=1.55):
     d = np.hstack((pos[:-1] + pos[1:]) / 2, pos[:-1]).T
     d_pml = np.vstack((
         (d[t] - d[:t]) / (d[t] - pos[0]),
         np.zeros_like(d[t:-t]),
         (d[-t:] - d[-t]) / (pos[-1] - d[-t])
     )).T
-    return (exp_scale + 1) * (d_pml ** exp_scale) * log_reflection / (2 * absorption_corr)
+    sigma = (exp_scale + 1) * (d_pml ** exp_scale) * log_reflection / (2 * absorption_corr)
+    alpha = (((t - d_pml + 1) / t) ** exp_scale)
+    return sigma, alpha
+
+#
+# def subpixel_smoothing(poly: Union[polygon, np.ndarray], grid_dim: Tuple[float, float, float, float]):
+#     cairo.

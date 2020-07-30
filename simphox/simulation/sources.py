@@ -9,7 +9,7 @@ import scipy.sparse as sp
 from ..typing import Dim, Dim2
 
 
-class ProfileSource:
+class Profile:
     def __init__(self, mask: np.ndarray, e: np.ndarray, wavelength: float,
                  h: Optional[np.ndarray] = None, beta: float = None):
         self.beta = beta
@@ -24,11 +24,8 @@ class ProfileSource:
         self.profile = np.zeros_like(self.mask).astype(np.complex128)
         self.profile[self.indices] = self.e_src.flatten()
 
-    def fdtd_step(self, e, t, phase=0):
-        return e + self.profile * np.exp(self.k0 * t + phase)
 
-
-class XSSource(ProfileSource):
+class XS(Profile):
     def __init__(self, grid: SimGrid, source_region: Union[Tuple[Dim2, Dim2, Dim2], np.ndarray],
                  wavelength: float = 1.55, mode_idx: int = 0):
         """
@@ -68,10 +65,10 @@ class XSSource(ProfileSource):
         e, h = mode, src_fdfd.e2h(mode, beta)
         if grid.ndim == 3:
             e = np.stack((e[2], e[1], e[0]))  # re-orient the source directions
-        super(XSSource, self).__init__(mask, e, wavelength, h, beta)
+        super(XS, self).__init__(mask, e, wavelength, h, beta)
 
 
-class TFSFSource:
+class TFSF(Profile):
     def __init__(self, grid: SimGrid, q_mask: np.ndarray, wavelength: float, k: Dim):
         """
 
@@ -98,7 +95,36 @@ class TFSFSource:
                               np.exp(1j * src_fdfd.pos[1][:-1] * self.k[1]),
                               np.exp(1j * src_fdfd.pos[2][:-1] * self.k[2])).flatten()
         a = src_fdfd.mat
-        self.profile = src_fdfd.reshape((self.q @ a - a @ self.q) @ self.fsrc)  # qaaq = quack :)
+        self.e_src = src_fdfd.reshape((self.q @ a - a @ self.q) @ self.fsrc)  # qaaq = quack :)
+        self.h_src = src_fdfd.e2h(self.e_src)
+        self.profile = self.e_src
 
-    def fdtd_step(self, e, t, phase=0):
-        return e + self.profile * np.exp(1j * (self.k0 * t + phase))
+
+def cw_source(profile: Optional[np.ndarray, Profile], wavelength: float):
+    profile = profile.profile if isinstance(profile, Profile) else profile
+    return lambda t: profile * np.exp(1j * 2 * np.pi * t / wavelength)
+
+
+def gaussian_source(profiles: np.ndarray, pulse_width: float, center_wavelength: float, dt: float,
+                    t0: float = None, linear_chirp: float = 0):
+    """
+
+    Args:
+        profiles: profiles defined at individual frequencies
+        pulse_width: pulse width at individual frequencies
+        center_wavelength: center wavelength
+        dt: dt
+        t0: peak time (default to be central)
+        linear_chirp: linear chirp coefficient (default to be 0)
+
+    Returns:
+        the source at
+
+    """
+    k0 = 2 * np.pi / center_wavelength
+    t = np.arange(profiles.shape[0]) * dt
+    t0 = t[t.size // 2] if t0 is None else t0
+    g = np.fft.fft(np.exp(1j * k0 * (t - t0)) * np.exp((-pulse_width + 1j * linear_chirp) * (t - t0) ** 2))
+    src = np.fft.ifft(g * profiles, axis=0)
+    return lambda tt: src[tt // dt]
+
