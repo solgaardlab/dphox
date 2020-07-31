@@ -5,14 +5,8 @@ import scipy.sparse as sp
 from scipy.sparse.linalg import eigs
 
 from .grid import SimGrid
-from .sources import xs_src
-from ..typing import Shape, Dim, GridSpacing, Optional, Tuple, List, Union, SpSolve, Op
-
-try:  # pardiso (using Intel MKL) is much faster than scipy's solver
-    from .mkl import spsolve, feast_eigs
-except OSError:  # if mkl isn't installed
-    from scipy.sparse.linalg import spsolve
-    from scipy.linalg import solve_banded
+from ..typing import Shape, Dim, GridSpacing, Optional, Union
+from scipy.linalg import solve_banded
 
 
 class BPM(SimGrid):
@@ -44,6 +38,7 @@ class BPM(SimGrid):
         slice_y = slice_y if slice_y is not None else slice(None, None)
         self.x = init_x
         self.beta, _, self.e, self.h = xs_src(self, init_x, slice_y)
+
     def adi_polarized(self, te: bool = True):
         """The ADI step for beam propagation method based on https://publik.tuwien.ac.at/files/PubDat_195610.pdf
 

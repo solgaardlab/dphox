@@ -155,6 +155,7 @@ class SimGrid(Grid):
             raise AttributeError(f'Need len(bloch_phase) == len(grid_shape),'
                                  f'got ({len(self.bloch)}, {len(self.shape)}).')
         self.dtype = np.float64 if pml is None and bloch_phase == 0 else np.complex128
+        self._dxes = np.meshgrid(*self.cell_sizes, indexing='ij'), np.meshgrid(*self.cell_sizes, indexing='ij')
 
     # @lru_cache()
     def deriv(self, back: bool = False) -> List[sp.spmatrix]:
@@ -206,6 +207,16 @@ class SimGrid(Grid):
         return d2curl_op(self.db)
 
     def curl_e(self, e, beta: Optional[float] = None) -> np.ndarray:
+        """
+
+        Args:
+            e: electric field :math:`\mathbf{E}`
+            beta: Propagation constant in the z direction (note: x, y are the `cross section` axes)
+
+        Returns:
+            The discretized curl :math:`\\nabla \times \mathbf{E}`
+
+        """
         dx, _ = self._dxes
 
         def de(e_, d):
@@ -214,21 +225,22 @@ class SimGrid(Grid):
         return d2curl(e, de, beta)
 
     def curl_h(self, h, beta: Optional[float] = None) -> np.ndarray:
+        """
+
+           Args:
+               h: magnetic field :math:`\mathbf{H}`
+               beta: Propagation constant in the z direction (note: x, y are the `cross section` axes)
+
+           Returns:
+               The discretized curl :math:`\\nabla \times \mathbf{H}`
+
+        """
         _, dx = self._dxes
 
         def dh(h_, d):
             return (h_ - np.roll(h_, 1, axis=d)) / dx[d]
 
         return d2curl(h, dh, beta)
-
-    @property
-    def _dxes(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
-        """Conditional transformation of self.dxes (will need to be extended by some other class)
-
-        Returns:
-            dxes for e and h fields, respectively.
-        """
-        return np.meshgrid(*self.cell_sizes, indexing='ij'), np.meshgrid(*self.cell_sizes, indexing='ij')
 
     @property
     def eps_t(self):

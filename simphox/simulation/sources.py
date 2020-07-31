@@ -1,4 +1,4 @@
-from typing import Union, Optional, Tuple
+from typing import Union, Optional, Tuple, Callable
 
 from .fdfd import FDFD
 from .grid import SimGrid
@@ -12,6 +12,15 @@ from ..typing import Dim, Dim2
 class Profile:
     def __init__(self, mask: np.ndarray, e: np.ndarray, wavelength: float,
                  h: Optional[np.ndarray] = None, beta: float = None):
+        """
+
+        Args:
+            mask: Mask in the overall grid to place the profile
+            e: Electric field (:math:`\mathbf{E}`)
+            wavelength: Wavelength (:math:`\\lambda`)
+            h: Magnetic field (:math:`\mathbf{H}`)
+            beta: Propagation constant (:math:`\\beta`)
+        """
         self.beta = beta
         self.mask = mask
         self.indices = self.mask != 0
@@ -100,31 +109,91 @@ class TFSF(Profile):
         self.profile = self.e_src
 
 
-def cw_source(profile: Optional[np.ndarray, Profile], wavelength: float):
+def cw_source(profile: Optional[np.ndarray, Profile], wavelength: float, t: float, dt: float) -> np.ndarray:
+    """ CW source array
+
+    Args:
+        profile: Profile :math:`\mathbf{\\Psi}`
+        wavelength: Wavelength :mode:`\\lambda`
+        t: total "on" time
+        dt: time step size
+
+    Returns:
+        CW source as an ndarray of size :code:`[t/dt, *source_shape]`
+
+    """
+    return source(cw_source_fn(profile, wavelength), t, dt)
+
+
+def source(source_fn: Callable[[float], np.ndarray], t: float, dt: float) -> np.ndarray:
+    """ Source array given a source function
+
+    Args:
+        source_fn: Source function
+        t: total "on" time
+        dt: time step size
+
+    Returns:
+        ndarray of size :code:`[t/dt, *source_shape]`
+
+    """
+    ts = np.linspace(0, t, int(t // dt) + 1)
+    return np.asarray([source_fn(t) for t in ts])  # not the most efficient, but it'll do for now
+
+
+def cw_source_fn(profile: Optional[np.ndarray, Profile], wavelength: float) -> Callable[[float], np.ndarray]:
+    """ CW source function
+
+    Args:
+        profile: Profile :mode:`\mathbf{\\Psi}` (e.g. mode or TFSF) for the input source
+        wavelength: Wavelength for CW source
+
+    Returns:
+        the CW source function of time
+
+    """
     profile = profile.profile if isinstance(profile, Profile) else profile
     return lambda t: profile * np.exp(1j * 2 * np.pi * t / wavelength)
 
 
 def gaussian_source(profiles: np.ndarray, pulse_width: float, center_wavelength: float, dt: float,
-                    t0: float = None, linear_chirp: float = 0):
-    """
+                    t0: float = None, linear_chirp: float = 0) -> np.ndarray:
+    """Gaussian source array
 
     Args:
         profiles: profiles defined at individual frequencies
         pulse_width: pulse width at individual frequencies
         center_wavelength: center wavelength
-        dt: dt
-        t0: peak time (default to be central)
+        dt: time step size
+        t0: peak time (default to be central time step)
         linear_chirp: linear chirp coefficient (default to be 0)
 
     Returns:
-        the source at
+        the Gaussian source discretized in time
 
     """
     k0 = 2 * np.pi / center_wavelength
     t = np.arange(profiles.shape[0]) * dt
     t0 = t[t.size // 2] if t0 is None else t0
     g = np.fft.fft(np.exp(1j * k0 * (t - t0)) * np.exp((-pulse_width + 1j * linear_chirp) * (t - t0) ** 2))
-    src = np.fft.ifft(g * profiles, axis=0)
-    return lambda tt: src[tt // dt]
+    return np.fft.ifft(g * profiles, axis=0)
 
+
+def gaussian_source_fn(profiles: np.ndarray, pulse_width: float, center_wavelength: float, dt: float,
+                       t0: float = None, linear_chirp: float = 0) -> Callable[[float], np.ndarray]:
+    """Gaussian source function
+
+    Args:
+        profiles: profiles defined at individual frequencies
+        pulse_width: pulse width at individual frequencies
+        center_wavelength: center wavelength
+        dt: time step size
+        t0: peak time (default to be central time step)
+        linear_chirp: linear chirp coefficient (default to be 0)
+
+    Returns:
+        the Gaussian source function of time
+
+    """
+    src = gaussian_source(profiles, pulse_width, center_wavelength, dt, t0, linear_chirp)
+    return lambda tt: src[tt // dt]

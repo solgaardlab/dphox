@@ -34,8 +34,14 @@ ALUMINA = Material('Alumina', (0.2, 0, 0.2), 1.75)
 ETCH = Material('Etch', (0, 0, 0))
 
 
-class ModeBlock:
+class MaterialBlock:
     def __init__(self, dim: Dim2, material: Material):
+        """
+
+        Args:
+            dim: Dimension tuple of the form :code:`(x, y)` for the material block
+            material: Material for the block
+        """
         self.dim = dim
         self.material = material
         self.x = dim[0]
@@ -45,40 +51,87 @@ class ModeBlock:
 
 class Modes:
     def __init__(self, betas: np.ndarray, modes: np.ndarray, fdfd: FDFD):
+        """A data structure to contain the information about :math:`M` cross-sectional modes
+
+        Args:
+            betas: Propagation constants :math:`\\beta` for :math:`M` modes
+            modes: Magnetic field :math:`\mathbf{H}` for :math:`M` modes
+            fdfd: The FDFD structure containing the epsilon and mesh information
+        """
         self.betas = betas.real
         self.modes = modes
         self.fdfd = copy.deepcopy(fdfd)
         self.eps = fdfd.eps
         self.num_modes = self.m = len(self.betas)
 
-    @property
     @lru_cache()
-    def h(self):
-        return self.fdfd.reshape(self.modes[0])
+    def h(self, mode_idx: int = 0) -> np.ndarray:
+        """Magnetic field :math:`\mathbf{H}` for the mode of specified index
+
+        Args:
+            mode_idx: The mode index :math:`m \\leq M`
+
+        Returns:
+            :math:`\mathbf{H}_m`, an :code:`ndarray` of the form :code:`(3, X, Y)` for mode :math:`m \\leq M`
+
+        """
+        return self.fdfd.reshape(self.modes[mode_idx])
+
+    @lru_cache()
+    def e(self, mode_idx: int = 0) -> np.ndarray:
+        """Electric field :math:`\mathbf{E}` for the mode of specified index
+
+        Args:
+            mode_idx: The mode index :math:`m \\leq M`
+
+        Returns:
+            :math:`\mathbf{E}_m`, an :code:`ndarray` of shape :code:`(3, X, Y)` for mode :math:`m \\leq M`
+
+        """
+        return self.fdfd.h2e(self.h(mode_idx), self.betas[mode_idx])
 
     @property
     @lru_cache()
-    def e(self):
-        return self.fdfd.h2e(self.h, self.betas[0])
+    def sz(self, mode_idx: int = 0) -> np.ndarray:
+        """Poynting vector :math:`\mathbf{S}_z` for the mode of specified index
 
-    @property
-    @lru_cache()
-    def sz(self):
-        return poynting_z(self.e, self.h).squeeze()
+        Args:
+            mode_idx: The mode index :math:`m \\leq M`
 
-    @property
-    @lru_cache()
-    def beta(self):
-        return self.betas[0]
+        Returns:
+            :math:`\mathbf{S}_{m, z}`, the z-component of Poynting vector (correspoding to power),
+            of shape :code:`(X, Y)`
 
-    @property
-    @lru_cache()
-    def n(self):
+        """
+        return poynting_z(self.e(mode_idx), self.h(mode_idx)).squeeze()
+
+    def beta(self, mode_idx: int = 0) -> float:
+        """Fundamental mode propagation constant :math:`\\beta` for the mode of specified index
+
+        Args:
+            mode_idx: The mode index :math:`m \\leq M`
+
+        Returns:
+            :math:`\\beta_m` for mode :math:`m \\leq M`
+        """
+        return self.betas[mode_idx]
+
+    def n(self, mode_idx: int = 0):
+        """Index :math:`n`
+
+        Returns:
+            :math:`n`
+        """
         return self.betas[0] / self.fdfd.k0
 
     @property
     @lru_cache()
     def hs(self):
+        """An array for the magnetic fields `\mathbf{H}` corresponding to all :math:`M` modes
+
+        Returns:
+           :math:`\mathbf{H}`, an :code:`ndarray` of shape :code:`(M, 3, X, Y)`
+        """
         hs = []
         for mode in self.modes:
             hs.append(self.fdfd.reshape(mode))
@@ -87,6 +140,11 @@ class Modes:
     @property
     @lru_cache()
     def es(self):
+        """An array for the magnetic fields `\mathbf{E}` corresponding to all :math:`M` modes
+
+        Returns:
+           :math:`\mathbf{E}`, an :code:`ndarray` of shape :code:`(M, 3, X, Y)`
+        """
         es = []
         for beta, h in zip(self.betas, self.hs):
             es.append(self.fdfd.h2e(h[..., np.newaxis], beta))
@@ -95,6 +153,11 @@ class Modes:
     @property
     @lru_cache()
     def szs(self):
+        """An array for the magnetic fields `\mathbf{S}_z` corresponding to all :math:`M` modes
+
+        Returns:
+           :math:`\mathbf{S}_z`, an :code:`ndarray` of shape :code:`(M, X, Y)`
+        """
         szs = []
         for beta, e, h in zip(self.betas, self.es, self.hs):
             szs.append(poynting_z(e[..., np.newaxis], h[..., np.newaxis]))
@@ -159,7 +222,7 @@ class Modes:
 
 
 class ModeDevice:
-    def __init__(self, wg: ModeBlock, sub: ModeBlock, size: Tuple[float, float], wg_height: float,
+    def __init__(self, wg: MaterialBlock, sub: MaterialBlock, size: Tuple[float, float], wg_height: float,
                  wavelength: float = 1.55, spacing: float = 0.01, rib_y: float = 0):
         self.size = size
         self.spacing = spacing
@@ -181,7 +244,7 @@ class ModeDevice:
         solution = Modes(beta, modes, self.fdfd)
         return solution
 
-    def single(self, ps: Optional[ModeBlock] = None, sep: float = 0) -> np.ndarray:
+    def single(self, ps: Optional[MaterialBlock] = None, sep: float = 0) -> np.ndarray:
         nx, ny = self.nx, self.ny
         center = nx // 2
         wg, sub, dx = self.wg, self.sub, self.fdfd.spacing[0]
@@ -201,7 +264,7 @@ class ModeDevice:
 
         return eps
 
-    def double_ps(self, ps: Optional[ModeBlock] = None, sep: float = 0) -> np.ndarray:
+    def double_ps(self, ps: Optional[MaterialBlock] = None, sep: float = 0) -> np.ndarray:
         nx, ny = self.nx, self.ny
         center = nx // 2
         wg, sub, dx = self.wg, self.sub, self.fdfd.spacing[0]
@@ -223,7 +286,7 @@ class ModeDevice:
 
         return eps
 
-    def coupled(self, gap: float, ps: Optional[ModeBlock] = None, seps: Tuple[float, float] = (0, 0)) -> np.ndarray:
+    def coupled(self, gap: float, ps: Optional[MaterialBlock] = None, seps: Tuple[float, float] = (0, 0)) -> np.ndarray:
         nx, ny = self.nx, self.ny
         center = nx // 2
         wg, sub, dx = self.wg, self.sub, self.fdfd.spacing[0]
@@ -255,7 +318,7 @@ class ModeDevice:
 
         return eps
 
-    def dc_grid(self, seps: np.ndarray, gap: float, ps: Optional[ModeBlock] = None, m: int = 6,
+    def dc_grid(self, seps: np.ndarray, gap: float, ps: Optional[MaterialBlock] = None, m: int = 6,
                 pbar: Callable = None) -> List[Modes]:
         solutions = []
         pbar = range if pbar is None else pbar
@@ -265,7 +328,7 @@ class ModeDevice:
                 solutions.append(copy.deepcopy(self.solve(eps, m)))
         return solutions
 
-    def ps_sweep(self, seps: np.ndarray, ps: Optional[ModeBlock] = None, m: int = 6,
+    def ps_sweep(self, seps: np.ndarray, ps: Optional[MaterialBlock] = None, m: int = 6,
                  pbar: Callable = None) -> List[Modes]:
         solutions = []
         pbar = range if pbar is None else pbar

@@ -22,15 +22,15 @@ class FDFD(SimGrid):
         """
 
         Args:
-            shape:
-            spacing:
-            eps:
-            wavelength:
-            bloch_phase:
-            pml:
-            pml_eps:
-            yee_avg:
-            no_grad:
+            shape: Tuple of size 1, 2, or 3 representing the number of pixels in the grid
+            spacing: Spacing (microns) between each pixel along each axis (must be same dim as `grid_shape`)
+            eps: Relative permittivity :math:`\\epsilon_r`
+            wavelength: Wavelength :math:`\\lambda`
+            bloch_phase: Bloch phase (dummy parameter, will only be used for periodic BCs)
+            pml: Perfectly matched layer (PML) of thickness on both sides of the form :code:`(x_pml, y_pml, z_pml)`
+            pml_eps: The permittivity used to scale the PML (should probably assign to 1 for now)
+            yee_avg: whether to do a yee average (highly recommended)
+            no_grad: Whether to store gradient information (dummy parameter)
         """
 
         self.wavelength = wavelength
@@ -45,6 +45,15 @@ class FDFD(SimGrid):
             pml_eps=pml_eps,
             yee_avg=yee_avg
         )
+
+        # overwrite dxes with PML-scaled ones
+        if self.pml_shape is not None:
+            dxes_pml_e, dxes_pml_h = [], []
+            for ax, p in enumerate(self.pos):
+                scpml_e, scpml_h = self.scpml(ax)
+                dxes_pml_e.append(self.cell_sizes[ax] * scpml_e)
+                dxes_pml_h.append(self.cell_sizes[ax] * scpml_h)
+            self._dxes = np.meshgrid(*dxes_pml_e, indexing='ij'), np.meshgrid(*dxes_pml_h, indexing='ij')
 
     @property
     def k0(self):
@@ -296,24 +305,6 @@ class FDFD(SimGrid):
             else:
                 src = self.reshape(h[mode_idx]) * polarity * np.sqrt(p)
         return beta, src if return_beta else src
-
-    @property
-    def _dxes(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
-        """Conditional transformation of self.dxes based on stretched-coordinated perfectly matched layers (SC-PML)
-
-        Returns:
-            SC-PML transformation of dxes for the e-fields and h-fields, respectively
-        """
-
-        if self.pml_shape is None:
-            return np.meshgrid(*self.cell_sizes, indexing='ij'), np.meshgrid(*self.cell_sizes, indexing='ij')
-        else:
-            dxes_pml_e, dxes_pml_h = [], []
-            for ax, p in enumerate(self.pos):
-                scpml_e, scpml_h = self.scpml(ax)
-                dxes_pml_e.append(self.cell_sizes[ax] * scpml_e)
-                dxes_pml_h.append(self.cell_sizes[ax] * scpml_h)
-            return np.meshgrid(*dxes_pml_e, indexing='ij'), np.meshgrid(*dxes_pml_h, indexing='ij')
 
     def scpml(self, ax: int, exp_scale: float = 4, log_reflection: float = -16) -> Tuple[np.ndarray, np.ndarray]:
         if self.cell_sizes[ax].size == 1:

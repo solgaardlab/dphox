@@ -307,6 +307,7 @@ def spsolve(mat: sp.spmatrix, rhs: np.ndarray):
         raise TypeError(f'mat must be an instance of ndarray but got {type(rhs)}')
     return pardiso.solve(mat.tocsr(), rhs)
 
+
 def spsolve_raw(data_rc: Tuple[np.ndarray, np.ndarray], rhs: np.ndarray):
     data, rc = data_rc
     mat = sp.coo_matrix((data, rc)).tocsr()  # need coo matrix to add duplicate elements!

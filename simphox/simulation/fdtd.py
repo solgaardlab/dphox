@@ -4,13 +4,21 @@ import numpy as np
 from typing import Tuple, Callable
 
 from .grid import SimGrid
-from ..typing import Shape, Dim, GridSpacing, Optional, Union
+from ..typing import Shape, Dim, GridSpacing, Optional, Union, Source
 from ..utils import pml_params, d2curl
 
 
 class FDTD(SimGrid):
     def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
                  pml: Optional[Union[Shape, Dim]] = None):
+        """Stateless FDTD implementation
+
+        Args:
+            shape: shape of the simulation
+            spacing: spacing among the different dimensions
+            eps: epsilon permittivity
+            pml: perfectly matched layers (PML)
+        """
         super(FDTD, self).__init__(shape, spacing, eps, pml=pml)
         self.dt = 1 / np.sqrt(np.sum(1 / self.spacing ** 2))  # includes courant condition!
 
@@ -53,7 +61,7 @@ class FDTD(SimGrid):
 
         """
         # stored fields for fdtd
-        e = e_init if e_init is not None else np.zeros(self.field_shape, dtype=np.float64)
+        e = e_init if e_init is not None else np.zeros(self.field_shape, dtype=np.complex128)
         h = h_init if h_init is not None else np.zeros_like(e)
         # for pml updates
         psi_e = psi_e_init if psi_e_init is not None else tuple([np.zeros_like(e)] * 6)
@@ -133,6 +141,29 @@ class FDTD(SimGrid):
 
         return e, h, psi_e, psi_h
 
+    def run(self, src: Source, src_idx: np.ndarray, time: float):
+        """
+
+        Args:
+            src: a function that provides the input source, or an :code:`ndarray` where :code:`src[time_step]`
+                gives the source at that time step
+            time: total time to run the simulation
+
+        Returns:
+            state: final state of the form :code:`(e, h, psi_e, psi_h)`
+                -:code:`e` refers to electric field :math:`\mathbf{E}(t)`
+                -:code:`h` refers to magnetic field :math:`\mathbf{H}(t)`
+                -:code:`psi_e` refers to :math:`\\boldsymbol{\\Psi}_E(t)` (for debugging PML)
+                -:code:`psi_h` refers to :math:`\\boldsymbol{\\Psi}_H(t)` (for debugging PML)
+
+        """
+        state = self.initial_state()
+        for step in range(int(time // self.dt)):
+            source = src[step] if isinstance(src, np.ndarray) else src(step * self.dt)
+            source_idx = src_idx[step] if isinstance(src_idx, list) else src_idx
+            state = self.step(state, source, source_idx)
+        return state
+
     def _cpml(self, ax: int, alpha_max: float = 0, exp_scale: float = 3.5,
              kappa: float = 1, log_reflection: float = 1.6) -> Tuple[np.ndarray, np.ndarray]:
         if self.cell_sizes[ax].size == 1:
@@ -160,23 +191,3 @@ class FDTD(SimGrid):
             return (h_ - np.roll(h_, 1, axis=ax)) / dx[ax][s] * c[ax]
 
         return d2curl(h, dh)
-
-    def run(self, src_func: Callable[[float], Tuple[np.ndarray, np.ndarray]], time: float):
-        """
-
-        Args:
-            src_func: a function that provides the input source
-            time: total time to run the simulation
-
-        Returns:
-            state: final state of the form :code:`(e, h, psi_e, psi_h)`
-                -:code:`e` refers to electric field :math:`\mathbf{E}(t)`
-                -:code:`h` refers to magnetic field :math:`\mathbf{H}(t)`
-                -:code:`psi_e` refers to :math:`\\boldsymbol{\\Psi}_E(t)` (for debugging PML)
-                -:code:`psi_h` refers to :math:`\\boldsymbol{\\Psi}_H(t)` (for debugging PML)
-
-        """
-        state = self.initial_state()
-        for step in range(int(time // self.dt)):
-            state = self.step(state, *src_func(step * self.dt))
-        return state
