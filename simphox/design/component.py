@@ -1,5 +1,4 @@
 import gdspy as gy
-import nazca as nd
 import copy
 from shapely.vectorized import contains
 from shapely.geometry import Polygon, MultiPolygon
@@ -8,6 +7,7 @@ from descartes import PolygonPatch
 
 try:
     import plotly.graph_objects as go
+    import nazca as nd
 except ImportError:
     pass
 

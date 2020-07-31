@@ -656,6 +656,7 @@ class AIMPhotonicChip:
             nd.Pin('b0').put()
         return ring_resonator
 
+
 def coupler_path(ic: nd.interconnects.Interconnect, angle: float, interaction_l: float, radius: float = 35):
     input_waveguide = ic.bend(radius=radius, angle=angle).put()
     ic.bend(radius=radius, angle=-angle).put()
