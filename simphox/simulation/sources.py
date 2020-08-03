@@ -1,11 +1,16 @@
-from typing import Union, Tuple, Callable
+from typing import Tuple, Callable
 
 from .fdfd import FDFD
 from .grid import SimGrid
 
 import numpy as np
 import scipy.sparse as sp
-import cupy as cp
+
+try:
+    import cupy as cp
+    GPU_AVAIL = True
+except ImportError:
+    GPU_AVAIL = False
 
 from ..typing import Dim
 

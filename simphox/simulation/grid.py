@@ -2,7 +2,12 @@ from functools import lru_cache
 
 import numpy as np
 import scipy.sparse as sp
-import cupy as cp
+
+try:
+    import cupy as cp
+    GPU_AVAIL = True
+except ImportError:
+    GPU_AVAIL = False
 
 from ..design.component import Component
 from ..typing import Shape, Dim, GridSpacing, Optional, List, Union
