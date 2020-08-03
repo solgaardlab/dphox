@@ -22,7 +22,7 @@ def get_extent_2d(ax, shape, spacing: Optional[float] = None):
     return (0, shape[0] * spacing, 0, shape[1] * spacing) if spacing else (0, shape[0], 0, shape[1])
 
 
-def plot_eps_2d(ax, eps: np.ndarray, spacing: Optional[float] = None, cmap: str = 'nipy_spectral'):
+def plot_eps_2d(ax, eps: np.ndarray, spacing: Optional[float] = None, cmap: str = 'gray'):
     """
 
     Args:
@@ -39,7 +39,7 @@ def plot_eps_2d(ax, eps: np.ndarray, spacing: Optional[float] = None, cmap: str 
 
 
 def plot_field_2d(ax, field: np.ndarray, eps: Optional[np.ndarray] = None, spacing: Optional[float] = None,
-                  cmap: str = 'RdBu', alpha: float = 0.8):
+                  cmap: str = 'RdBu', mat_cmap: str = 'gray', alpha: float = 0.8):
     """
 
     Args:
@@ -48,6 +48,7 @@ def plot_field_2d(ax, field: np.ndarray, eps: Optional[np.ndarray] = None, spaci
         eps: epsilon permittivity for overlaying field onto materials
         spacing: spacing between grid points (assumed to be isotropic)
         cmap: colormap for field array (we highly recommend RdBu)
+        mat_cmap: colormap for eps array (we recommend gray)
         alpha: transparency of the plots to visualize overlay
 
     Returns:
@@ -55,14 +56,14 @@ def plot_field_2d(ax, field: np.ndarray, eps: Optional[np.ndarray] = None, spaci
     """
     extent = get_extent_2d(ax, field.shape, spacing)
     if eps is not None:
-        plot_eps_2d(ax, eps, spacing)
+        plot_eps_2d(ax, eps, spacing, mat_cmap)
     im_val = field * np.sign(field.flat[np.abs(field).argmax()])
     norm = mcolors.DivergingNorm(vcenter=0, vmin=-im_val.max(), vmax=im_val.max())
     ax.imshow(im_val.T, cmap=cmap, origin='lower left', alpha=alpha, extent=extent, norm=norm)
 
 
 def plot_power_2d(ax, power: np.ndarray, eps: Optional[np.ndarray] = None, spacing: Optional[float] = None,
-                  cmap: str = 'hot', alpha: float = 0.8):
+                  cmap: str = 'hot', mat_cmap: str = 'gray', alpha: float = 0.8):
     """
 
     Args:
@@ -71,6 +72,7 @@ def plot_power_2d(ax, power: np.ndarray, eps: Optional[np.ndarray] = None, spaci
         eps: epsilon for overlay with materials
         spacing: spacing between grid points (assumed to be isotropic)
         cmap: colormap for power array
+        mat_cmap: colormap for eps array (we recommend gray)
         alpha: transparency of the plots to visualize overlay
 
     Returns:
@@ -78,7 +80,7 @@ def plot_power_2d(ax, power: np.ndarray, eps: Optional[np.ndarray] = None, spaci
     """
     extent = get_extent_2d(ax, power.shape, spacing)
     if eps is not None:
-        plot_eps_2d(ax, eps, spacing)
+        plot_eps_2d(ax, eps, spacing, mat_cmap)
     ax.imshow(power.T, cmap=cmap, origin='lower left', alpha=alpha, extent=extent)
 
 
