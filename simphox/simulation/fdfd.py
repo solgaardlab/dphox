@@ -6,7 +6,7 @@ from scipy.sparse.linalg import eigs
 from typing import Callable
 
 from .grid import SimGrid
-from ..typing import Shape, Dim, GridSpacing, Optional, Tuple, List, Union, SpSolve, Op, Shape2, Dim2
+from ..typing import Shape, Dim, GridSpacing, Optional, Tuple, Union, SpSolve, Shape2, Dim2
 
 try:  # pardiso (using Intel MKL) is much faster than scipy's solver
     from .mkl import spsolve, feast_eigs
@@ -15,23 +15,38 @@ except OSError:  # if mkl isn't installed
 
 
 class FDFD(SimGrid):
+    """Finite Difference Frequency Domain (FDFD) simulator
+
+    Notes:
+        Finite difference frequency domain works by performing a linear solve of discretized Maxwell's equations
+        at a `single` frequency (wavelength).
+
+        The discretized version of Maxwell's equations in frequency domain is:
+        .. math::
+            \nabla \\times \mu^{-1} \nabla \\times \mathbf{e} - k_0^2 \\epsilon \mathbf{e} = k_0 \mathbf{j},
+        which can be written in the form :math:`A \mathbf{e} = \mathbf{b}`, where:
+        .. math::
+            A = \nabla \times \mu^{-1} \nabla \\times - k_0^2 \\epsilon \\
+            b = k_0 \mathbf{j}
+        is an operator representing the discretized EM wave operator at frequency :math:`omega`.
+
+        Therefore, :math:`\mathbf{e} = A^{-1}\mathbf{b}`.
+
+    Args:
+        shape: Tuple of size 1, 2, or 3 representing the number of pixels in the grid
+        spacing: Spacing (microns) between each pixel along each axis (must be same dim as `grid_shape`)
+        eps: Relative permittivity :math:`\\epsilon_r`
+        wavelength: Wavelength :math:`\\lambda`
+        bloch_phase: Bloch phase (generally useful for angled scattering sims)
+        pml: Perfectly matched layer (PML) of thickness on both sides of the form :code:`(x_pml, y_pml, z_pml)`
+        pml_eps: The permittivity used to scale the PML (should probably assign to 1 for now)
+        yee_avg: whether to do a yee average (highly recommended)
+        no_grad: Whether to store gradient information (dummy parameter)
+    """
     def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
                  wavelength: float = 1.55, bloch_phase: Union[Dim, float] = 0.0,
                  pml: Optional[Union[Shape, Dim]] = None, pml_eps: float = 1.0,
                  yee_avg: bool = True, no_grad: bool = True):
-        """
-
-        Args:
-            shape: Tuple of size 1, 2, or 3 representing the number of pixels in the grid
-            spacing: Spacing (microns) between each pixel along each axis (must be same dim as `grid_shape`)
-            eps: Relative permittivity :math:`\\epsilon_r`
-            wavelength: Wavelength :math:`\\lambda`
-            bloch_phase: Bloch phase (dummy parameter, will only be used for periodic BCs)
-            pml: Perfectly matched layer (PML) of thickness on both sides of the form :code:`(x_pml, y_pml, z_pml)`
-            pml_eps: The permittivity used to scale the PML (should probably assign to 1 for now)
-            yee_avg: whether to do a yee average (highly recommended)
-            no_grad: Whether to store gradient information (dummy parameter)
-        """
 
         self.wavelength = wavelength
         self.no_grad = no_grad
@@ -46,7 +61,7 @@ class FDFD(SimGrid):
             yee_avg=yee_avg
         )
 
-        # overwrite dxes with PML-scaled ones
+        # overwrite dxes with PML-scaled ones if specified
         if self.pml_shape is not None:
             dxes_pml_e, dxes_pml_h = [], []
             for ax, p in enumerate(self.pos):
@@ -62,15 +77,6 @@ class FDFD(SimGrid):
     @property
     def mat(self) -> Union[sp.spmatrix, Tuple[np.ndarray, np.ndarray]]:
         """Build the discrete Maxwell operator :math:`A(k_0)` acting on :math:`\mathbf{e}`.
-
-        The discretized version of Maxwell's equations in frequency domain is:
-        .. math::
-            \nabla \times \mu^{-1} \nabla \times \mathbf{e} - k_0^2 \epsilon \mathbf{e} = k_0 \mathbf{j},
-        which can be written in the form :math:`A \mathbf{e} = \mathbf{b}`, where:
-        .. math::
-            A = \nabla \times \mu^{-1} \nabla \times - k_0^2 \epsilon \\
-            b = k_0 \mathbf{j}
-        is an operator representing the discretized EM wave operator at frequency :math:`omega`.
 
         Returns:
             Electric field operator :math:`A` for solving Maxwell's equations at frequency :math:`omega`.

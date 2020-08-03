@@ -17,18 +17,12 @@ class Material:
         return self.name
 
 
-# SILICON = Material('Silicon', (0.3, 0.3, 0.3), 3.4784 ** 2)
-# POLYSILICON = Material('Poly-Si', (0.5, 0.5, 0.5), 3.4784 ** 2)
-# OXIDE = Material('Oxide', (0.6, 0, 0), 1.4442 ** 2)
-# NITRIDE = Material('Nitride', (0, 0, 0.7), 1.996 ** 2)
-
-SILICON = Material('Silicon', (0.3, 0.3, 0.3), 3.47 ** 2)
-POLYSILICON = Material('Poly-Si', (0.5, 0.5, 0.5), 3.47 ** 2)
-OXIDE = Material('Oxide', (0.6, 0, 0), 1.45 ** 2)
-NITRIDE = Material('Nitride', (0, 0, 0.7), 2 ** 2)
+SILICON = Material('Silicon', (0.3, 0.3, 0.3), 3.4784 ** 2)
+POLYSILICON = Material('Poly-Si', (0.5, 0.5, 0.5), 3.4784 ** 2)
+OXIDE = Material('Oxide', (0.6, 0, 0), 1.4442 ** 2)
+NITRIDE = Material('Nitride', (0, 0, 0.7), 1.996 ** 2)
 LS_NITRIDE = Material('Low-Stress Nitride', (0, 0.4, 1))
-# LT_OXIDE = Material('Low-Temp Oxide', (0.8, 0.2, 0.2), 1.4442 ** 2)
-LT_OXIDE = Material('Low-Temp Oxide', (0.8, 0.2, 0.2), 1.45 ** 2)
+LT_OXIDE = Material('Low-Temp Oxide', (0.8, 0.2, 0.2), 1.4442 ** 2)
 ALUMINUM = Material('Aluminum', (0, 0.5, 0))
 ALUMINA = Material('Alumina', (0.2, 0, 0.2), 1.75)
 ETCH = Material('Etch', (0, 0, 0))
@@ -36,7 +30,7 @@ ETCH = Material('Etch', (0, 0, 0))
 
 class MaterialBlock:
     def __init__(self, dim: Dim2, material: Material):
-        """
+        """Material block (substrate or waveguide)
 
         Args:
             dim: Dimension tuple of the form :code:`(x, y)` for the material block
@@ -90,7 +84,6 @@ class Modes:
         """
         return self.fdfd.h2e(self.h(mode_idx), self.betas[mode_idx])
 
-    @property
     @lru_cache()
     def sz(self, mode_idx: int = 0) -> np.ndarray:
         """Poynting vector :math:`\mathbf{S}_z` for the mode of specified index
@@ -122,7 +115,7 @@ class Modes:
         Returns:
             :math:`n`
         """
-        return self.betas[0] / self.fdfd.k0
+        return self.betas[mode_idx] / self.fdfd.k0
 
     @property
     @lru_cache()
@@ -170,11 +163,11 @@ class Modes:
 
     @property
     def dbeta(self):
-        return self.betas[0] - self.betas[1]
+        return self.beta(0) - self.beta(1)
 
     @property
     def dn(self):
-        return (self.betas[0] - self.betas[1]) / self.fdfd.k0
+        return (self.beta(0) - self.beta(1)) / self.fdfd.k0
 
     @property
     def te_ratios(self):
@@ -193,28 +186,40 @@ class Modes:
         ])
 
     def fundamental_coeff(self, other_modes: "Modes"):
-        e_i, h_i = self.e, self.h
-        e_o, h_o = other_modes.e, other_modes.h
+        e_i, h_i = self.e(), self.h()
+        e_o, h_o = other_modes.e(), other_modes.h()
         return np.sum(poynting_z(e_o, h_i) + poynting_z(e_i, h_o)).real
 
     def plot_sz(self, ax, idx: int = 0, title: str = "Poynting"):
         if idx > self.m - 1:
             ValueError("Out of range of number of solutions")
-        plot_power_2d(ax, np.abs(self.szs[idx].real), self.eps, spacing=self.fdfd.spacing[0])
-        ax.set_title(rf'{title}, $n_{idx + 1} = {self.ns[idx]:.4f}$')
+        plot_power_2d(ax, np.abs(self.sz(idx).real), self.eps, spacing=self.fdfd.spacing[0])
+        ax.set_title(rf'{title}, $n_{idx + 1} = {self.n(idx):.4f}$')
         ax.text(x=0.9, y=0.9, s=rf'$s_z$', color='white', transform=ax.transAxes, fontsize=16)
         ratio = np.max((self.te_ratios[idx], 1 - self.te_ratios[idx]))
         polarization = "TE" if np.argmax((self.te_ratios[idx], 1 - self.te_ratios[idx])) > 0 else "TM"
         ax.text(x=0.05, y=0.9, s=rf'{polarization}[{ratio:.2f}]', color='white', transform=ax.transAxes)
 
     def plot_field(self, ax, idx: int = 0, axis: int = 1, use_e: bool = False, title: str = "Field"):
+        """
+
+        Args:
+            ax: Matplotlib axis handle
+            idx: Mode index
+            axis: Field axis to plot
+            use_e: Use electric field :math:`\mathbf{E}`, else use magnetic field :math:`\mathbf{H}` by default
+            title: Title for the plot (recommended to change for application!)
+
+        Returns:
+
+        """
         field = self.es if use_e else self.hs
         if idx > self.m - 1:
             ValueError("Out of range of number of solutions")
         if not (axis == 0 or axis == 1 or axis == 2):
             ValueError("Out of range of number of solutions")
         plot_field_2d(ax, field[idx][axis].real, self.eps, spacing=self.fdfd.spacing[0])
-        ax.set_title(rf'{title}, $n_{idx + 1} = {self.ns[idx]:.4f}$')
+        ax.set_title(rf'{title}, $n_{idx + 1} = {self.n(idx):.4f}$')
         ax.text(x=0.9, y=0.9, s=rf'$e_y$' if use_e else rf'$h_y$', color='black', transform=ax.transAxes, fontsize=16)
         ratio = np.max((self.te_ratios[idx], 1 - self.te_ratios[idx]))
         polarization = "TE" if np.argmax((self.te_ratios[idx], 1 - self.te_ratios[idx])) > 0 else "TM"
@@ -224,6 +229,17 @@ class Modes:
 class ModeDevice:
     def __init__(self, wg: MaterialBlock, sub: MaterialBlock, size: Tuple[float, float], wg_height: float,
                  wavelength: float = 1.55, spacing: float = 0.01, rib_y: float = 0):
+        """A :code:`ModeDevice` can be used to efficiently simulate various scenarios for coupled waveguides
+
+        Args:
+            wg: Waveguide :code:`MaterialBlock`
+            sub: Substrate :code:`MaterialBlock`
+            size: Size of the overall simulation (in arb. units)
+            wg_height: Size of the overall simulation (in arb. units)
+            wavelength: Wavelength for the mode solver (in arb. units)
+            spacing: Spacing for the simulation (recommended at least 10 pixels per wavelength in high-index material)
+            rib_y: Rib height (from substrate to partial etch cutoff)
+        """
         self.size = size
         self.spacing = spacing
         self.nx = int(self.size[0] / spacing)
@@ -245,6 +261,16 @@ class ModeDevice:
         return solution
 
     def single(self, ps: Optional[MaterialBlock] = None, sep: float = 0) -> np.ndarray:
+        """Single-waveguide permittivity with an optional phase shifter block placed above
+
+        Args:
+            ps: phase shifter block
+            sep: separation betwen phase shifter and waveguide
+
+        Returns:
+            permittivity distribution for the system
+
+        """
         nx, ny = self.nx, self.ny
         center = nx // 2
         wg, sub, dx = self.wg, self.sub, self.fdfd.spacing[0]
@@ -261,32 +287,21 @@ class ModeDevice:
             xr_ps = (center - int(ps.x / 2 / dx), center + int(ps.x / 2 / dx))
             yr_ps = (int(ps_y[0] / dx), int(ps_y[1] / dx))
             eps[xr_ps[0]:xr_ps[1], yr_ps[0]:yr_ps[1]] = ps.material.eps
-
-        return eps
-
-    def double_ps(self, ps: Optional[MaterialBlock] = None, sep: float = 0) -> np.ndarray:
-        nx, ny = self.nx, self.ny
-        center = nx // 2
-        wg, sub, dx = self.wg, self.sub, self.fdfd.spacing[0]
-        wg_y = (self.wg_height, self.wg_height + wg.y)
-        xr_wg = (center - int(wg.x / 2 / dx), center + int(wg.x / 2 / dx))
-        yr_wg = (int(wg_y[0] / dx), int(wg_y[1] / dx))
-        eps = np.ones((nx, ny))
-        eps[:, :int(self.sub.y / dx)] = sub.material.eps
-        eps[xr_wg[0]:xr_wg[1], yr_wg[0]:yr_wg[1]] = wg.material.eps
-        eps[:, int(self.sub.y / dx):int(self.sub.y / dx) + int(self.rib_y / dx)] = wg.material.eps
-
-        if ps is not None:
-            ps_y = (self.wg.y + self.wg_height + sep, self.wg.y + self.wg_height + sep + ps.y)
-            xr_ps = (center - int(ps.x / 2 / dx), center + int(ps.x / 2 / dx))
-            yr_ps = (int(ps_y[0] / dx), int(ps_y[1] / dx))
-            yr_ps_2 = (yr_ps[1] + int(sep / dx), yr_ps[1] + int((sep + ps.y) / dx))
-            eps[xr_ps[0]:xr_ps[1], yr_ps[0]:yr_ps[1]] = ps.material.eps
-            eps[xr_ps[0]:xr_ps[1], yr_ps_2[0]:yr_ps_2[1]] = ps.material.eps
 
         return eps
 
     def coupled(self, gap: float, ps: Optional[MaterialBlock] = None, seps: Tuple[float, float] = (0, 0)) -> np.ndarray:
+        """Coupled-waveguide permittivity with an optional pair of phase shifter blocks placed above
+
+        Args:
+            gap: coupling gap for the interaction region
+            ps: phase shifter :code:`MaterialBlock`
+            seps: separation between left and right waveguide in the coupler respectively
+
+        Returns:
+            permittivity distribution for the system
+
+        """
         nx, ny = self.nx, self.ny
         center = nx // 2
         wg, sub, dx = self.wg, self.sub, self.fdfd.spacing[0]
@@ -309,8 +324,6 @@ class ModeDevice:
             wg_l, wg_r = (xr_l[0] + xr_l[1]) / 2, (xr_r[0] + xr_r[1]) / 2
             xrps_l = (int(wg_l - ps.x / dx / 2), int(wg_l + ps.x / dx / 2))
             xrps_r = (int(wg_r - ps.x / dx / 2), int(wg_r + ps.x / dx / 2))
-            # xrps_l = (xr_l[0], xr_l[0] + int(ps.x / dx))
-            # xrps_r = (xr_r[1] - int(ps.x / dx), xr_r[1])
             yr_ps = (int(ps_y[0] / dx), int(ps_y[1] / dx))
             yr_ps2 = (int(ps_y_2[0] / dx), int(ps_y_2[1] / dx))
             eps[xrps_l[0]:xrps_l[1], yr_ps[0]:yr_ps[1]] = ps.eps
@@ -320,6 +333,20 @@ class ModeDevice:
 
     def dc_grid(self, seps: np.ndarray, gap: float, ps: Optional[MaterialBlock] = None, m: int = 6,
                 pbar: Callable = None) -> List[Modes]:
+        """Tunable directional coupler grid sweep
+
+        Args:
+            seps: separations to sweep, for :math:`S` separations, the resulting solution grid will be :math:`S \\times S`
+            gap: coupling gap for the interaction region
+            ps: phase shifter :code:`MaterialBlock`
+            m: Number of modes to find
+            pbar: progress bar handle (to show progress using e.g. tqdm)
+
+        Returns:
+            A list of :math:`S^2` :code:`Modes` solution objects
+
+
+        """
         solutions = []
         pbar = range if pbar is None else pbar
         for sep_1 in pbar(seps):
@@ -330,6 +357,18 @@ class ModeDevice:
 
     def ps_sweep(self, seps: np.ndarray, ps: Optional[MaterialBlock] = None, m: int = 6,
                  pbar: Callable = None) -> List[Modes]:
+        """Phase shifter sweep
+
+        Args:
+            seps: separations to sweep, for :math:`S` separations, the resulting solution will be of length :math:`S`
+            ps: phase shifter :code:`MaterialBlock`
+            m: Number of modes to find
+            pbar: progress bar handle (to show progress using e.g. tqdm)
+
+        Returns:
+            A list of :math:`S` :code:`Modes` solution objects
+
+        """
         solutions = []
         pbar = range if pbar is None else pbar
         for sep in pbar(seps):
@@ -339,6 +378,17 @@ class ModeDevice:
 
 
 def dispersion_sweep(device: ModeDevice, lmbdas: np.ndarray, pbar: Callable):
+    """Dispersion sweep for cross sectional modes
+
+    Args:
+        device: :code:`ModeDevice`
+        lmbdas: Wavelengths :math:`\\lambda` of length :math:`L`
+        pbar: progress bar handle (to show progress using e.g. tqdm)
+
+    Returns:
+        A list of :math:`L` :code:`Modes` solution objects
+
+    """
     solutions = []
     fdfd = device.fdfd
     for lmbda in pbar(lmbdas):

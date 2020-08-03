@@ -1,79 +1,21 @@
 from functools import lru_cache
 
 import numpy as np
-from typing import Tuple, Callable
+from typing import Tuple, List
 
 from .grid import SimGrid
 from ..typing import Shape, Dim, GridSpacing, Optional, Union, Source
-from ..utils import pml_params, d2curl
+from ..utils import pml_params, curl, yee_avg
+
+try:
+    import cupy as cp
+    GPU_AVAIL = True
+except ImportError:
+    GPU_AVAIL = False
 
 
 class FDTD(SimGrid):
-    def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
-                 pml: Optional[Union[Shape, Dim]] = None):
-        """Stateless FDTD implementation
-
-        Args:
-            shape: shape of the simulation
-            spacing: spacing among the different dimensions
-            eps: epsilon permittivity
-            pml: perfectly matched layers (PML)
-        """
-        super(FDTD, self).__init__(shape, spacing, eps, pml=pml)
-        self.dt = 1 / np.sqrt(np.sum(1 / self.spacing ** 2))  # includes courant condition!
-
-        # pml (internal to the grid, so specified here!)
-        if self.pml_shape is not None:
-            b, c = zip(*[self._cpml(ax) for ax in range(3)])
-            b_e, c_e = [b[ax][0] for ax in range(3)], [c[ax][0] for ax in range(3)]
-            b_h, c_h = [b[ax][1] for ax in range(3)], [c[ax][1] for ax in range(3)]
-            b_e, c_e = np.asarray(np.meshgrid(*b_e, indexing='ij')), np.asarray(np.meshgrid(*c_e, indexing='ij'))
-            b_h, c_h = np.asarray(np.meshgrid(*b_h, indexing='ij')), np.asarray(np.meshgrid(*c_h, indexing='ij'))
-            # for memory and time purposes, we only update the pml slices, NOT the full field
-            self.pml_regions = ((slice(None), slice(None, self.pml_shape[0]), slice(None), slice(None)),
-                                (slice(None), slice(-self.pml_shape[0], None), slice(None), slice(None)),
-                                (slice(None), slice(None), slice(None, self.pml_shape[1]), slice(None)),
-                                (slice(None), slice(None), slice(-self.pml_shape[1], None), slice(None)),
-                                (slice(None), slice(None), slice(None), slice(None, self.pml_shape[2])),
-                                (slice(None), slice(None), slice(None), slice(-self.pml_shape[2], None)))
-            self.cpml_be, self.cpml_bh = [b_e[s] for s in self.pml_regions], [b_h[s] for s in self.pml_regions]
-            self.cpml_ce, self.cpml_ch = [c_e[s] for s in self.pml_regions], [c_h[s] for s in self.pml_regions]
-
-    def initial_state(self, e_init: Optional[np.ndarray] = None, h_init: Optional[np.ndarray] = None,
-                      psi_e_init: Optional[Tuple[np.ndarray, ...]] = None,
-                      psi_h_init: Optional[Tuple[np.ndarray, ...]] = None):
-        """Initial state
-
-        Notes:
-            Initial values are typically not specified unless starting from a midpoint of a simulation.
-
-        Args:
-            e_init: initial :math:`\mathbf{E}`
-            h_init: initial :math:`\mathbf{H}`
-            psi_e_init: :math:`\\boldsymbol{\\Psi}_E` for CPML updates (zero if :code:`None`)
-            psi_h_init: :math:`\\boldsymbol{\\Psi}_E` for CPML updates (zero if :code:`None`)
-
-        Returns: Hidden state of the form:
-            e: current :math:`\mathbf{E}`
-            h: current :math:`\mathbf{H}`
-            psi_e: current :math:`\\boldsymbol{\\Psi}_E` for CPML updates (otherwise :code:`None`)
-            psi_h: current :math:`\\boldsymbol{\\Psi}_H` for CPML updates (otherwise :code:`None`)
-
-        """
-        # stored fields for fdtd
-        e = e_init if e_init is not None else np.zeros(self.field_shape, dtype=np.complex128)
-        h = h_init if h_init is not None else np.zeros_like(e)
-        # for pml updates
-        psi_e = psi_e_init if psi_e_init is not None else tuple([np.zeros_like(e)] * 6)
-        psi_h = psi_h_init if psi_h_init is not None else tuple([np.zeros_like(e)] * 6)
-        return e, h, psi_e, psi_h
-
-    def step(self, state: Tuple[np.ndarray, np.ndarray, Optional[Tuple[np.ndarray, ...]],
-                                Optional[Tuple[np.ndarray, ...]]],
-                   src: np.ndarray, src_idx: Optional[np.ndarray]) -> Tuple[np.ndarray, np.ndarray,
-                                                                            Optional[Tuple[np.ndarray, ...]],
-                                                                            Optional[Tuple[np.ndarray, ...]]]:
-        """FDTD step (in the form of an RNNCell)
+    """Stateless Finite Difference Time Domain (FDTD) implementation
 
         Notes:
             The FDTD update consists of updating the fields and auxiliary vectors that comprise the system "state."
@@ -105,48 +47,123 @@ class FDTD(SimGrid):
             :math:`\\nabla_{\mathbf{c}} \\times \mathbf{v} := \epsilon_{ijk} c_j \partial_j v_k`.
 
         Args:
+            shape: shape of the simulation
+            spacing: spacing among the different dimensions
+            eps: epsilon permittivity
+            pml: perfectly matched layers (PML)
+            gpu: use the GPU to accelerate the computation
+    """
+    def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
+                 pml: Optional[Union[Shape, Dim]] = None, gpu: bool = False):
+        super(FDTD, self).__init__(shape, spacing, eps, pml=pml, gpu=gpu)
+        self.dt = 1 / np.sqrt(np.sum(1 / self.spacing ** 2))  # includes courant condition!
+
+        # pml (internal to the grid, so specified here!)
+        if self.pml_shape is not None:
+            b, c = zip(*[self._cpml(ax) for ax in range(3)])
+            b_e, c_e = [b[ax][0] for ax in range(3)], [c[ax][0] for ax in range(3)]
+            b_h, c_h = [b[ax][1] for ax in range(3)], [c[ax][1] for ax in range(3)]
+            b_e, c_e = np.asarray(np.meshgrid(*b_e, indexing='ij')), np.asarray(np.meshgrid(*c_e, indexing='ij'))
+            b_h, c_h = np.asarray(np.meshgrid(*b_h, indexing='ij')), np.asarray(np.meshgrid(*c_h, indexing='ij'))
+            # for memory and time purposes, we only update the pml slices, NOT the full field
+            self.pml_regions = ((slice(None), slice(None, self.pml_shape[0]), slice(None), slice(None)),
+                                (slice(None), slice(-self.pml_shape[0], None), slice(None), slice(None)),
+                                (slice(None), slice(None), slice(None, self.pml_shape[1]), slice(None)),
+                                (slice(None), slice(None), slice(-self.pml_shape[1], None), slice(None)),
+                                (slice(None), slice(None), slice(None), slice(None, self.pml_shape[2])),
+                                (slice(None), slice(None), slice(None), slice(-self.pml_shape[2], None)))
+            self.cpml_be, self.cpml_bh = [b_e[s] for s in self.pml_regions], [b_h[s] for s in self.pml_regions]
+            self.cpml_ce, self.cpml_ch = [c_e[s] for s in self.pml_regions], [c_h[s] for s in self.pml_regions]
+            if gpu:
+                self.cpml_be, self.cpml_bh = [cp.asarray(v) for v in self.cpml_be],\
+                                             [cp.asarray(v) for v in self.cpml_bh]
+                self.cpml_ce, self.cpml_ch = [cp.asarray(v) for v in self.cpml_ce],\
+                                             [cp.asarray(v) for v in self.cpml_ch]
+
+    def initial_state(self, e_init: Optional[np.ndarray] = None, h_init: Optional[np.ndarray] = None,
+                      psi_e_init: Optional[Tuple[np.ndarray, ...]] = None,
+                      psi_h_init: Optional[Tuple[np.ndarray, ...]] = None):
+        """Initial state
+
+        Notes:
+            Initial values are typically not specified unless starting from a midpoint of a simulation.
+
+        Args:
+            e_init: initial :math:`\mathbf{E}`
+            h_init: initial :math:`\mathbf{H}`
+            psi_e_init: :math:`\\boldsymbol{\\Psi}_E` for CPML updates (zero if :code:`None`)
+            psi_h_init: :math:`\\boldsymbol{\\Psi}_H` for CPML updates (zero if :code:`None`)
+
+        Returns: Hidden state of the form:
+            e: current :math:`\mathbf{E}`
+            h: current :math:`\mathbf{H}`
+            psi_e: current :math:`\\boldsymbol{\\Psi}_E` for CPML updates (otherwise :code:`None`)
+            psi_h: current :math:`\\boldsymbol{\\Psi}_H` for CPML updates (otherwise :code:`None`)
+
+        """
+        # stored fields for fdtd
+        e = e_init if e_init is not None else self.xp.zeros(self.field_shape, dtype=np.complex128)
+        h = h_init if h_init is not None else self.xp.zeros_like(e)
+        # for pml updates
+        psi_e = psi_e_init if psi_e_init is not None else tuple([self.xp.zeros_like(e)] * 6)
+        psi_h = psi_h_init if psi_h_init is not None else tuple([self.xp.zeros_like(e)] * 6)
+        return e, h, psi_e, psi_h
+
+    def step(self, state: Tuple[np.ndarray, np.ndarray, Optional[Tuple[np.ndarray, ...]],
+                                Optional[Tuple[np.ndarray, ...]]],
+             src: np.ndarray, src_region: Optional[np.ndarray]) -> Tuple[np.ndarray, np.ndarray,
+                                                                         Optional[Tuple[np.ndarray, ...]],
+                                                                         Optional[Tuple[np.ndarray, ...]]]:
+        """FDTD step (in the form of an RNNCell)
+
+        Args:
             state: current state of the form :code:`(e, h, psi_e, psi_h)`
                 -:code:`e` refers to electric field :math:`\mathbf{E}(t)`
                 -:code:`h` refers to magnetic field :math:`\mathbf{H}(t)`
                 -:code:`psi_e` refers to :math:`\\boldsymbol{\\Psi}_E(t)`
                 -:code:`psi_h` refers to :math:`\\boldsymbol{\\Psi}_H(t)`
             src: is the source :math:`\mathbf{J}(t)`, the "input" to the system.
-            src_idx: slice of the added source to be added to E in the update (assume same shape as :code:`e`
+            src_region: slice or mask of the added source to be added to E in the update (assume same shape as :code:`e`
                 if :code:`None`)
 
         Returns:
-            e_next: refers to :math:`\mathbf{E}(t)`
-            h_next: refers to :math:`\mathbf{H}(t)`
-            psi_e_next: next :code:`psi_e` (if PML)
-            psi_h_next: next :code:`psi_h` (if PML)
+            a new :code:`state`
 
         """
         e, h, psi_e, psi_h = state
-        src_idx = tuple([slice(None)] * 4) if src_idx is None else src_idx
+        src_region = tuple([slice(None)] * 4) if src_region is None else src_region
 
-        # add pml in pml regions if specified
+        # update pml in pml regions if specified
         if self.pml_shape is not None:
             for pml_idx, region in enumerate(self.pml_regions):
                 psi_e[pml_idx] = self.cpml_be[pml_idx] * psi_e[pml_idx] + self._curl_h_pml(h, pml_idx)
                 psi_h[pml_idx] = self.cpml_bh[pml_idx] * psi_h[pml_idx] - self._curl_e_pml(e, pml_idx)
-                e[region] += psi_e / self.eps_t[region] * self.dt
-                h[region] += psi_h * self.dt
 
         # add source
-        e[src_idx] += src * self.dt / self.eps_t[src_idx]
+        src = src.flatten() if isinstance(src_region, np.ndarray) else src.squeeze()
+        e[src_region] += src * self.dt / self.eps_t[src_region]
 
-        # update e, h fields
+        # update e field
         e += (self.curl_h(h) / self.eps_t) * self.dt
+        if self.pml_shape is not None:
+            for pml_idx, region in enumerate(self.pml_regions):
+                e[region] += psi_e[pml_idx] / self.eps_t[region] * self.dt
+
+        # update h field
         h += -self.curl_e(e) * self.dt
+        if self.pml_shape is not None:
+            for pml_idx, region in enumerate(self.pml_regions):
+                h[region] += psi_h[pml_idx] * self.dt
 
         return e, h, psi_e, psi_h
 
-    def run(self, src: Source, src_idx: np.ndarray, time: float):
-        """
+    def run(self, src: Source, src_idx: Union[np.ndarray, List[np.ndarray]], time: float):
+        """Run the FDTD
 
         Args:
             src: a function that provides the input source, or an :code:`ndarray` where :code:`src[time_step]`
                 gives the source at that time step
+            src_idx: source location in the grid, provided by :code:`src_idx`
             time: total time to run the simulation
 
         Returns:
@@ -177,17 +194,15 @@ class FDTD(SimGrid):
     def _curl_e_pml(self, e: np.ndarray, pml_idx: int) -> np.ndarray:
         dx, _ = self._dxes
         c, s = self.cpml_ch[pml_idx], self.pml_regions[pml_idx]
-
-        def de(e_, ax):
-            return (np.roll(e_, -1, axis=ax) - e_) / dx[ax][s] * c[ax]
-
-        return d2curl(e, de)
+        return curl(e, lambda e_, ax: (np.roll(e_, -1, axis=ax) - e_) / dx[ax][s] * c[ax])
 
     def _curl_h_pml(self, h: np.ndarray, pml_idx: int) -> np.ndarray:
         _, dx = self._dxes
         c, s = self.cpml_ce[pml_idx], self.pml_regions[pml_idx]
+        return curl(h, lambda h_, ax: (h_ - np.roll(h_, 1, axis=ax)) / dx[ax][s] * c[ax])
 
-        def dh(h_, ax):
-            return (h_ - np.roll(h_, 1, axis=ax)) / dx[ax][s] * c[ax]
-
-        return d2curl(h, dh)
+    @property
+    @lru_cache()
+    def eps_t(self):
+        eps_t = yee_avg(self.eps, shift=self.yee_avg)
+        return cp.asarray(eps_t) if self.gpu else eps_t

@@ -2,10 +2,11 @@ from functools import lru_cache
 
 import numpy as np
 import scipy.sparse as sp
+import cupy as cp
 
 from ..design.component import Component
-from ..typing import Shape, Dim, Dim2, GridSpacing, Optional, Tuple, List, Union
-from ..utils import d2curl_op, d2curl, yee_avg
+from ..typing import Shape, Dim, GridSpacing, Optional, List, Union
+from ..utils import d2curl_op, curl, yee_avg
 
 
 class Grid:
@@ -122,21 +123,35 @@ class Grid:
             self.eps[mask == 1, zidx[0]:zidx[1]] = eps
 
     def reshape(self, v: np.ndarray) -> np.ndarray:
-        """A simple method to reshape flat 3d vec array into the same shape
+        """A simple method to reshape flat 3d vec array into the grid shape
 
         Args:
             v: vector of size `(3n,)` to rearrange into array of size `(3, n)`
 
         Returns:
 
+
         """
-        return np.stack([split_v.reshape(self.shape3) for split_v in np.split(v, 3)])
+        return np.stack([split_v.reshape(self.shape3) for split_v in np.split(v, 3)]) if v.ndim == 1 else v.flatten()
 
 
 class SimGrid(Grid):
     def __init__(self, shape: Shape, spacing: GridSpacing, eps: Union[float, np.ndarray] = 1,
                  bloch_phase: Union[Dim, float] = 0.0, pml: Optional[Union[int, Shape, Dim]] = None,
-                 pml_eps: float = 1.0, yee_avg: int = 1):
+                 pml_eps: float = 1.0, yee_avg: int = 1, gpu: bool = False):
+        """The base :code:`SimGrid` class (adding things to :code:`Grid` like Yee grid support, Bloch phase,
+        PML shape, etc.).
+
+        Args:
+            shape: Tuple of size 1, 2, or 3 representing the number of pixels in the grid
+            spacing: Spacing (microns) between each pixel along each axis (must be same dim as `grid_shape`)
+            eps: Relative permittivity :math:`\\epsilon_r`
+            bloch_phase: Bloch phase (generally useful for angled scattering sims)
+            pml: Perfectly matched layer (PML) of thickness on both sides of the form :code:`(x_pml, y_pml, z_pml)`
+            pml_eps: The permittivity used to scale the PML (should probably assign to 1 for now)
+            yee_avg: whether to do a yee average (highly recommended)
+            gpu: whether to run on GPU (mostly useful for FDTD, BPM)
+        """
         super(SimGrid, self).__init__(shape, spacing, eps)
         self.pml_shape = np.asarray(pml, dtype=np.int) if isinstance(pml, tuple) else pml
         self.pml_shape = np.ones(self.ndim, dtype=np.int) * pml if isinstance(pml, int) else pml
@@ -156,8 +171,11 @@ class SimGrid(Grid):
                                  f'got ({len(self.bloch)}, {len(self.shape)}).')
         self.dtype = np.float64 if pml is None and bloch_phase == 0 else np.complex128
         self._dxes = np.meshgrid(*self.cell_sizes, indexing='ij'), np.meshgrid(*self.cell_sizes, indexing='ij')
+        if gpu:
+            self._dxes = cp.asarray(self._dxes[0]), cp.asarray(self._dxes[1])
+        self.xp = cp if gpu else np
+        self.gpu = gpu
 
-    # @lru_cache()
     def deriv(self, back: bool = False) -> List[sp.spmatrix]:
         """Calculate directional derivative (cached, since this does not depend on any params)
 
@@ -165,7 +183,7 @@ class SimGrid(Grid):
             back: Return backward derivative
 
         Returns:
-            Discrete directional derivative `d` of the form `(d_x, d_y, d_z)`
+            Discrete directional derivative :code:`d` of the form :code:`(d_x, d_y, d_z)`
 
         """
 
@@ -207,7 +225,7 @@ class SimGrid(Grid):
         return d2curl_op(self.db)
 
     def curl_e(self, e, beta: Optional[float] = None) -> np.ndarray:
-        """
+        """Get the curl of the electric field :math:`\mathbf{E}`
 
         Args:
             e: electric field :math:`\mathbf{E}`
@@ -217,15 +235,12 @@ class SimGrid(Grid):
             The discretized curl :math:`\\nabla \times \mathbf{E}`
 
         """
-        dx, _ = self._dxes
-
         def de(e_, d):
-            return (np.roll(e_, -1, axis=d) - e_) / dx[d]
-
-        return d2curl(e, de, beta)
+            return (self.xp.roll(e_, -1, axis=d) - e_) / self._dxes[0][d]
+        return curl(e, de, beta)
 
     def curl_h(self, h, beta: Optional[float] = None) -> np.ndarray:
-        """
+        """Get the curl of the magnetic field :math:`\mathbf{H}`
 
            Args:
                h: magnetic field :math:`\mathbf{H}`
@@ -235,13 +250,11 @@ class SimGrid(Grid):
                The discretized curl :math:`\\nabla \times \mathbf{H}`
 
         """
-        _, dx = self._dxes
-
         def dh(h_, d):
-            return (h_ - np.roll(h_, 1, axis=d)) / dx[d]
-
-        return d2curl(h, dh, beta)
+            return (h_ - self.xp.roll(h_, 1, axis=d)) / self._dxes[1][d]
+        return curl(h, dh, beta)
 
     @property
+    @lru_cache()
     def eps_t(self):
         return yee_avg(self.eps, shift=self.yee_avg) if self.yee_avg > 0 else np.stack((self.eps, self.eps, self.eps))

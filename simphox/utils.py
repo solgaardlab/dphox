@@ -31,7 +31,7 @@ def d2curl_op(d: List[sp.spmatrix]) -> sp.spmatrix:
                     [-d[1], d[0], o]])
 
 
-def d2curl(f: np.ndarray, df: Callable[[np.ndarray, int], np.ndarray], beta: float = None):
+def curl(f: np.ndarray, df: Callable[[np.ndarray, int], np.ndarray], beta: float = None):
     if beta is not None:
         return np.stack([df(f[2], 1) + 1j * beta * f[1],
                          -1j * beta * f[0] - df(f[2], 0),
@@ -52,7 +52,7 @@ def yee_avg(params: np.ndarray, shift: int = 1) -> np.ndarray:
     return np.stack([p_x, p_y, p_z])
 
 
-def pml_params(pos: np.ndarray, t: int, exp_scale: float, log_reflection: float, absorption_corr: float, central_wavelength: float=1.55):
+def pml_params(pos: np.ndarray, t: int, exp_scale: float, log_reflection: float, absorption_corr: float):
     d = np.hstack((pos[:-1] + pos[1:]) / 2, pos[:-1]).T
     d_pml = np.vstack((
         (d[t] - d[:t]) / (d[t] - pos[0]),
