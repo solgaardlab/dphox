@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from setuptools import setup
 
-project_name = "simphox"
+project_name = "dphox"
 
 setup(
     name=project_name,
