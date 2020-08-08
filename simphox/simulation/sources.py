@@ -48,11 +48,10 @@ def xs_profile(grid: SimGrid, center: Tuple[float, ...], shape: Tuple[float, ...
         eps=mode_eps, wavelength=wavelength
     )
     beta, mode = src_fdfd.src(mode_idx=mode_idx, return_beta=True)
-    e = src_fdfd.h2e(mode, beta).squeeze()
-    e = np.expand_dims(e, axis + 1)
+    mode = np.expand_dims(mode, axis + 1)
     if grid.ndim == 3:
-        e = np.stack((e[2], e[1], e[0]))  # re-orient the source directions
-    return e, (slice(None), *s)
+        mode = np.stack((mode[2], mode[1], mode[0]))  # re-orient the source directions
+    return mode, (slice(None), *s)
 
 
 def tfsf_profile(grid: SimGrid, q_mask: np.ndarray, wavelength: float, k: Dim):
@@ -75,10 +74,9 @@ def tfsf_profile(grid: SimGrid, q_mask: np.ndarray, wavelength: float, k: Dim):
     period = wavelength  # equivalent to period since c = 1!
     k0 = 2 * np.pi / period
     k = np.asarray(k) / (np.sum(k)) * k0
-    fsrc = np.einsum('i,j,k->ijk',
-                      np.exp(1j * src_fdfd.pos[0][:-1] * k[0]),
-                      np.exp(1j * src_fdfd.pos[1][:-1] * k[1]),
-                      np.exp(1j * src_fdfd.pos[2][:-1] * k[2])).flatten()
+    fsrc = np.einsum('i,j,k->ijk', np.exp(1j * src_fdfd.pos[0][:-1] * k[0]),
+                                   np.exp(1j * src_fdfd.pos[1][:-1] * k[1]),
+                                   np.exp(1j * src_fdfd.pos[2][:-1] * k[2])).flatten()
     a = src_fdfd.mat
     src = src_fdfd.reshape((q @ a - a @ q) @ fsrc)  # qaaq = quack :)
     return src
@@ -150,7 +148,7 @@ def cw_source_fn(profile: np.ndarray, wavelength: float, gpu: bool = False) -> C
     """
     profile = cp.asarray(profile) if gpu else profile
     xp = cp if gpu else np
-    return lambda t: profile * xp.exp(1j * 2 * xp.pi * t / wavelength)
+    return lambda t: profile * xp.exp(-1j * 2 * xp.pi * t / wavelength)
 
 
 def gaussian_source(profiles: np.ndarray, pulse_width: float, center_wavelength: float, dt: float,

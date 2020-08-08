@@ -32,6 +32,13 @@ class FDFD(SimGrid):
 
         Therefore, :math:`\mathbf{e} = A^{-1}\mathbf{b}`.
 
+        For 2D simulations, it can be more efficient to solve for just the :math:`z`-component of the fields since
+        only :math:`\mathbf{e}_z` is non-zero. In this case, we can solve a smaller problem to improve the efficiency.
+        The form of this problem is :math:`A_z \mathbf{e}_z = \mathbf{b}_z`, where:
+        .. math::
+            A = (\nabla \times \mu^{-1} \nabla \times)_z + k_0^2 \epsilon_z \\
+            \mathbf{b}_z = k_0 \mathbf{j}_z \\
+
     Args:
         shape: Tuple of size 1, 2, or 3 representing the number of pixels in the grid
         spacing: Spacing (microns) between each pixel along each axis (must be same dim as `grid_shape`)
@@ -95,22 +102,7 @@ class FDFD(SimGrid):
 
     @property
     def matz(self) -> Union[sp.spmatrix, Tuple[np.ndarray, np.ndarray]]:
-        """Build the discrete Maxwell operator :math:`A_z(k_0)` acting on :math:`\mathbf{e}_z`.
-
-        The discretized version of Maxwell's equations in frequency domain is:
-        .. math::
-            \nabla \times \mu^{-1} \nabla \times \mathbf{e} - k_0^2 \epsilon \mathbf{e} = k_0 \mathbf{j},
-        which can be written in the form :math:`A \mathbf{e} = \mathbf{b}`, where:
-        .. math::
-            A = (\nabla \times \mu^{-1} \nabla \times) - k_0^2 \epsilon \\
-            \mathbf{b} = k_0 \mathbf{j}
-        is an operator representing the discretized EM wave operator at frequency :math:`omega`.
-
-        But when only :math:`\mathbf{e}_z` is non-zero, then we can solve a smaller problem to improve the efficiency.
-        The form of this problem is :math:`A_z \mathbf{e}_z = \mathbf{b}_z`, where:
-        .. math::
-            A = (\nabla \times \mu^{-1} \nabla \times)_z + k_0^2 \epsilon_z \\
-            \mathbf{b}_z = k_0 \mathbf{j}_z \\
+        """Build the discrete Maxwell operator :math:`A_z(k_0)` acting on :math:`\mathbf{e}_z` (for 2D problems).
 
         Returns:
             Electric field operator :math:`A_z` for a source with z-polarized e-field.

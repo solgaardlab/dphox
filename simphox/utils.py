@@ -11,6 +11,7 @@ def poynting_z(e: np.ndarray, h: np.ndarray):
                         (h[1] + np.roll(h[1], shift=1, axis=1)) / 2])
     return e_cross[0] * h_cross.conj()[1] - e_cross[1] * h_cross.conj()[0]
 
+
 def poynting_x(e: np.ndarray, h: np.ndarray):
     e_cross = np.stack([(e[1] + np.roll(e[1], shift=1, axis=1)) / 2,
                         (e[2] + np.roll(e[2], shift=1, axis=0)) / 2])
@@ -53,14 +54,14 @@ def yee_avg(params: np.ndarray, shift: int = 1) -> np.ndarray:
 
 
 def pml_params(pos: np.ndarray, t: int, exp_scale: float, log_reflection: float, absorption_corr: float):
-    d = np.hstack((pos[:-1] + pos[1:]) / 2, pos[:-1]).T
+    d = np.vstack(((pos[:-1] + pos[1:]) / 2, pos[:-1])).T
     d_pml = np.vstack((
         (d[t] - d[:t]) / (d[t] - pos[0]),
         np.zeros_like(d[t:-t]),
         (d[-t:] - d[-t]) / (pos[-1] - d[-t])
     )).T
     sigma = (exp_scale + 1) * (d_pml ** exp_scale) * log_reflection / (2 * absorption_corr)
-    alpha = (((t - d_pml + 1) / t) ** exp_scale)
+    alpha = (1 - d_pml) ** exp_scale
     return sigma, alpha
 
 #

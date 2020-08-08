@@ -1,10 +1,10 @@
 from functools import lru_cache
 
 import numpy as np
-from typing import Tuple, List
+from typing import Tuple, List, Callable
 
 from .grid import SimGrid
-from ..typing import Shape, Dim, GridSpacing, Optional, Union, Source
+from ..typing import Shape, Dim, GridSpacing, Optional, Union, Source, State
 from ..utils import pml_params, curl, yee_avg
 
 try:
@@ -80,19 +80,9 @@ class FDTD(SimGrid):
                 self.cpml_ce, self.cpml_ch = [cp.asarray(v) for v in self.cpml_ce],\
                                              [cp.asarray(v) for v in self.cpml_ch]
 
-    def initial_state(self, e_init: Optional[np.ndarray] = None, h_init: Optional[np.ndarray] = None,
-                      psi_e_init: Optional[Tuple[np.ndarray, ...]] = None,
-                      psi_h_init: Optional[Tuple[np.ndarray, ...]] = None):
-        """Initial state
-
-        Notes:
-            Initial values are typically not specified unless starting from a midpoint of a simulation.
-
-        Args:
-            e_init: initial :math:`\mathbf{E}`
-            h_init: initial :math:`\mathbf{H}`
-            psi_e_init: :math:`\\boldsymbol{\\Psi}_E` for CPML updates (zero if :code:`None`)
-            psi_h_init: :math:`\\boldsymbol{\\Psi}_H` for CPML updates (zero if :code:`None`)
+    @property
+    def zero_state(self):
+        """Zero state, the default initial state for the FDTD
 
         Returns: Hidden state of the form:
             e: current :math:`\mathbf{E}`
@@ -102,18 +92,14 @@ class FDTD(SimGrid):
 
         """
         # stored fields for fdtd
-        e = e_init if e_init is not None else self.xp.zeros(self.field_shape, dtype=np.complex128)
-        h = h_init if h_init is not None else self.xp.zeros_like(e)
+        e = self.xp.zeros(self.field_shape, dtype=np.complex128)
+        h = self.xp.zeros_like(e)
         # for pml updates
-        psi_e = psi_e_init if psi_e_init is not None else tuple([self.xp.zeros_like(e)] * 6)
-        psi_h = psi_h_init if psi_h_init is not None else tuple([self.xp.zeros_like(e)] * 6)
+        psi_e = None if self.pml_shape is None else [self.xp.zeros_like(e[s]) for s in self.pml_regions]
+        psi_h = None if self.pml_shape is None else [self.xp.zeros_like(e[s]) for s in self.pml_regions]
         return e, h, psi_e, psi_h
 
-    def step(self, state: Tuple[np.ndarray, np.ndarray, Optional[Tuple[np.ndarray, ...]],
-                                Optional[Tuple[np.ndarray, ...]]],
-             src: np.ndarray, src_region: Optional[np.ndarray]) -> Tuple[np.ndarray, np.ndarray,
-                                                                         Optional[Tuple[np.ndarray, ...]],
-                                                                         Optional[Tuple[np.ndarray, ...]]]:
+    def step(self, state: State, src: np.ndarray, src_region: Optional[np.ndarray]) -> State:
         """FDTD step (in the form of an RNNCell)
 
         Args:
@@ -137,34 +123,37 @@ class FDTD(SimGrid):
         if self.pml_shape is not None:
             for pml_idx, region in enumerate(self.pml_regions):
                 psi_e[pml_idx] = self.cpml_be[pml_idx] * psi_e[pml_idx] + self._curl_h_pml(h, pml_idx)
-                psi_h[pml_idx] = self.cpml_bh[pml_idx] * psi_h[pml_idx] - self._curl_e_pml(e, pml_idx)
+                psi_h[pml_idx] = self.cpml_bh[pml_idx] * psi_h[pml_idx] + self._curl_e_pml(e, pml_idx)
 
         # add source
         src = src.flatten() if isinstance(src_region, np.ndarray) else src.squeeze()
         e[src_region] += src * self.dt / self.eps_t[src_region]
 
         # update e field
-        e += (self.curl_h(h) / self.eps_t) * self.dt
+        e += self.curl_h(h) / self.eps_t * self.dt
         if self.pml_shape is not None:
             for pml_idx, region in enumerate(self.pml_regions):
                 e[region] += psi_e[pml_idx] / self.eps_t[region] * self.dt
 
         # update h field
-        h += -self.curl_e(e) * self.dt
+        h -= self.curl_e(e) * self.dt
         if self.pml_shape is not None:
             for pml_idx, region in enumerate(self.pml_regions):
-                h[region] += psi_h[pml_idx] * self.dt
+                h[region] -= psi_h[pml_idx] * self.dt
 
         return e, h, psi_e, psi_h
 
-    def run(self, src: Source, src_idx: Union[np.ndarray, List[np.ndarray]], time: float):
+    def run(self, src: Source, src_idx: Union[np.ndarray, List[np.ndarray]], num_time_steps: int,
+            pbar: Callable = None, initial_state: Optional[State] = None):
         """Run the FDTD
 
         Args:
             src: a function that provides the input source, or an :code:`ndarray` where :code:`src[time_step]`
                 gives the source at that time step
             src_idx: source location in the grid, provided by :code:`src_idx`
-            time: total time to run the simulation
+            num_time_steps: total time to run the simulation
+            pbar: Progress bar handle (e.g. tqdm)
+            initial_state: Initial state fot the FDTD (default is the zero state called by :code:`fdtd.initial_state()`)
 
         Returns:
             state: final state of the form :code:`(e, h, psi_e, psi_h)`
@@ -174,32 +163,36 @@ class FDTD(SimGrid):
                 -:code:`psi_h` refers to :math:`\\boldsymbol{\\Psi}_H(t)` (for debugging PML)
 
         """
-        state = self.initial_state()
-        for step in range(int(time // self.dt)):
+        state = self.zero_state if initial_state is None else initial_state
+        iterator = range(num_time_steps) if pbar is None else pbar(np.arange(num_time_steps))
+        for step in iterator:
             source = src[step] if isinstance(src, np.ndarray) else src(step * self.dt)
             source_idx = src_idx[step] if isinstance(src_idx, list) else src_idx
             state = self.step(state, source, source_idx)
         return state
 
-    def _cpml(self, ax: int, alpha_max: float = 0, exp_scale: float = 3.5,
-             kappa: float = 1, log_reflection: float = 1.6) -> Tuple[np.ndarray, np.ndarray]:
+    def _cpml(self, ax: int, alpha_max: float = 0, exp_scale: float = 3,
+             kappa: float = 1, log_reflection: float = 35) -> Tuple[np.ndarray, np.ndarray]:
         if self.cell_sizes[ax].size == 1:
             return np.ones(2), np.ones(2)
         sigma, alpha = pml_params(self.pos[ax], t=self.pml_shape[ax], exp_scale=exp_scale,
                                   log_reflection=log_reflection, absorption_corr=1)
         alpha *= alpha_max  # alpha_max recommended to be np.pi * central_wavelength / 5 if nonzero
         b = np.exp(-(alpha + sigma / kappa) * self.dt)
-        return b, (b - 1) * (sigma / (sigma * kappa + alpha * kappa ** 2))
+        factor = sigma / (sigma + alpha * kappa) if alpha_max > 0 else 1
+        return b, (b - 1) * factor / kappa
 
     def _curl_e_pml(self, e: np.ndarray, pml_idx: int) -> np.ndarray:
         dx, _ = self._dxes
-        c, s = self.cpml_ch[pml_idx], self.pml_regions[pml_idx]
-        return curl(e, lambda e_, ax: (np.roll(e_, -1, axis=ax) - e_) / dx[ax][s] * c[ax])
+        c, s = self.cpml_ce[pml_idx], self.pml_regions[pml_idx][1:]
+        e_pml = e[self.pml_regions[pml_idx]]
+        return curl(e_pml, lambda e_, ax: (self.xp.roll(e_, -1, axis=ax) - e_) / dx[ax][s] * c[ax])
 
     def _curl_h_pml(self, h: np.ndarray, pml_idx: int) -> np.ndarray:
         _, dx = self._dxes
-        c, s = self.cpml_ce[pml_idx], self.pml_regions[pml_idx]
-        return curl(h, lambda h_, ax: (h_ - np.roll(h_, 1, axis=ax)) / dx[ax][s] * c[ax])
+        c, s = self.cpml_ch[pml_idx], self.pml_regions[pml_idx][1:]
+        h_pml = h[self.pml_regions[pml_idx]]
+        return curl(h_pml, lambda h_, ax: (h_ - self.xp.roll(h_, 1, axis=ax)) / dx[ax][s] * c[ax])
 
     @property
     @lru_cache()
