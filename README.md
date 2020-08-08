@@ -1,21 +1,21 @@
-# simphox
-Design and simulation module for photonics
+# dphox
+Design module for photonics (internal to Solgaard lab).
 
 ## Installation
 
 Install in your python environment using:
 
-`pip install -e simphox`
+`pip install -e dphox`
 
-You can then change `simphox` if necessary.
-When importing `simphox`, you can now treat it as any other module.
-No filepath setting necessary because `simphox` will be in your environment's `site-packages` directory.
+You can then change `dphox` if necessary.
+When importing `dphox`, you can now treat it as any other module.
+No filepath setting necessary because `dphox` will be in your environment's `site-packages` directory.
 
 For the AIM PDK imports, please save PDK files
-in a separate folder of your choice (or in `simphox/aim_lib/`).
+in a separate folder of your choice (or in `dphox/aim_lib/`).
 You will always specify these folders when using the PDK 
-(see `simphox.gds.aim.AIMPhotonicsChip`). Please do not commit
-these files to `simphox` as they tend to inflate contributions
+(see `dphox.gds.aim.AIMPhotonicsChip`). Please do not commit
+these files to `dphox` as they tend to inflate contributions
 (these are specified via a `.gitignore`).
 
 ## Git Workflow
