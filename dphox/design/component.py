@@ -15,7 +15,7 @@ from simphox.typing import *
 
 
 class Path(gy.Path):
-    def poly_taper(self, length: float, taper_params: Union[np.ndarray, List[float]],
+    def poly_taper(self, length: float, taper_params: Union[np.ndarray, Tuple[float, ...]],
                    num_taper_evaluations: int = 100, layer: int = 0, inverted: bool = False):
         curr_width = self.w * 2
         taper_params = np.asarray(taper_params)
@@ -150,48 +150,6 @@ class Component:
 
     def to_nazca_polys(self):
         return [nd.Polygon(np.asarray(poly.exterior.coords.xy).T) for poly in self.polys]
-
-    def plotly3d(self, thickness: float, color: str, floor: float = 0, resolution: Union[int, Dim3] = (1000, 1000, 10)):
-        resolution = (resolution, resolution, resolution) if isinstance(resolution, float) else resolution
-        colorscale = [[0, color], [1, color]]
-
-        def extrude(coords):
-            v = np.mgrid[floor:floor + thickness:resolution[2] * 1j]
-            xs, zs = np.meshgrid(coords[0], v)
-            ys = np.tile(coords[1], (xs.shape[0], 1))
-            return go.Surface(x=xs, y=ys, z=zs, colorscale=colorscale, showscale=False)
-
-        plotly_objects = []
-
-        xmin, ymin, xmax, ymax = self.bounds
-        x_, y_ = np.mgrid[xmin:xmax:resolution[0] * 1j, ymin:ymax:resolution[1] * 1j]
-        mask = contains(self.pattern, x_, y_)
-        z_ = np.ones_like(mask, dtype=np.float)
-        z_[~mask] = np.nan
-        for poly in self.pattern:
-            ext_coords = np.asarray(poly.exterior.coords.xy)
-            plotly_objects.append(extrude(ext_coords))
-            for pint in poly.interiors:
-                int_coords = np.asarray(pint.coords.xy)
-                plotly_objects.append(extrude(int_coords))
-        plotly_objects += [go.Surface(x=x_, y=y_, z=floor * z_, colorscale=colorscale, showscale=False),
-                           go.Surface(x=x_, y=y_, z=(floor + thickness) * z_, colorscale=colorscale, showscale=False)]
-        return plotly_objects
-
-    def plotly2d(self, color: str):
-        # currently only works for exterior shapes
-        plotly_objects = []
-
-        for poly in self.pattern:
-            plotly_objects.append(go.layout.Shape(
-                type="path",
-                path="".join(["M"] + [f"{point[0]},{point[1]} L" for point in np.asarray(poly.exterior.coords.xy).T])[
-                     :-1],
-                fillcolor=color,
-                line_width=0
-            ))
-
-        return plotly_objects
 
     def plot(self, ax, color):
         ax.add_patch(PolygonPatch(self.pattern, facecolor=color, edgecolor='none'))
@@ -380,7 +338,7 @@ class MMI(Component):
 
 class Waveguide(Component):
     def __init__(self, waveguide_width: float, taper_length: float = 0,
-                 taper_params: Union[np.ndarray, List[float]] = None,
+                 taper_params: Union[np.ndarray, Tuple[float, ...]] = None,
                  length: float = 5, num_taper_evaluations: int = 100, end_length: float = 0,
                  shift: Dim2 = (0, 0), layer: int = 0):
         self.end_length = end_length
@@ -405,6 +363,36 @@ class Waveguide(Component):
     @property
     def output_ports(self) -> np.ndarray:
         return self.input_ports + np.asarray((self.size[0], 0))
+
+
+class PlanarNemsPhaseShifter(Component):
+    def __init__(self, waveguide_width: float, side_taper_params: Union[np.ndarray, Tuple[float, ...]],
+                 wg_taper_params: Union[np.ndarray, Tuple[float, ...]], straight_length: float, end_length: float,
+                 init_gap: float, box_h: float, taper_length: float,
+                 num_taper_evaluations: int = 100, shift: Tuple[float, float] = (0, 0),
+                 layer: int = 0):
+        waveguide = Waveguide(waveguide_width, taper_length=taper_length, taper_params=wg_taper_params,
+                              length=straight_length, end_length=end_length, layer=layer,
+                              num_taper_evaluations=num_taper_evaluations)
+        rect = Box((waveguide.size[0] - 2 * end_length, box_h),
+                   layer=layer).translate(dx=end_length, dy=-box_h / 2).pattern
+        subtracted_path = Waveguide(waveguide_width + init_gap * 2, taper_params=side_taper_params,
+                                    taper_length=taper_length, length=straight_length, end_length=end_length,
+                                    layer=layer, num_taper_evaluations=num_taper_evaluations).pattern
+        pattern = MultiPolygon(cascaded_union([rect - subtracted_path, waveguide.pattern]))
+
+        # pattern = gy.boolean(gy.boolean(rect, subtracted_path, "not"), waveguide.pattern, "and", layer=layer)
+        super(PlanarNemsPhaseShifter, self).__init__(*list(pattern), shift=shift)
+
+    @property
+    def input_ports(self) -> np.ndarray:
+        return np.asarray((0, 0)) + self.shift
+
+    @property
+    def output_ports(self) -> np.ndarray:
+        return self.input_ports + np.asarray((self.size[0], 0))
+
+
 
 #
 # class RingResonator(Component):

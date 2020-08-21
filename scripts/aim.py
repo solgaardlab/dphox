@@ -6,7 +6,8 @@ if __name__ == 'main':
 
     chip = AIMPhotonicChip(
         passive_filepath='/Users/sunilpai/Documents/research/simphox/aim_lib/APSUNY_v35a_passive.gds',
-        waveguides_filepath='/Users/sunilpai/Documents/research/simphox/aim_lib/APSUNY_v35_waveguides.gds'
+        waveguides_filepath='/Users/sunilpai/Documents/research/simphox/aim_lib/APSUNY_v35_waveguides.gds',
+        active_filepath='/Users/sunilpai/Documents/research/simphox/aim_lib/APSUNY_v35a_active.gds',
     )
 
     waveguide_w = 0.5

@@ -12,11 +12,12 @@ from ..typing import Optional, List, Tuple
 
 
 class AIMPhotonicChip:
-    def __init__(self, passive_filepath: str, waveguides_filepath: str, waveguide_w: float = 0.48,
-                 accuracy: float = 0.001):
+    def __init__(self, passive_filepath: str, waveguides_filepath: str, active_filepath: str,
+                 waveguide_w: float = 0.48, accuracy: float = 0.001):
         self.waveguide_w = waveguide_w
         self.passive = nd.load_gds(passive_filepath, asdict=True, topcellsonly=False)
         self.waveguides = nd.load_gds(waveguides_filepath, asdict=True, topcellsonly=False)
+        self.active = nd.load_gds(active_filepath, asdict=True, topcellsonly=False)
         # Define layers
         # todo(sunil): use AIM_STACK instead of hardcoding
         nd.add_layer(name='ZLAM', layer=(701, 727), overwrite=True, accuracy=accuracy)
@@ -163,6 +164,19 @@ class AIMPhotonicChip:
             self.passive['cl_band_1p_tap_si'].pin['a1'] = nd.Pin('a1').put(0, -5, 180)
             self.passive['cl_band_1p_tap_si'].pin['b0'] = nd.Pin('b0').put(40, 5, 0)
             self.passive['cl_band_1p_tap_si'].pin['b1'] = nd.Pin('b1').put(40, -5, 0)
+
+        with nd.Cell(name='nazca_cl_band_thermo_optic_switch') as self.cl_band_thermo_optic_switch:
+            self.active['cl_band_thermo_optic_switch'].put()
+            self.active['cl_band_thermo_optic_switch'].pin['a0'] = nd.Pin('a0').put(0, 5, 180)
+            self.active['cl_band_thermo_optic_switch'].pin['a1'] = nd.Pin('a1').put(0, -5, 180)
+            self.active['cl_band_thermo_optic_switch'].pin['b0'] = nd.Pin('b0').put(550, 5, 0)
+            self.active['cl_band_thermo_optic_switch'].pin['b1'] = nd.Pin('b1').put(550, -5, 0)
+            self.active['cl_band_thermo_optic_switch'].pin['c0'] = nd.Pin('c0').put(272.3, 62.5, 0)
+            self.active['cl_band_thermo_optic_switch'].pin['c1'] = nd.Pin('c1').put(277.3, 62.5, 0)
+
+        with nd.Cell(name='nazca_cl_band_photodetector_analog') as self.cl_band_photodetector_analog:
+            self.active['cl_band_photodetector_analog'].put()
+            self.active['cl_band_photodetector_analog'].pin['a0'] = nd.Pin('a0').put(0, 0, 180)
 
     # parameterized single mode waveguide for silicon and nitride
     # 6z. silicon single mode rib waveguide
@@ -458,95 +472,94 @@ class AIMPhotonicChip:
 
         return microbridge_ps
 
-    def static_ps_simple(self ,w1: float, w2: float, offset1: float, offset2: float, length: float = 90,
+    def static_ps_simple(self, w1: float, w2: float, offset1: float, offset2: float, length: float = 90,
+                         length_taper: float = 5):
+        '''
+        added by Nate to lay down static phase shifters 05/01/2020 1:30am
+        '''
+        with nd.Cell(name='static_ps_simple') as static_ps_simple:
+            l = (length + 2 * length_taper)
+            wg = self.cl_band_waveguide_si(length=l)
+            wg.put()
+            taper_in1 = geom.taper(length=length_taper, width1=0, width2=w1)
+            taper_out1 = geom.taper(length=length_taper, width1=w1, width2=0)
+            ps1 = geom.box(length=length, width=w1)
+            nd.Polygon(points=taper_in1, layer='FNAM').put(0, offset1)
+            nd.Polygon(points=ps1, layer='FNAM').put(length_taper, offset1)
+            nd.Polygon(points=taper_out1, layer='FNAM').put(length + length_taper, offset1)
+
+            taper_in2 = geom.taper(length=length_taper, width1=0, width2=w2)
+            taper_out2 = geom.taper(length=length_taper, width1=w2, width2=0)
+            ps2 = geom.box(length=length, width=w2)
+            nd.Polygon(points=taper_in2, layer='SNAM').put(0, offset2)
+            nd.Polygon(points=ps2, layer='SNAM').put(length_taper, offset2)
+            nd.Polygon(points=taper_out2, layer='SNAM').put(length + length_taper, offset2)
+            # add pin
+            nd.Pin('a0', pin=wg.pin['a0']).put()
+            nd.Pin('b0', pin=wg.pin['b0']).put()
+
+        return (static_ps_simple)
+
+    def static_ps_3(self, offset1: float = 0, offset2: float = 0, length: float = 90,
                     length_taper: float = 5):
         '''
         added by Nate to lay down static phase shifters 05/01/2020 1:30am
         '''
         with nd.Cell(name='static_ps_simple') as static_ps_simple:
-            l=(length+2*length_taper)
-            wg=self.cl_band_waveguide_si(length=l)
-            wg.put()
-            taper_in1=geom.taper(length=length_taper,width1=0,width2=w1)
-            taper_out1=geom.taper(length=length_taper,width1=w1,width2=0)
-            ps1=geom.box(length=length, width=w1)
-            nd.Polygon(points=taper_in1, layer='FNAM').put(0,offset1)
-            nd.Polygon(points=ps1, layer='FNAM').put(length_taper,offset1)
-            nd.Polygon(points=taper_out1, layer='FNAM').put(length+length_taper,offset1)
+            w = 0.15
+            sep = 0.1
 
-            taper_in2=geom.taper(length=length_taper,width1=0,width2=w2)
-            taper_out2=geom.taper(length=length_taper,width1=w2,width2=0)
-            ps2=geom.box(length=length, width=w2)
-            nd.Polygon(points=taper_in2, layer='SNAM').put(0,offset2)
-            nd.Polygon(points=ps2, layer='SNAM').put(length_taper,offset2)
-            nd.Polygon(points=taper_out2, layer='SNAM').put(length+length_taper,offset2)
-            # add pin
-            nd.Pin('a0', pin=wg.pin['a0']).put()
-            nd.Pin('b0', pin=wg.pin['b0']).put()
-
-        return(static_ps_simple)
-
-
-    def static_ps_3(self , offset1: float = 0, offset2: float = 0, length: float = 90,
-                    length_taper: float = 5):
-        '''
-        added by Nate to lay down static phase shifters 05/01/2020 1:30am
-        '''
-        with nd.Cell(name='static_ps_simple') as static_ps_simple:
-            w=0.15
-            sep=0.1
-
-            l=(length+2*length_taper)
-            wg=self.cl_band_waveguide_si(length=l)
+            l = (length + 2 * length_taper)
+            wg = self.cl_band_waveguide_si(length=l)
             wg.put()
 
-            taper_in1=geom.taper(length=length_taper,width1=0,width2=w)
-            taper_out1=geom.taper(length=length_taper,width1=w,width2=0)
-            ps1=geom.box(length=length, width=w)
-            nd.Polygon(points=taper_in1, layer='FNAM').put(0,offset1)
-            nd.Polygon(points=ps1, layer='FNAM').put(length_taper,offset1)
-            nd.Polygon(points=taper_out1, layer='FNAM').put(length+length_taper,offset1)
+            taper_in1 = geom.taper(length=length_taper, width1=0, width2=w)
+            taper_out1 = geom.taper(length=length_taper, width1=w, width2=0)
+            ps1 = geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in1, layer='FNAM').put(0, offset1)
+            nd.Polygon(points=ps1, layer='FNAM').put(length_taper, offset1)
+            nd.Polygon(points=taper_out1, layer='FNAM').put(length + length_taper, offset1)
 
-            taper_in12=geom.taper(length=length_taper,width1=0,width2=w)
-            taper_out12=geom.taper(length=length_taper,width1=w,width2=0)
-            ps12=geom.box(length=length, width=w)
-            nd.Polygon(points=taper_in12, layer='FNAM').put(0,offset1+w+sep)
-            nd.Polygon(points=ps12, layer='FNAM').put(length_taper,offset1+w+sep)
-            nd.Polygon(points=taper_out12, layer='FNAM').put(length+length_taper,offset1+w+sep)
+            taper_in12 = geom.taper(length=length_taper, width1=0, width2=w)
+            taper_out12 = geom.taper(length=length_taper, width1=w, width2=0)
+            ps12 = geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in12, layer='FNAM').put(0, offset1 + w + sep)
+            nd.Polygon(points=ps12, layer='FNAM').put(length_taper, offset1 + w + sep)
+            nd.Polygon(points=taper_out12, layer='FNAM').put(length + length_taper, offset1 + w + sep)
 
-            taper_in13=geom.taper(length=length_taper,width1=0,width2=w)
-            taper_out13=geom.taper(length=length_taper,width1=w,width2=0)
-            ps13=geom.box(length=length, width=w)
-            nd.Polygon(points=taper_in13, layer='FNAM').put(0,offset1-w-sep)
-            nd.Polygon(points=ps13, layer='FNAM').put(length_taper,offset1-w-sep)
-            nd.Polygon(points=taper_out13, layer='FNAM').put(length+length_taper,offset1-w-sep)
+            taper_in13 = geom.taper(length=length_taper, width1=0, width2=w)
+            taper_out13 = geom.taper(length=length_taper, width1=w, width2=0)
+            ps13 = geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in13, layer='FNAM').put(0, offset1 - w - sep)
+            nd.Polygon(points=ps13, layer='FNAM').put(length_taper, offset1 - w - sep)
+            nd.Polygon(points=taper_out13, layer='FNAM').put(length + length_taper, offset1 - w - sep)
 
-            taper_in21=geom.taper(length=length_taper,width1=0,width2=w)
-            taper_out21=geom.taper(length=length_taper,width1=w,width2=0)
-            ps21=geom.box(length=length, width=w)
-            nd.Polygon(points=taper_in21, layer='SNAM').put(0,offset2)
-            nd.Polygon(points=ps21, layer='SNAM').put(length_taper,offset2)
-            nd.Polygon(points=taper_out21, layer='SNAM').put(length+length_taper,offset2)
+            taper_in21 = geom.taper(length=length_taper, width1=0, width2=w)
+            taper_out21 = geom.taper(length=length_taper, width1=w, width2=0)
+            ps21 = geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in21, layer='SNAM').put(0, offset2)
+            nd.Polygon(points=ps21, layer='SNAM').put(length_taper, offset2)
+            nd.Polygon(points=taper_out21, layer='SNAM').put(length + length_taper, offset2)
 
-            taper_in22=geom.taper(length=length_taper,width1=0,width2=w)
-            taper_out22=geom.taper(length=length_taper,width1=w,width2=0)
-            ps22=geom.box(length=length, width=w)
-            nd.Polygon(points=taper_in22, layer='SNAM').put(0,offset2+w+sep)
-            nd.Polygon(points=ps22, layer='SNAM').put(length_taper,offset2+w+sep)
-            nd.Polygon(points=taper_out22, layer='SNAM').put(length+length_taper,offset2+w+sep)
+            taper_in22 = geom.taper(length=length_taper, width1=0, width2=w)
+            taper_out22 = geom.taper(length=length_taper, width1=w, width2=0)
+            ps22 = geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in22, layer='SNAM').put(0, offset2 + w + sep)
+            nd.Polygon(points=ps22, layer='SNAM').put(length_taper, offset2 + w + sep)
+            nd.Polygon(points=taper_out22, layer='SNAM').put(length + length_taper, offset2 + w + sep)
 
-            taper_in23=geom.taper(length=length_taper,width1=0,width2=w)
-            taper_out23=geom.taper(length=length_taper,width1=w,width2=0)
-            ps23=geom.box(length=length, width=w)
-            nd.Polygon(points=taper_in23, layer='SNAM').put(0,offset2-w-sep)
-            nd.Polygon(points=ps23, layer='SNAM').put(length_taper,offset2-w-sep)
-            nd.Polygon(points=taper_out23, layer='SNAM').put(length+length_taper,offset2-w-sep)
+            taper_in23 = geom.taper(length=length_taper, width1=0, width2=w)
+            taper_out23 = geom.taper(length=length_taper, width1=w, width2=0)
+            ps23 = geom.box(length=length, width=w)
+            nd.Polygon(points=taper_in23, layer='SNAM').put(0, offset2 - w - sep)
+            nd.Polygon(points=ps23, layer='SNAM').put(length_taper, offset2 - w - sep)
+            nd.Polygon(points=taper_out23, layer='SNAM').put(length + length_taper, offset2 - w - sep)
 
             # add pin
             nd.Pin('a0', pin=wg.pin['a0']).put()
             nd.Pin('b0', pin=wg.pin['b0']).put()
 
-        return(static_ps_simple)
+        return (static_ps_simple)
 
     def comb_drive_ps(self, cblock_dim: Tuple[float, float], teeth_ys: List[float], big_spring_ys: List[float],
                       anchor_spring_ys: List[float], n_teeth: int, teeth_vert_sep: float,
@@ -656,6 +669,47 @@ class AIMPhotonicChip:
             nd.Pin('b0').put()
         return ring_resonator
 
+    def binary_tree_mesh_4(self):
+        mzi_root = self.cl_band_thermo_optic_switch.put(0, 0)
+        self.cl_band_vertical_coupler_si.put(mzi_root.pin['a0'], angle=90)
+        self.cl_band_photodetector_analog.put(mzi_root.pin['a1'], flop=True)
+        self.cl_band_waveguide_si(angle=90).put(mzi_root.pin['b0'])
+        self.cl_band_waveguide_si(length=100).put()
+        self.cl_band_waveguide_si(angle=-90).put()
+        mzi_bot = self.cl_band_thermo_optic_switch.put(nd.cp.x(), nd.cp.y() - 5)
+        self.cl_band_vertical_coupler_si.put(mzi_bot.pin['b0'], angle=90)
+        self.cl_band_vertical_coupler_si.put(mzi_bot.pin['b1'], angle=90)
+        self.cl_band_waveguide_si(angle=-90).put(mzi_root.pin['b1'])
+        self.cl_band_waveguide_si(length=100).put()
+        self.cl_band_waveguide_si(angle=90).put()
+        mzi_top = self.cl_band_thermo_optic_switch.put(nd.cp.x(), nd.cp.y() + 5)
+        self.cl_band_vertical_coupler_si.put(mzi_top.pin['b0'], angle=90)
+        self.cl_band_vertical_coupler_si.put(mzi_top.pin['b1'], angle=90)
+
+
+
+
+        # self.cl_band_waveguide_si(length=200).put()
+        self.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
+        self.cl_band_waveguide_si(angle=-90).put(tap_lower.pin['b1'])
+        self.cl_band_waveguide_si(length=25).put()
+        self.cl_band_waveguide_si(angle=90).put()
+        self.cl_band_waveguide_si(length=200).put()
+        self.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
+        dc_r = self.cl_band_splitter_4port_si.put(tap_upper.pin['b0'])
+        self.cl_band_waveguide_si(angle=-90).put(dc_l.pin['a0'])
+        self.cl_band_waveguide_si(angle=90).put()
+        self.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), 90)
+        self.cl_band_waveguide_si(angle=90).put(dc_l.pin['a1'])
+        self.cl_band_waveguide_si(angle=-90).put()
+        self.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), 90)
+        self.cl_band_waveguide_si(angle=90).put(dc_r.pin['b0'])
+        self.cl_band_waveguide_si(angle=-90).put()
+        self.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
+        self.cl_band_waveguide_si(angle=-90).put(dc_r.pin['b1'])
+        self.cl_band_waveguide_si(angle=90).put()
+        self.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
+
 
 def coupler_path(ic: nd.interconnects.Interconnect, angle: float, interaction_l: float, radius: float = 35):
     input_waveguide = ic.bend(radius=radius, angle=angle).put()
@@ -666,9 +720,10 @@ def coupler_path(ic: nd.interconnects.Interconnect, angle: float, interaction_l:
     return input_waveguide, interaction_waveguide, output_waveguide
 
 
-def trombone(ic: nd.interconnects.Interconnect, height: float, radius: float = 10):
-    ic.bend(radius, 90).put()
-    ic.strt(height).put()
-    ic.bend(radius, -180).put()
-    ic.strt(height).put()
-    ic.bend(radius, 90).put()
+def trombone(self, height: float, radius: Optional[float] = None):
+    radius = self.min_radius if radius is None else radius
+    self.waveguide_ic.bend(radius, 90).put()
+    self.waveguide_ic.strt(height).put()
+    self.waveguide_ic.bend(radius, -180).put()
+    self.waveguide_ic.strt(height).put()
+    self.waveguide_ic.bend(radius, 90).put()
