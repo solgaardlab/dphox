@@ -38,9 +38,15 @@ class Path(gy.Path):
             pole_3 = np.asarray((bend_dim[0], (-1) ** inverted * bend_dim[1]))
             self.bezier([pole_1, pole_2, pole_3], layer=layer)
         else:
-            angle = np.arccos(1 - bend_dim[1] / 2 / bend_dim[0]) * (-1) ** inverted
-            self.turn(bend_dim[0], angle, number_of_points=199)
-            self.turn(bend_dim[0], -angle, number_of_points=199)
+            if bend_dim[1] > 2 * bend_dim[0]:
+                angle = np.pi / 2 * (-1) ** inverted
+                self.turn(bend_dim[0], angle, number_of_points=199)
+                self.segment(bend_dim[1] - 2 * bend_dim[0])
+                self.turn(bend_dim[0], -angle, number_of_points=199)
+            else:
+                angle = np.arccos(1 - bend_dim[1] / 2 / bend_dim[0]) * (-1) ** inverted
+                self.turn(bend_dim[0], angle, number_of_points=199)
+                self.turn(bend_dim[0], -angle, number_of_points=199)
         return self
 
     def dc(self, bend_dim: Dim2, interaction_l: float, end_l: float = 0, layer: int = 0,
@@ -151,16 +157,16 @@ class Pattern:
         self.translate(center[0] - old_x, center[1] - old_y)
         return self
 
-    def horz_align(self, c: Union["Pattern", float], left: bool = True) -> "Pattern":
+    def horz_align(self, c: Union["Pattern", float], left: bool = True, opposite: bool = False) -> "Pattern":
         x = self.bounds[0] if left else self.bounds[2]
-        p = c if isinstance(c, tuple) else (c.bounds[0] if left else c.bounds[2])
-        self.translate(dx=p[0] - x)
+        p = c[0] if isinstance(c, tuple) else (c.bounds[0] if left and not opposite or opposite and not left else c.bounds[2])
+        self.translate(dx=p - x)
         return self
 
-    def vert_align(self, c: Union["Pattern", float], bottom: bool = True) -> "Pattern":
+    def vert_align(self, c: Union["Pattern", float], bottom: bool = True, opposite: bool = False) -> "Pattern":
         x = self.bounds[1] if bottom else self.bounds[3]
-        p = c if isinstance(c, tuple) else (c.bounds[1] if bottom else c.bounds[3])
-        self.translate(dy=p[1] - x)
+        p = c[1] if isinstance(c, tuple) else (c.bounds[1] if bottom and not opposite or opposite and not bottom else c.bounds[3])
+        self.translate(dy=p - x)
         return self
 
     def to_gds(self, cell: gy.Cell):
@@ -497,7 +503,7 @@ class Waveguide(Pattern):
         return self.input_ports + np.asarray((self.size[0], 0))
 
 
-class LateralNemsPhaseShifter(GroupedPattern):
+class LateralNemsPS(GroupedPattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, end_l: float,
                  gap_w: float, taper_l: float, num_taper_evaluations: int = 100,
                  connector_dim: Optional[Dim2] = None, pad_dim: Optional[Dim2] = None,
@@ -559,7 +565,7 @@ class LateralNemsPhaseShifter(GroupedPattern):
                 copy(connector).translate(dx=end_l + phaseshift_l - connector_dim[0] / 2, dy=conn_y)
             ]
 
-        super(LateralNemsPhaseShifter, self).__init__(*([waveguide] + nanofins), shift=shift)
+        super(LateralNemsPS, self).__init__(*([waveguide] + nanofins), shift=shift)
         self.waveguide, self.connectors, self.pads, self.nanofins = waveguide, connectors, pads, nanofins
 
     @property
@@ -570,21 +576,13 @@ class LateralNemsPhaseShifter(GroupedPattern):
     def output_ports(self) -> np.ndarray:
         return self.input_ports + np.asarray((self.size[0], 0))
 
-    def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], clearout_layer: str,
-                   clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
-                   clearout_etch_stop_grow: float = 0):
-
-        layer_to_metal = {GroupedPattern(*[Box(contact_box_dim).center_align(pad) for pad in self.pads]): layer
-                          for layer in metal_stack_layers}
-
-        clearout = Box(clearout_box_dim).center_align(self.center)
-
-        return Multilayer({
-            self: waveguide_layer,
-            **layer_to_metal,
-            clearout: clearout_layer,
-            clearout.grow(clearout_etch_stop_grow): clearout_etch_stop_layer
-        })
+    def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], via_stack_layers: List[str],
+                   clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
+                   doping_stack_layer: Optional[str] = None,
+                   clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
+        return multilayer(self, self.pads, (self.center,), waveguide_layer, metal_stack_layers,
+                          via_stack_layers, clearout_layer, clearout_etch_stop_layer, contact_box_dim,
+                          clearout_box_dim, doping_stack_layer, clearout_etch_stop_grow, via_shrink, doping_grow)
 
 
 class LateralNemsTDC(GroupedPattern):
@@ -621,6 +619,7 @@ class LateralNemsTDC(GroupedPattern):
         self.connector_dim = connector_dim
         self.pad_dim = pad_dim
         self.middle_fin_dim = middle_fin_dim
+        self.middle_fin_pad_dim = middle_fin_pad_dim
         self.use_radius = use_radius
 
         dc = DC(bend_dim=bend_dim, waveguide_w=waveguide_w, gap_w=dc_gap_w,
@@ -637,6 +636,11 @@ class LateralNemsTDC(GroupedPattern):
             pad = Box(pad_dim).center_align(dc)
             pad_y = nanofin_w / 2 + connector_dim[1] + pad_dim[1] / 2 + nanofin_y
             pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
+
+        if middle_fin_pad_dim is not None:
+            pad = Box(middle_fin_pad_dim).center_align(dc)
+            pad_x = middle_fin_pad_dim[0] / 2 + middle_fin_dim[0] / 2
+            pads += [copy(pad).translate(dx=pad_x), copy(pad).translate(dx=pad_x)]
 
         if connector_dim is not None:
             connector = Box(connector_dim).center_align(dc)
@@ -657,23 +661,15 @@ class LateralNemsTDC(GroupedPattern):
 
     @property
     def output_ports(self) -> np.ndarray:
-        return self.dc.output_ports
+        return self.dc.output_ports + self.shift
 
-    def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], clearout_layer: str,
-                   contact_box_dim: Dim2, clearout_box_dim: Dim2, clearout_etch_stop_layer: Optional[str] = None,
-                   clearout_etch_stop_grow: float = 0) -> Multilayer:
-
-
-        component_to_layer = {GroupedPattern(*[Box(contact_box_dim).center_align(pad) for pad in self.pads]): layer
-                              for layer in metal_stack_layers}
-
-        clearout = Box(clearout_box_dim).center_align(self.center)
-        component_to_layer[clearout] = clearout_layer
-        component_to_layer[self] = waveguide_layer
-        if clearout_etch_stop_grow > 0 and clearout_etch_stop_layer is not None:
-            component_to_layer[clearout.grow(clearout_etch_stop_grow)] = clearout_etch_stop_layer
-
-        return Multilayer(component_to_layer)
+    def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], via_stack_layers: List[str],
+                   clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
+                   doping_stack_layer: Optional[str] = None,
+                   clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
+        return multilayer(self, self.pads, (self.center,), waveguide_layer, metal_stack_layers,
+                          via_stack_layers, clearout_layer, clearout_etch_stop_layer, contact_box_dim,
+                          clearout_box_dim, doping_stack_layer, clearout_etch_stop_grow, via_shrink, doping_grow)
 
 
 class LateralNemsDiffPS(GroupedPattern):
@@ -693,7 +689,7 @@ class LateralNemsDiffPS(GroupedPattern):
             gap_w: gap width (initial, before tapering)
             taper_l: taper length
             interport_w: interport distance between waveguides
-            num_taper_evaluations: number of taper evalulations (see gdspy)
+            num_taper_evaluations: number of taper evaluations (see gdspy)
             connector_dim: connector xy size
             pad_dim: silicon anchor/handle xy size
             gap_taper: gap taper polynomial params (recommend same as wg_taper)
@@ -713,8 +709,8 @@ class LateralNemsDiffPS(GroupedPattern):
         self.gap_taper = gap_taper
         self.wg_taper = wg_taper
 
-        ps = LateralNemsPhaseShifter(waveguide_w, nanofin_w, phaseshift_l, end_l, gap_w, taper_l,
-                                     num_taper_evaluations, shift, gap_taper, wg_taper)
+        ps = LateralNemsPS(waveguide_w, nanofin_w, phaseshift_l, end_l, gap_w, taper_l,
+                           num_taper_evaluations, shift, gap_taper, wg_taper)
         connectors, pads = [], []
 
         upper_ps, lower_ps = copy(ps).translate(dy=interport_w / 2), copy(ps).translate(dy=-interport_w / 2)
@@ -722,7 +718,8 @@ class LateralNemsDiffPS(GroupedPattern):
         if pad_dim is not None:
             pad_dy = nanofin_w + connector_dim[1] + pad_dim[1] / 2 + gap_w + waveguide_w / 2
             side_pad = Box(pad_dim).center_align(lower_ps)
-            center_pad = Box((pad_dim[0], interport_w - waveguide_w - 2 * connector_dim[1] - 2 * gap_w - nanofin_w)).center_align(
+            center_pad = Box(
+                (pad_dim[0], interport_w - waveguide_w - 2 * connector_dim[1] - 2 * gap_w - nanofin_w)).center_align(
                 lower_ps).translate(dy=interport_w / 2)
             side_pads = [copy(side_pad).translate(dy=-pad_dy),
                          copy(side_pad).translate(dy=pad_dy + interport_w)]
@@ -742,28 +739,127 @@ class LateralNemsDiffPS(GroupedPattern):
         super(LateralNemsDiffPS, self).__init__(*([upper_ps, lower_ps] + connectors + pads), shift=shift)
         self.upper_ps, self.lower_ps, self.connectors, self.pads = upper_ps, lower_ps, connectors, pads
 
-    def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], clearout_layer: str,
-                   clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
-                   clearout_etch_stop_grow: float = 0) -> Multilayer:
+    @property
+    def input_ports(self) -> np.ndarray:
+        return np.vstack(self.upper_ps.input_ports, self.lower_ps.input_ports)
 
-        component_to_layer = {GroupedPattern(*[Box(contact_box_dim).center_align(pad) for pad in self.pads]): layer
-                              for layer in metal_stack_layers}
+    @property
+    def output_ports(self) -> np.ndarray:
+        return np.vstack(self.upper_ps.output_ports, self.lower_ps.output_ports)
 
-        for ps in (self.upper_ps, self.lower_ps):
-            clearout = Box(clearout_box_dim).center_align(ps.center)
-            component_to_layer[clearout] = clearout_layer
-            if clearout_etch_stop_grow > 0 and clearout_etch_stop_layer is not None:
-                component_to_layer[clearout.grow(clearout_etch_stop_grow)] = clearout_etch_stop_layer
+    def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], via_stack_layers: List[str],
+                   clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
+                   doping_stack_layer: Optional[str] = None,
+                   clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
+        return multilayer(self, self.pads, (self.lower_ps, self.upper_ps), waveguide_layer, metal_stack_layers,
+                          via_stack_layers, clearout_layer, clearout_etch_stop_layer, contact_box_dim,
+                          clearout_box_dim, doping_stack_layer, clearout_etch_stop_grow, via_shrink, doping_grow)
 
-        component_to_layer[self] = waveguide_layer
-        return Multilayer(component_to_layer)
 
-# class MemsTempPDCoupler(GroupedPattern):
-#     def __init__(self, waveguide_w: float, interaction_l: float, end_l: float, gap_w: float, taper_l: float,
-#                  interport_w: float, num_taper_evaluations: int = 100, shift: Tuple[float, float] = (0, 0),
-#                  gap_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
-#                  wg_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
-#                  connector_dim: Optional[Dim2] = None, pad_dim: Optional[Dim2] = None):
+class MemsMonitorCoupler(Pattern):
+    def __init__(self, waveguide_w: float, interaction_l: float, gap_w: float,
+                 end_l: float, detector_wg_l: float, bend_radius: float = 3, pad_dim: Optional[Dim2] = None,
+                 rib_pad_w: float = 0):
+        self.waveguide_w = waveguide_w
+        self.interaction_l = interaction_l
+        self.detector_wg_l = detector_wg_l
+        self.gap_w = gap_w
+        self.end_l = end_l
+        self.bend_radius = bend_radius
+        self.pad_dim = pad_dim
+
+        pads = []
+
+        waveguide = Path(width=waveguide_w).segment(interaction_l)
+        monitor_wg = copy(waveguide).translate(dx=0, dy=gap_w + waveguide_w)
+        monitor_left = Path(width=waveguide_w).rotate(np.pi).turn(bend_radius, -np.pi / 2).segment(detector_wg_l).turn(
+            bend_radius, -np.pi / 2).translate(dx=0, dy=gap_w + waveguide_w)
+        monitor_right = Path(width=waveguide_w).turn(bend_radius, np.pi / 2).segment(detector_wg_l).turn(
+            bend_radius, np.pi / 2).translate(dx=interaction_l, dy=gap_w + waveguide_w)
+        pad_y = waveguide_w * 3 / 2 + gap_w + pad_dim[1] / 2 + rib_pad_w
+        pads.append(Path(width=pad_dim[1]).segment(pad_dim[0]).translate(dx=interaction_l / 2 - pad_dim[0] / 2, dy=pad_y))
+        if rib_pad_w > 0:
+            pads.append(Path(width=pad_dim[1]).segment(pad_dim[0]).translate(
+                dx=0, dy=waveguide_w * 3 / 2 + gap_w + rib_pad_w / 2))
+
+        super(MemsMonitorCoupler, self).__init__(waveguide, monitor_wg, monitor_left, monitor_right, *pads)
+        self.pads = pads[:1]
+
+
+class NemsMillerNode(GroupedPattern):
+    def __init__(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
+                 gap_w: float, bend_radius: float, bend_extension: float, lr_nanofin_w: float,
+                 ud_nanofin_w: float, lr_gap_w: float, ud_gap_w: float, lr_pad_dim: Optional[Dim2] = None,
+                 ud_pad_dim: Optional[Dim2] = None, lr_connector_dim: Optional[Dim2] = None,
+                 ud_connector_dim: Optional[Dim2] = None, shift: Tuple[float, float] = (0, 0)):
+        self.waveguide_w = waveguide_w
+        self.upper_interaction_l = upper_interaction_l
+        self.lower_interaction_l = lower_interaction_l
+        self.bend_radius = bend_radius
+        self.bend_extension = bend_extension
+        self.lr_nanofin_w = lr_nanofin_w
+        self.ud_nanofin_w = ud_nanofin_w
+        self.lr_pad_dim = lr_pad_dim
+        self.ud_pad_dim = ud_pad_dim
+        self.lr_connector_dim = lr_connector_dim
+        self.ud_connector_dim = ud_connector_dim
+        self.gap_w = gap_w
+
+        connectors, pads = [], []
+
+        bend_height = 2 * bend_radius + bend_extension
+        interport_distance = waveguide_w + 2 * bend_height + gap_w
+
+        if not upper_interaction_l <= lower_interaction_l:
+            raise ValueError("Require upper_interaction_l <= lower_interaction_l by convention.")
+
+        lower_path = Path(waveguide_w).dc((bend_radius, bend_height), lower_interaction_l, use_radius=True)
+        upper_path = Path(waveguide_w).dc((bend_radius, bend_height), upper_interaction_l,
+                                          (lower_interaction_l - upper_interaction_l) / 2,
+                                          inverted=True, use_radius=True)
+        upper_path.translate(dx=0, dy=interport_distance)
+
+        dc = Pattern(lower_path, upper_path)
+
+        nanofin_y = ud_nanofin_w / 2 + gap_w / 2 + waveguide_w + ud_gap_w
+        nanofins = [Box((lower_interaction_l, ud_nanofin_w)).center_align(dc).translate(dx=0, dy=-nanofin_y)]
+        pad_y = ud_connector_dim[1] + ud_pad_dim[1] / 2
+        pads += [Box(ud_pad_dim).center_align(nanofins[0]).translate(dy=-pad_y)]
+        connector = Box(ud_connector_dim).center_align(pads[0])
+        connectors += [copy(connector).vert_align(pads[0], bottom=True, opposite=True).horz_align(pads[0]),
+                       copy(connector).vert_align(pads[0], bottom=True, opposite=True).horz_align(pads[0], left=False)]
+
+        nanofin_x = lr_nanofin_w / 2 + lr_gap_w + upper_interaction_l / 2 + bend_radius + waveguide_w / 2
+        pad_x = lr_connector_dim[0] + lr_pad_dim[0] / 2
+        nanofin_y = bend_radius + waveguide_w + gap_w / 2 + bend_extension / 2
+
+        nanofins += [Box((lr_nanofin_w, bend_extension)).center_align(dc).translate(dx=-nanofin_x, dy=nanofin_y),
+                     Box((lr_nanofin_w, bend_extension)).center_align(dc).translate(dx=nanofin_x, dy=nanofin_y)]
+        pads += [Box(lr_pad_dim).center_align(nanofins[1]).translate(dx=-pad_x, dy=0),
+                 Box(lr_pad_dim).center_align(nanofins[2]).translate(dx=pad_x, dy=0)]
+        connector = Box(lr_connector_dim).center_align(pads[1])
+        connectors += [copy(connector).horz_align(pads[1], left=True, opposite=True).vert_align(pads[1]),
+                       copy(connector).horz_align(pads[1], left=True, opposite=True).vert_align(pads[1], bottom=False)]
+        connector = Box(lr_connector_dim).center_align(pads[2])
+        connectors += [copy(connector).horz_align(pads[2], left=False, opposite=True).vert_align(pads[2]),
+                       copy(connector).horz_align(pads[2], left=False, opposite=True).vert_align(pads[2], bottom=False)]
+
+        super(NemsMillerNode, self).__init__(*([dc] + nanofins + connectors + pads), shift=shift)
+        self.dc, self.connectors, self.nanofins, self.pads = dc, connectors, nanofins, pads
+
+# class Node:
+#     def __init__(self, tunable_splitter: Union[nd.Cell, gy.Cell], input_phase: Union[nd.Cell, gy.Cell]):
+#
+#
+#
+# def mesh_nazca(n, node_cell: nd.Cell, grating_cell: nd.Cell, equal_bends: bool = True, rectangular: bool = False):
+#     if rectangular:
+#         num_straight = np.zeros(n)
+#         num_straight[::2] = 1
+#     else:
+#         num_straight = (n - 1) - (np.hstack([np.arange(1, n), np.arange(n - 2, 0, -1)]) + 1)
+#     n_mzis = (n - num_straight) // 2
+
 
 #
 # class RingResonator(Pattern):
@@ -793,3 +889,28 @@ class LateralNemsDiffPS(GroupedPattern):
 #     @property
 #     def output_ports(self) -> np.ndarray:
 #         return self.input_ports + np.asarray((self.size[0], 0))
+
+
+def multilayer(waveguide_pattern: Pattern, pads: List[Pattern], clearout_areas: Tuple,
+               waveguide_layer: str, metal_stack_layers: List[str],
+               via_stack_layers: List[str], clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2,
+               clearout_box_dim: Dim2, doping_stack_layer: Optional[str] = None,
+               clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
+
+    pattern_to_layer = {GroupedPattern(*[Box(contact_box_dim).center_align(pad) for pad in pads]): layer
+                        for layer in metal_stack_layers}
+    pattern_to_layer.update({GroupedPattern(*[Box(contact_box_dim).center_align(pad).grow(-via_shrink)
+                                              for pad in pads]): layer for layer in via_stack_layers})
+    if doping_stack_layer is not None:
+        pattern_to_layer[GroupedPattern(*[Box(contact_box_dim).center_align(pad).grow(doping_grow)
+                                          for pad in pads])] = doping_stack_layer
+
+    pattern_to_layer[waveguide_pattern] = waveguide_layer
+
+    for region in clearout_areas:
+        clearout = Box(clearout_box_dim).center_align(region if isinstance(region, tuple) else region.center)
+        pattern_to_layer[clearout] = clearout_layer
+        if clearout_etch_stop_grow > 0 and clearout_etch_stop_layer is not None:
+            pattern_to_layer[clearout.grow(clearout_etch_stop_grow)] = clearout_etch_stop_layer
+
+    return Multilayer(pattern_to_layer)

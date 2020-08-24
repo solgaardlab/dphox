@@ -75,7 +75,7 @@ AMF_STACK = {
                 'layer': 12  # slab
             }
         ]
-    }
+    },
 }
 
 
@@ -103,7 +103,19 @@ AIM_STACK = {
         'tzam': (737, 727),  # tzam
         'diam': (726, 727),  # diam, dicing channel
         'paam': (779, 727),  # metal passivation
-
+        'mlam': (780, 727)
+    },
+    'cross_sections': {
+        'pad_xs': [
+            {
+                'layer': 779  # mlam
+            },
+            {
+                'layer': 725,  # pad
+                'growx': 60,
+                'growy': 60
+            }
+        ],
     }
 }
 
@@ -132,14 +144,14 @@ AIM_PDK = {
         'n': (277.3, 62.5, 0)
     },
     'cl_band_photodetector_analog': {
-        'a0': 'input',
-        'p': 'p_anode',
-        'n': 'n_anode'
+        'a0': (0, 0, 180),
+        'p': (169.15, 26, -90),
+        'n': (173.55, 26, -90)
     },
     'cl_band_photodetector_digital': {
-        'a0': 'input',
-        'p': 'p_anode',
-        'n': 'n_anode'
+        'a0': (0, 0, 180),
+        'p': (42, 2.6, 0),
+        'n': (42, 0, 0)
     },
 }
 

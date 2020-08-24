@@ -29,14 +29,32 @@ class AIMNazca:
         for layer_name in stack['layers']:
             nd.add_layer(name=layer_name, layer=stack['layers'][layer_name], overwrite=True, accuracy=accuracy)
 
+        for pdk_elem_name, pdk_elem_pins in self.pdk_dict.items():
+            with nd.Cell(f'nazca_{pdk_elem_name}') as cell:
+                self.lib[pdk_elem_name].put()
+                for pin_name, pin_assignment in pdk_elem_pins.items():
+                    nd.Pin(pin_name)
+            setattr(self, pdk_elem_name, cell)
+
+        for xs_name in stack['cross_sections']:
+            for layer_dict in stack['cross_sections'][xs_name]:
+                nd.add_layer2xsection(
+                    xsection=xs_name,
+                    accuracy=accuracy,
+                    overwrite=True,
+                    **layer_dict)
+
+        self.pad_ic = nd.interconnects.Interconnect(width=60, xs='pad_xs')
+
     def nems_tdc(self, waveguide_w, nanofin_w, interaction_l, end_l, dc_gap_w,
-                        beam_gap_w, bend_dim, pad_dim, connector_dim, middle_fin_dim, use_radius,
-                        contact_box_dim, clearout_box_dim, clearout_etch_stop_grow):
+                 beam_gap_w, bend_dim, pad_dim, connector_dim, middle_fin_dim, use_radius,
+                 contact_box_dim, clearout_box_dim, clearout_etch_stop_grow):
         c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w, interaction_l=interaction_l,
                            end_l=end_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
                            bend_dim=bend_dim, pad_dim=pad_dim, connector_dim=connector_dim,
                            middle_fin_dim=middle_fin_dim, use_radius=use_radius)
-        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['cbam', 'm1am', 'v1am', 'm2am'],
+        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
+                              doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
                               clearout_layer='tram', clearout_etch_stop_layer='esam',
                               contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
                               clearout_etch_stop_grow=clearout_etch_stop_grow)
@@ -45,11 +63,12 @@ class AIMNazca:
     def nems_ps(self, waveguide_w, nanofin_w, phaseshift_l, end_l, gap_w,
                 taper_l, num_taper_evaluations, pad_dim, connector_dim, gap_taper, wg_taper,
                 contact_box_dim, clearout_box_dim, clearout_etch_stop_grow):
-        c = LateralNemsPhaseShifter(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l,
-                                    end_l=end_l, gap_w=gap_w, taper_l=taper_l, num_taper_evaluations=num_taper_evaluations,
-                                    pad_dim=pad_dim, connector_dim=connector_dim,
-                                    gap_taper=gap_taper, wg_taper=wg_taper)
-        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['cbam', 'm1am', 'v1am', 'm2am'],
+        c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l,
+                          end_l=end_l, gap_w=gap_w, taper_l=taper_l, num_taper_evaluations=num_taper_evaluations,
+                          pad_dim=pad_dim, connector_dim=connector_dim,
+                          gap_taper=gap_taper, wg_taper=wg_taper)
+        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
+                              doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
                               clearout_layer='tram', clearout_etch_stop_layer='esam',
                               contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
                               clearout_etch_stop_grow=clearout_etch_stop_grow)
@@ -57,19 +76,35 @@ class AIMNazca:
 
     def nems_diff_ps(self, waveguide_w, nanofin_w, interport_w, phaseshift_l, end_l, gap_w,
                      taper_l, num_taper_evaluations, pad_dim, connector_dim, gap_taper, wg_taper,
-                     contact_box_dim, clearout_box_dim, clearout_etch_stop_grow):
+                     contact_box_dim, clearout_box_dim, clearout_etch_stop_grow,
+                     shift: Dim2 = (0, 0)):
         c = LateralNemsDiffPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, interport_w=interport_w,
-                              phaseshift_l=phaseshift_l,
-                              end_l=end_l, gap_w=gap_w, taper_l=taper_l, num_taper_evaluations=num_taper_evaluations,
+                              phaseshift_l=phaseshift_l, end_l=end_l, gap_w=gap_w, taper_l=taper_l,
+                              num_taper_evaluations=num_taper_evaluations,
                               pad_dim=pad_dim, connector_dim=connector_dim,
-                              gap_taper=gap_taper, wg_taper=wg_taper)
-        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['cbam', 'm1am', 'v1am', 'm2am'],
+                              gap_taper=gap_taper, wg_taper=wg_taper, shift=shift)
+        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
+                              doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
                               clearout_layer='tram', clearout_etch_stop_layer='esam',
                               contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
                               clearout_etch_stop_grow=clearout_etch_stop_grow)
         return device.nazca_cell('nems_diff_ps')
 
+    def bond_pad(self, pad_w: float = 60, pad_l: float = 60):
+        with nd.Cell(name='bond_pad') as bond_pad:
+            self.pad_ic.strt(length=pad_l, width=pad_w).put()
+        return bond_pad
 
+    def bond_pad_array(self, n_pads: int = 25, pitch: float = 100,
+                       pad_w: float = 60, pad_l: float = 60, labels: Optional[np.ndarray] = None):
+        lattice_bond_pads = []
+        with nd.Cell(name=f'bond_pad_array_{n_pads}_{pitch}') as bond_pad_array:
+            pad = self.bond_pad(pad_w=pad_w, pad_l=pad_l)
+            for i in range(n_pads):
+                lattice_bond_pads.append(pad.put(i * pitch, 0, 270))
+                message = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='cc', layer=10, height=50)
+                message.put(-pitch / 2 + i * pitch, -pad_l / 2)
+        return bond_pad_array
 
 
 
