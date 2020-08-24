@@ -1,7 +1,9 @@
+from collections import defaultdict
+
 import gdspy as gy
-import copy
+from copy import deepcopy as copy
 from shapely.vectorized import contains
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import Polygon, MultiPolygon, CAP_STYLE
 from shapely.ops import cascaded_union
 from descartes import PolygonPatch
 
@@ -24,55 +26,59 @@ class Path(gy.Path):
                         final_width=lambda u: curr_width - np.sum(taper_params) +
                                               np.sum(taper_params * (1 - u) ** np.arange(taper_params.size,
                                                                                          dtype=float)) if inverted
-                        else curr_width +
-                             np.sum(taper_params * u ** np.arange(taper_params.size, dtype=float)),
+                        else curr_width + np.sum(taper_params * u ** np.arange(taper_params.size, dtype=float)),
                         number_of_evaluations=num_taper_evaluations,
                         layer=layer)
         return self
 
-    def sbend(self, bend_dim: Dim2, layer: int = 0, inverted: bool = False):
-        pole_1 = np.asarray((bend_dim[0] / 2, 0))
-        pole_2 = np.asarray((bend_dim[0] / 2, (-1) ** inverted * bend_dim[1]))
-        pole_3 = np.asarray((bend_dim[0], (-1) ** inverted * bend_dim[1]))
-        self.bezier([pole_1, pole_2, pole_3], layer=layer)
+    def sbend(self, bend_dim: Dim2, layer: int = 0, inverted: bool = False, use_radius: bool = False):
+        if use_radius is False:
+            pole_1 = np.asarray((bend_dim[0] / 2, 0))
+            pole_2 = np.asarray((bend_dim[0] / 2, (-1) ** inverted * bend_dim[1]))
+            pole_3 = np.asarray((bend_dim[0], (-1) ** inverted * bend_dim[1]))
+            self.bezier([pole_1, pole_2, pole_3], layer=layer)
+        else:
+            angle = np.arccos(1 - bend_dim[1] / 2 / bend_dim[0]) * (-1) ** inverted
+            self.turn(bend_dim[0], angle, number_of_points=199)
+            self.turn(bend_dim[0], -angle, number_of_points=199)
         return self
 
-    def dc(self, bend_dim: Dim2, interaction_length: float, end_length: float = 0, layer: int = 0,
-           inverted: bool = False, end_bend_dim: Optional[Dim3] = None):
+    def dc(self, bend_dim: Dim2, interaction_l: float, end_l: float = 0, layer: int = 0,
+           inverted: bool = False, end_bend_dim: Optional[Dim3] = None, use_radius: bool = False):
+        if end_bend_dim:
+            if end_bend_dim[-1] > 0:
+                self.segment(end_bend_dim[-1], layer=layer)
+            self.sbend(end_bend_dim[:2], layer, inverted, use_radius)
+        if end_l > 0:
+            self.segment(end_l, layer=layer)
+        self.sbend(bend_dim, layer, inverted, use_radius)
+        self.segment(interaction_l, layer=layer)
+        self.sbend(bend_dim, layer, not inverted, use_radius)
+        if end_l > 0:
+            self.segment(end_l, layer=layer)
+        if end_bend_dim:
+            self.sbend(end_bend_dim[:2], layer, not inverted, use_radius)
+            if end_bend_dim[-1] > 0:
+                self.segment(end_bend_dim[-1], layer=layer)
+        return self
+
+    def mzi(self, bend_dim: Dim2, interaction_l: float, arm_l: float, end_l: float = 0, layer: int = 0,
+            inverted: bool = False, end_bend_dim: Optional[Dim3] = None, use_radius: bool = False):
         if end_bend_dim:
             if end_bend_dim[-1] > 0:
                 self.segment(end_bend_dim[-1], layer=layer)
             self.sbend(end_bend_dim[:2], layer, inverted)
-        if end_length > 0:
-            self.segment(end_length, layer=layer)
-        self.sbend(bend_dim, layer, inverted)
-        self.segment(interaction_length, layer=layer)
-        self.sbend(bend_dim, layer, not inverted)
-        if end_length > 0:
-            self.segment(end_length, layer=layer)
-        if end_bend_dim:
-            self.sbend(end_bend_dim[:2], layer, not inverted)
-            if end_bend_dim[-1] > 0:
-                self.segment(end_bend_dim[-1], layer=layer)
-        return self
-
-    def mzi(self, bend_dim: Dim2, interaction_length: float, arm_length: float,
-            end_length: float = 0, layer: int = 0, inverted: bool = False, end_bend_dim: Optional[Dim3] = None):
-        if end_bend_dim:
-            if end_bend_dim[-1] > 0:
-                self.segment(end_bend_dim[-1], layer=layer)
-            self.sbend(end_bend_dim[:2], layer, inverted)
-        if end_length > 0:
-            self.segment(end_length, layer=layer)
-        self.sbend(bend_dim, layer, inverted)
-        self.segment(interaction_length, layer=layer)
-        self.sbend(bend_dim, layer, not inverted)
-        self.segment(arm_length, layer=layer)
-        self.sbend(bend_dim, layer, inverted)
-        self.segment(interaction_length, layer=layer)
-        self.sbend(bend_dim, layer, not inverted)
-        if end_length > 0:
-            self.segment(end_length, layer=layer)
+        if end_l > 0:
+            self.segment(end_l, layer=layer)
+        self.sbend(bend_dim, layer, inverted, use_radius)
+        self.segment(interaction_l, layer=layer)
+        self.sbend(bend_dim, layer, not inverted, use_radius)
+        self.segment(arm_l, layer=layer)
+        self.sbend(bend_dim, layer, inverted, use_radius)
+        self.segment(interaction_l, layer=layer)
+        self.sbend(bend_dim, layer, not inverted, use_radius)
+        if end_l > 0:
+            self.segment(end_l, layer=layer)
         if end_bend_dim:
             self.sbend(end_bend_dim[:2], layer, not inverted)
             if end_bend_dim[-1] > 0:
@@ -83,27 +89,32 @@ class Path(gy.Path):
         return self.sbend((port[0] - self.x, port[1] - self.y))
 
 
-class Component:
-    def __init__(self, *polygons: Union[Path, gy.Polygon, gy.FlexPath, Polygon], shift: Dim2 = (0, 0), layer: int = 0):
+class Pattern:
+    def __init__(self, *polygons: Union[Path, gy.Polygon, gy.FlexPath, Polygon], shift: Dim2 = (0, 0)):
         self.shift = shift
-        self.layer = layer
-        self.config = copy.deepcopy(self.__dict__)
-
+        self.config = copy(self.__dict__)
         self.polys = polygons
         self.pattern = self._pattern()
         if shift != (0, 0):
             self.translate(shift[0], shift[1])
 
     def _pattern(self) -> MultiPolygon:
-        if not isinstance(self.polys[0], Polygon):
-            polygon_list = []
-            for shape in self.polys:
-                polygons = shape.get_polygons() if isinstance(shape, gy.FlexPath) else shape.polygons
-                polygon_list += [Polygon(polygon_point_list) for polygon_point_list in polygons]
-        else:
-            polygon_list = self.polys
-        pattern = cascaded_union(polygon_list)
+        pattern = cascaded_union(self.shapely_polys)
         return pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern])
+
+    @property
+    def shapely_polys(self):
+        polygon_list = []
+        for shape in self.polys:
+            if not isinstance(shape, Polygon):
+                if isinstance(shape, MultiPolygon):
+                    polygons = list(shape)
+                else:
+                    polygons = shape.get_polygons() if isinstance(shape, gy.FlexPath) else shape.polygons
+                polygon_list += [Polygon(polygon_point_list) for polygon_point_list in polygons]
+            else:
+                polygon_list.append(shape)
+        return polygon_list
 
     def mask(self, shape: Shape, grid_spacing: GridSpacing):
         x_, y_ = np.mgrid[0:grid_spacing[0] * shape[0]:grid_spacing[0], 0:grid_spacing[1] * shape[1]:grid_spacing[1]]
@@ -123,17 +134,33 @@ class Component:
         b = self.bounds  # (minx, miny, maxx, maxy)
         return (b[2] + b[0]) / 2, (b[3] + b[1]) / 2  # (avgx, avgy)
 
-    def translate(self, dx: float = 0, dy: float = 0) -> "Component":
-        for path in self.polys:
-            path.translate(dx, dy)
+    def translate(self, dx: float = 0, dy: float = 0) -> "Pattern":
+        new_polys = []
+        for path in self.shapely_polys:
+            path = gy.Polygon(np.asarray(path.exterior.coords.xy).T)
+            new_polys.append(path.translate(dx, dy))
+        self.polys = new_polys
         self.pattern = self._pattern()
         self.shift = (self.shift[0] + dx, self.shift[1] + dy)
         self.config["shift"] = self.shift
         return self
 
-    def centered(self, center: Tuple[float, float]) -> "Component":
+    def center_align(self, c: Union["Pattern", Tuple[float, float]]) -> "Pattern":
         old_x, old_y = self.center
+        center = c if isinstance(c, tuple) else c.center
         self.translate(center[0] - old_x, center[1] - old_y)
+        return self
+
+    def horz_align(self, c: Union["Pattern", float], left: bool = True) -> "Pattern":
+        x = self.bounds[0] if left else self.bounds[2]
+        p = c if isinstance(c, tuple) else (c.bounds[0] if left else c.bounds[2])
+        self.translate(dx=p[0] - x)
+        return self
+
+    def vert_align(self, c: Union["Pattern", float], bottom: bool = True) -> "Pattern":
+        x = self.bounds[1] if bottom else self.bounds[3]
+        p = c if isinstance(c, tuple) else (c.bounds[1] if bottom else c.bounds[3])
+        self.translate(dy=p[1] - x)
         return self
 
     def to_gds(self, cell: gy.Cell):
@@ -147,9 +174,6 @@ class Component:
         """
         for path in self.polys:
             cell.add(gy.Polygon(np.asarray(path.exterior.coords.xy).T)) if isinstance(path, Polygon) else cell.add(path)
-
-    def to_nazca_polys(self):
-        return [nd.Polygon(np.asarray(poly.exterior.coords.xy).T) for poly in self.polys]
 
     def plot(self, ax, color):
         ax.add_patch(PolygonPatch(self.pattern, facecolor=color, edgecolor='none'))
@@ -166,40 +190,103 @@ class Component:
     def output_ports(self) -> np.ndarray:
         return np.asarray([])
 
+    def grow(self, grow_d: float, subtract: bool = False, cap_style: int = CAP_STYLE.square) -> "Pattern":
+        rib_pattern = self.pattern.buffer(grow_d, cap_style=cap_style)
+        if subtract:
+            rib_pattern = rib_pattern - self.pattern
+        return Pattern(rib_pattern.geoms if subtract else rib_pattern)
 
-class Box(Component):
-    def __init__(self, box_dim: Dim2, shift: Dim2 = (0, 0), layer: int = 0):
+
+class Multilayer:
+    def __init__(self,
+                 pattern_to_layer: Dict[Union[Pattern, Path, gy.Polygon, gy.FlexPath, Polygon], Union[int, str]]):
+        self.pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
+                                 for comp, layer in pattern_to_layer.items()}
+        self.layer_to_pattern = self._layer_to_pattern()
+
+    @property
+    def input_ports(self) -> np.ndarray:
+        all_input_ports = [c.input_ports for c in self.pattern_to_layer.keys() if c.input_ports.size > 0]
+        return np.vstack(all_input_ports) if len(all_input_ports) > 0 else np.asarray([])
+
+    @property
+    def output_ports(self) -> np.ndarray:
+        all_output_ports = [c.output_ports for c in self.pattern_to_layer.keys() if c.output_ports.size > 0]
+        return np.vstack(all_output_ports) if len(all_output_ports) > 0 else np.asarray([])
+
+    @property
+    def bounds(self) -> Dim4:
+        return self.gdspy_cell().get_bounding_box()
+
+    def gdspy_cell(self, cell_name: str = 'dummy') -> gy.Cell:
+        cell = gy.Cell(cell_name, exclude_from_current=(cell_name == 'dummy'))
+        for pattern, layer in self.pattern_to_layer.items():
+            for poly in pattern.polys:
+                cell.add(gy.Polygon(np.asarray(poly.exterior.coords.xy).T, layer=layer))
+        return cell
+
+    def nazca_cell(self, cell_name: str) -> nd.Cell:
+        with nd.Cell(cell_name) as cell:
+            for pattern, layer in self.pattern_to_layer.items():
+                for poly in pattern.shapely_polys:
+                    nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
+            for idx, port in enumerate(self.input_ports):
+                nd.Pin(f'a{idx}').put(*port)
+            for idx, port in enumerate(self.output_ports):
+                nd.Pin(f'b{idx}').put(*port)
+            nd.put_stub()
+        return cell
+
+    def _layer_to_pattern(self) -> Dict[Union[int, str], MultiPolygon]:
+        layer_to_polys = defaultdict(list)
+        for component, layer in self.pattern_to_layer.items():
+            layer_to_polys[layer].extend(component.shapely_polys)
+        pattern_dict = {layer: cascaded_union(polys) for layer, polys in layer_to_polys.items()}
+        pattern_dict = {layer: (pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern]))
+                        for layer, pattern in pattern_dict.items()}
+        return pattern_dict
+
+    def plot(self, ax, layer_to_color: Dict[Union[int, str], Union[Dim3, str]], alpha: float = 0.5):
+        for layer, pattern in self.layer_to_pattern:
+            ax.add_patch(PolygonPatch(pattern, facecolor=layer_to_color[layer], edgecolor='none', alpha=alpha))
+        b = self.bounds
+        ax.set_xlim((b[0], b[2]))
+        ax.set_ylim((b[1], b[3]))
+        ax.set_aspect('equal')
+
+
+class Box(Pattern):
+    def __init__(self, box_dim: Dim2, shift: Dim2 = (0, 0)):
         self.box_dim = box_dim
 
-        super(Box, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2), shift=shift,
-                                  layer=layer)
+        super(Box, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2), shift=shift)
 
 
-class GratingPad(Component):
-    def __init__(self, pad_dim: Dim2, taper_length: float, final_width: float, out: bool = False,
-                 end_length: Optional[float] = None, bend_dim: Optional[Dim2] = None, shift: Dim2 = (0, 0),
+class GratingPad(Pattern):
+    def __init__(self, pad_dim: Dim2, taper_l: float, final_width: float, out: bool = False,
+                 end_l: Optional[float] = None, bend_dim: Optional[Dim2] = None, shift: Dim2 = (0, 0),
                  layer: int = 0):
         self.pad_dim = pad_dim
-        self.taper_length = taper_length
+        self.taper_l = taper_l
         self.final_width = final_width
         self.out = out
         self.bend_dim = bend_dim
-        self.end_length = taper_length if end_length is None else end_length
+        self.end_l = taper_l if end_l is None else end_l
 
         if out:
             path = Path(final_width)
-            if end_length > 0:
-                path.segment(end_length)
+            if end_l > 0:
+                path.segment(end_l)
             if bend_dim:
                 path.sbend(bend_dim)
             super(GratingPad, self).__init__(
-                path.segment(taper_length, final_width=pad_dim[1]).segment(pad_dim[0]), shift=shift, layer=layer)
+                path.segment(taper_l, final_width=pad_dim[1]).segment(pad_dim[0]), shift=shift)
         else:
-            path = Path(pad_dim[1]).segment(pad_dim[0]).segment(taper_length, final_width=final_width)
+            path = Path(pad_dim[1]).segment(pad_dim[0]).segment(taper_l, final_width=final_width)
             if bend_dim:
                 path.sbend(bend_dim, layer=layer)
-            if end_length > 0:
-                path.segment(end_length, layer=layer)
+            if end_l > 0:
+                path.segment(end_l, layer=layer)
             super(GratingPad, self).__init__(path, shift=shift)
 
     def to(self, port: Dim2):
@@ -211,50 +298,74 @@ class GratingPad(Component):
 
     @property
     def copy(self) -> "GratingPad":
-        return copy.deepcopy(self)
+        return copy(self)
 
 
-class GroupedComponent(Component):
-    def __init__(self, *components: Component, shift: Dim2 = (0, 0)):
-        super(GroupedComponent, self).__init__(*sum([list(component.polys) for component in components], []),
-                                               shift=shift)
+class GroupedPattern(Pattern):
+    def __init__(self, *patterns: Pattern, shift: Dim2 = (0, 0)):
+        self.patterns = patterns
+        super(GroupedPattern, self).__init__(*sum([list(pattern.polys) for pattern in patterns], []),
+                                             shift=shift)
 
     @classmethod
-    def component_with_gratings(cls, component: Component, grating: GratingPad) -> "GroupedComponent":
+    def component_with_gratings(cls, component: Pattern, grating: GratingPad) -> "GroupedPattern":
         components = [component]
-        out_config = copy.deepcopy(grating.config)
+        out_config = copy(grating.config)
         out_config['out'] = True
         out_grating = GratingPad(**out_config)
         components.extend([grating.copy.to(port) for port in component.input_ports])
         components.extend([out_grating.copy.to(port) for port in component.output_ports])
         return cls(*components)
 
+    @property
+    def input_ports(self) -> np.ndarray:
+        input_ports = [c.input_ports for c in self.patterns if c.input_ports.size > 0]
+        return np.vstack(input_ports) if len(input_ports) > 0 else np.asarray([])
 
-class DC(Component):
-    def __init__(self, bend_dim: Dim2, waveguide_width: float, coupling_spacing: float, interaction_length: float,
-                 end_length: float = 0, end_bend_dim: Optional[Dim3] = None, shift: Dim2 = (0, 0), layer: int = 0):
-        self.end_length = end_length
+    @property
+    def output_ports(self) -> np.ndarray:
+        output_ports = [c.output_ports for c in self.patterns if c.output_ports.size > 0]
+        return np.vstack(output_ports) if len(output_ports) > 0 else np.asarray([])
+
+
+class DC(Pattern):
+    def __init__(self, bend_dim: Dim2, waveguide_w: float, gap_w: float, interaction_l: float, end_l: float = 0,
+                 end_bend_dim: Optional[Dim3] = None, use_radius: bool = False, shift: Dim2 = (0, 0)):
+        """Directional coupler
+
+        Args:
+            bend_dim: if use_radius is True (bend_radius, bend_height), else (bend_width, bend_height)
+            waveguide_w: waveguide width
+            gap_w: gap between the waveguides
+            interaction_l: interaction length
+            end_l: end length before and after the bends
+            end_bend_dim: If specified, places an additional end bend (see DC)
+            use_radius: use radius to define bends
+            shift:
+        """
+        self.end_l = end_l
         self.bend_dim = bend_dim
-        self.waveguide_width = waveguide_width
-        self.interaction_length = interaction_length
-        self.coupling_spacing = coupling_spacing
+        self.waveguide_w = waveguide_w
+        self.interaction_l = interaction_l
+        self.gap_w = gap_w
         self.end_bend_dim = end_bend_dim
+        self.use_radius = use_radius
 
-        interport_distance = waveguide_width + 2 * bend_dim[1] + coupling_spacing
+        interport_distance = waveguide_w + 2 * bend_dim[1] + gap_w
         if end_bend_dim:
             interport_distance += 2 * end_bend_dim[1]
 
-        lower_path = Path(waveguide_width).dc(bend_dim, interaction_length, end_length, end_bend_dim=end_bend_dim,
-                                              layer=layer)
-        upper_path = Path(waveguide_width).dc(bend_dim, interaction_length, end_length, end_bend_dim=end_bend_dim,
-                                              inverted=True, layer=layer)
+        lower_path = Path(waveguide_w).dc(bend_dim, interaction_l, end_l, end_bend_dim=end_bend_dim,
+                                          use_radius=use_radius)
+        upper_path = Path(waveguide_w).dc(bend_dim, interaction_l, end_l, end_bend_dim=end_bend_dim,
+                                          inverted=True, use_radius=use_radius)
         upper_path.translate(dx=0, dy=interport_distance)
 
-        super(DC, self).__init__(lower_path, upper_path, shift=shift, layer=layer)
+        super(DC, self).__init__(lower_path, upper_path, shift=shift)
 
     @property
     def input_ports(self) -> np.ndarray:
-        interport_distance = self.waveguide_width + 2 * self.bend_dim[1] + self.coupling_spacing
+        interport_distance = self.waveguide_w + 2 * self.bend_dim[1] + self.gap_w
         if self.end_bend_dim:
             interport_distance += 2 * self.end_bend_dim[1]
         return np.asarray(((0, 0), (0, interport_distance))) + self.shift
@@ -263,30 +374,39 @@ class DC(Component):
     def output_ports(self) -> np.ndarray:
         return self.input_ports + np.asarray((self.size[0], 0))
 
+    @property
+    def interaction_points(self) -> np.ndarray:
+        bl = np.asarray(self.center) - np.asarray((self.interaction_l, self.waveguide_w + self.gap_w)) / 2
+        tl = bl + np.asarray((0, self.waveguide_w + self.gap_w))
+        br = bl + np.asarray((self.interaction_l, 0))
+        tr = tl + np.asarray((self.interaction_l, 0))
+        return np.vstack((bl, tl, br, tr))
 
-class MZI(Component):
-    def __init__(self, bend_dim: Dim2, waveguide_width: float, arm_length: float, coupling_spacing: float,
-                 interaction_length: float, end_length: float = 0, end_bend_dim: Optional[Dim3] = None,
-                 shift: Dim2 = (0, 0), layer: int = 0):
-        self.end_length = end_length
-        self.arm_length = arm_length
+
+class MZI(Pattern):
+    def __init__(self, bend_dim: Dim2, waveguide_w: float, arm_l: float, gap_w: float,
+                 interaction_l: float, end_l: float = 0, end_bend_dim: Optional[Dim3] = None, use_radius: bool = False,
+                 shift: Dim2 = (0, 0)):
+        self.end_l = end_l
+        self.arm_l = arm_l
         self.bend_dim = bend_dim
-        self.waveguide_width = waveguide_width
-        self.interaction_length = interaction_length
-        self.coupling_spacing = coupling_spacing
+        self.waveguide_w = waveguide_w
+        self.interaction_l = interaction_l
+        self.gap_w = gap_w
         self.end_bend_dim = end_bend_dim
+        self.use_radius = use_radius
 
-        lower_path = Path(waveguide_width).mzi(bend_dim, interaction_length, arm_length, end_length,
-                                               end_bend_dim=end_bend_dim, layer=layer)
-        upper_path = Path(waveguide_width).mzi(bend_dim, interaction_length, arm_length, end_length,
-                                               end_bend_dim=end_bend_dim, inverted=True, layer=layer)
-        upper_path.translate(dx=0, dy=waveguide_width + 2 * bend_dim[1] + coupling_spacing)
+        lower_path = Path(waveguide_w).mzi(bend_dim, interaction_l, arm_l, end_l,
+                                           end_bend_dim=end_bend_dim, use_radius=use_radius)
+        upper_path = Path(waveguide_w).mzi(bend_dim, interaction_l, arm_l, end_l,
+                                           end_bend_dim=end_bend_dim, inverted=True, use_radius=use_radius)
+        upper_path.translate(dx=0, dy=waveguide_w + 2 * bend_dim[1] + gap_w)
 
         super(MZI, self).__init__(lower_path, upper_path, shift=shift)
 
     @property
     def input_ports(self) -> np.ndarray:
-        interport_distance = self.waveguide_width + 2 * self.bend_dim[1] + self.coupling_spacing
+        interport_distance = self.waveguide_w + 2 * self.bend_dim[1] + self.gap_w
         if self.end_bend_dim:
             interport_distance += 2 * self.end_bend_dim[1]
         return np.asarray(((0, 0), (0, interport_distance))) + self.shift
@@ -295,34 +415,47 @@ class MZI(Component):
     def output_ports(self) -> np.ndarray:
         return self.input_ports + np.asarray((self.size[0], 0))
 
+    @property
+    def interaction_points(self) -> np.ndarray:
+        input_ports = self.input_ports
+        bl = input_ports[0] + np.asarray(self.bend_dim) + np.asarray(self.end_bend_dim) + np.asarray((self.end_l, 0))
+        tl = bl + np.asarray((self.waveguide_w + self.gap_w, 0))
+        br = bl + np.asarray((self.interaction_l, 0))
+        tr = tl + np.asarray((self.interaction_l, 0))
+        left_dc_pts = np.vstack((bl, tl, br, tr))
+        right_dc_pts = left_dc_pts + np.asarray((self.arm_l + self.bend_dim[0], 0))
+        return np.vstack((left_dc_pts, right_dc_pts))
 
-class MMI(Component):
-    def __init__(self, box_dim: Dim2, waveguide_width: float, interport_distance: float,
-                 taper_dim: Dim2, end_length: float = 0, bend_dim: Optional[Tuple[float, float]] = None,
-                 shift: Dim2 = (0, 0), layer: int = 0):
-        self.end_length = end_length
-        self.waveguide_width = waveguide_width
+
+class MMI(Pattern):
+    def __init__(self, box_dim: Dim2, waveguide_w: float, interport_distance: float,
+                 taper_dim: Dim2, end_l: float = 0, bend_dim: Optional[Tuple[float, float]] = None,
+                 use_radius: bool = False, shift: Dim2 = (0, 0)):
+        self.end_l = end_l
+        self.waveguide_w = waveguide_w
         self.box_dim = box_dim
         self.interport_distance = interport_distance
         self.taper_dim = taper_dim
         self.bend_dim = bend_dim
+        self.use_radius = use_radius
 
         if self.bend_dim:
-            center = (end_length + bend_dim[0] + taper_dim[0] + box_dim[0] / 2, interport_distance / 2 + bend_dim[1])
-            p_00 = Path(waveguide_width).segment(end_length, layer=layer) if end_length > 0 else Path(waveguide_width)
-            p_00.sbend(bend_dim).segment(taper_dim[0], final_width=taper_dim[1], layer=layer)
-            p_01 = Path(waveguide_width, (0, interport_distance + 2 * bend_dim[1]))
-            p_01 = p_01.segment(end_length, layer=layer) if end_length > 0 else p_01
-            p_01.sbend(bend_dim, inverted=True).segment(taper_dim[0], final_width=taper_dim[1], layer=layer)
+            center = (end_l + bend_dim[0] + taper_dim[0] + box_dim[0] / 2, interport_distance / 2 + bend_dim[1])
+            p_00 = Path(waveguide_w).segment(end_l) if end_l > 0 else Path(waveguide_w)
+            p_00.sbend(bend_dim, use_radius=use_radius).segment(taper_dim[0], final_width=taper_dim[1])
+            p_01 = Path(waveguide_w, (0, interport_distance + 2 * bend_dim[1]))
+            p_01 = p_01.segment(end_l) if end_l > 0 else p_01
+            p_01.sbend(bend_dim, inverted=True, use_radius=use_radius).segment(
+                taper_dim[0], final_width=taper_dim[1])
         else:
-            center = (end_length + taper_dim[0] + box_dim[0] / 2, interport_distance / 2)
-            p_00 = Path(waveguide_width).segment(end_length, layer=layer) if end_length > 0 else Path(waveguide_width)
-            p_00.segment(taper_dim[0], final_width=taper_dim[1], layer=layer)
-            p_01 = copy.deepcopy(p_00).translate(dx=0, dy=interport_distance)
+            center = (end_l + taper_dim[0] + box_dim[0] / 2, interport_distance / 2)
+            p_00 = Path(waveguide_w).segment(end_l) if end_l > 0 else Path(waveguide_w)
+            p_00.segment(taper_dim[0], final_width=taper_dim[1])
+            p_01 = copy(p_00).translate(dx=0, dy=interport_distance)
         mmi_start = (center[0] - box_dim[0] / 2, center[1])
-        mmi = Path(box_dim[1], mmi_start).segment(box_dim[0], layer=layer)
-        p_10 = copy.deepcopy(p_01).rotate(np.pi, center)
-        p_11 = copy.deepcopy(p_00).rotate(np.pi, center)
+        mmi = Path(box_dim[1], mmi_start).segment(box_dim[0])
+        p_10 = copy(p_01).rotate(np.pi, center)
+        p_11 = copy(p_00).rotate(np.pi, center)
 
         super(MMI, self).__init__(mmi, p_00, p_01, p_10, p_11, shift=shift)
 
@@ -336,24 +469,23 @@ class MMI(Component):
         return self.input_ports + np.asarray((self.size[0], 0))
 
 
-class Waveguide(Component):
-    def __init__(self, waveguide_width: float, taper_length: float = 0,
+class Waveguide(Pattern):
+    def __init__(self, waveguide_w: float, length: float, taper_l: float = 0,
                  taper_params: Union[np.ndarray, Tuple[float, ...]] = None,
-                 length: float = 5, num_taper_evaluations: int = 100, end_length: float = 0,
-                 shift: Dim2 = (0, 0), layer: int = 0):
-        self.end_length = end_length
+                 num_taper_evaluations: int = 100, end_l: float = 0, shift: Dim2 = (0, 0)):
+        self.end_l = end_l
         self.length = length
-        self.waveguide_width = waveguide_width
-        p = Path(waveguide_width).segment(end_length, layer=layer) if end_length > 0 else Path(waveguide_width)
-        if end_length > 0:
-            p.segment(end_length, layer=layer)
-        if taper_length > 0 or taper_params is not None:
-            p.poly_taper(taper_length, taper_params, num_taper_evaluations, layer)
-        p.segment(length, layer=layer)
-        if taper_length > 0 or taper_params is not None:
-            p.poly_taper(taper_length, taper_params, num_taper_evaluations, layer, inverted=True)
-        if end_length > 0:
-            p.segment(end_length, layer=layer)
+        self.waveguide_w = waveguide_w
+        p = Path(waveguide_w)
+        if end_l > 0:
+            p.segment(end_l)
+        if taper_l > 0 or taper_params is not None:
+            p.poly_taper(taper_l, taper_params, num_taper_evaluations)
+        p.segment(length)
+        if taper_l > 0 or taper_params is not None:
+            p.poly_taper(taper_l, taper_params, num_taper_evaluations, inverted=True)
+        if end_l > 0:
+            p.segment(end_l)
         super(Waveguide, self).__init__(p, shift=shift)
 
     @property
@@ -365,24 +497,70 @@ class Waveguide(Component):
         return self.input_ports + np.asarray((self.size[0], 0))
 
 
-class PlanarNemsPhaseShifter(Component):
-    def __init__(self, waveguide_width: float, side_taper_params: Union[np.ndarray, Tuple[float, ...]],
-                 wg_taper_params: Union[np.ndarray, Tuple[float, ...]], straight_length: float, end_length: float,
-                 init_gap: float, box_h: float, taper_length: float,
-                 num_taper_evaluations: int = 100, shift: Tuple[float, float] = (0, 0),
-                 layer: int = 0):
-        waveguide = Waveguide(waveguide_width, taper_length=taper_length, taper_params=wg_taper_params,
-                              length=straight_length, end_length=end_length, layer=layer,
-                              num_taper_evaluations=num_taper_evaluations)
-        rect = Box((waveguide.size[0] - 2 * end_length, box_h),
-                   layer=layer).translate(dx=end_length, dy=-box_h / 2).pattern
-        subtracted_path = Waveguide(waveguide_width + init_gap * 2, taper_params=side_taper_params,
-                                    taper_length=taper_length, length=straight_length, end_length=end_length,
-                                    layer=layer, num_taper_evaluations=num_taper_evaluations).pattern
-        pattern = MultiPolygon(cascaded_union([rect - subtracted_path, waveguide.pattern]))
+class LateralNemsPhaseShifter(GroupedPattern):
+    def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, end_l: float,
+                 gap_w: float, taper_l: float, num_taper_evaluations: int = 100,
+                 connector_dim: Optional[Dim2] = None, pad_dim: Optional[Dim2] = None,
+                 gap_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                 wg_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                 shift: Tuple[float, float] = (0, 0),
+                 ):
+        """NEMS single-mode phase shifter
 
-        # pattern = gy.boolean(gy.boolean(rect, subtracted_path, "not"), waveguide.pattern, "and", layer=layer)
-        super(PlanarNemsPhaseShifter, self).__init__(*list(pattern), shift=shift)
+        Args:
+            waveguide_w: waveguide width
+            nanofin_w: nanofin width (initial, before tapering)
+            phaseshift_l: phase shift length
+            end_l: end length
+            gap_w: gap width (initial, before tapering)
+            taper_l: taper length
+            num_taper_evaluations: number of taper evalulations (see gdspy)
+            connector_dim: connector xy size
+            pad_dim: silicon handle xy size
+            gap_taper: gap taper polynomial params (recommend same as wg_taper)
+            wg_taper: wg taper polynomial params (recommend same as gap_taper)
+            shift: translate this component in xy
+        """
+        self.waveguide_w = waveguide_w
+        self.nanofin_w = nanofin_w
+        self.phaseshift_l = phaseshift_l
+        self.end_l = end_l
+        self.gap_w = gap_w
+        self.taper_l = taper_l
+        self.num_taper_evaluations = num_taper_evaluations
+        self.connector_dim = connector_dim
+        self.pad_dim = pad_dim
+        self.gap_taper = gap_taper
+        self.wg_taper = wg_taper
+
+        box_w = nanofin_w * 2 + gap_w * 2 + waveguide_w
+        waveguide = Waveguide(waveguide_w, taper_l=taper_l, taper_params=wg_taper, length=phaseshift_l, end_l=end_l,
+                              num_taper_evaluations=num_taper_evaluations)
+        rect = Box((waveguide.size[0] - 2 * end_l, box_w)).center_align(waveguide).pattern
+        gap_path = Waveguide(waveguide_w + gap_w * 2, taper_params=gap_taper,
+                             taper_l=taper_l, length=phaseshift_l, end_l=end_l,
+                             num_taper_evaluations=num_taper_evaluations).pattern
+        nanofins = [Pattern(poly) for poly in (rect - gap_path)]
+
+        connectors, pads = [], []
+
+        if pad_dim is not None:
+            pad = Box(pad_dim).center_align(waveguide)
+            pad_y = nanofin_w + connector_dim[1] + pad_dim[1] / 2
+            pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
+
+        if connector_dim is not None:
+            connector = Box(connector_dim).center_align(waveguide)
+            conn_y = nanofin_w + connector_dim[1] / 2
+            connectors += [
+                copy(connector).translate(dx=end_l + connector_dim[0] / 2, dy=-conn_y),
+                copy(connector).translate(dx=end_l + connector_dim[0] / 2, dy=conn_y),
+                copy(connector).translate(dx=end_l + phaseshift_l - connector_dim[0] / 2, dy=-conn_y),
+                copy(connector).translate(dx=end_l + phaseshift_l - connector_dim[0] / 2, dy=conn_y)
+            ]
+
+        super(LateralNemsPhaseShifter, self).__init__(*([waveguide] + nanofins), shift=shift)
+        self.waveguide, self.connectors, self.pads, self.nanofins = waveguide, connectors, pads, nanofins
 
     @property
     def input_ports(self) -> np.ndarray:
@@ -392,27 +570,220 @@ class PlanarNemsPhaseShifter(Component):
     def output_ports(self) -> np.ndarray:
         return self.input_ports + np.asarray((self.size[0], 0))
 
+    def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], clearout_layer: str,
+                   clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
+                   clearout_etch_stop_grow: float = 0):
 
+        layer_to_metal = {GroupedPattern(*[Box(contact_box_dim).center_align(pad) for pad in self.pads]): layer
+                          for layer in metal_stack_layers}
+
+        clearout = Box(clearout_box_dim).center_align(self.center)
+
+        return Multilayer({
+            self: waveguide_layer,
+            **layer_to_metal,
+            clearout: clearout_layer,
+            clearout.grow(clearout_etch_stop_grow): clearout_etch_stop_layer
+        })
+
+
+class LateralNemsTDC(GroupedPattern):
+    def __init__(self, waveguide_w: float, nanofin_w: float, dc_gap_w: float, beam_gap_w: float, bend_dim: Dim2,
+                 interaction_l: float, end_l: float = 0, end_bend_dim: Optional[Dim3] = None,
+                 connector_dim: Optional[Dim2] = None, pad_dim: Optional[Dim2] = None,
+                 middle_fin_dim: Optional[Dim2] = None, middle_fin_pad_dim: Optional[Dim2] = None,
+                 use_radius: bool = True, shift: Dim2 = (0, 0)):
+        """NEMS tunable directional coupler
+
+        Args:
+            waveguide_w: waveguide width
+            nanofin_w: nanofin width
+            dc_gap_w: directional coupler gap width
+            beam_gap_w: gap betweem the nanofin and the TDC waveguides
+            bend_dim: see DC
+            interaction_l: interaction length
+            end_l: end length before and after the first and last bends
+            end_bend_dim: If specified, places an additional end bend (see DC)
+            connector_dim: If specified, connector xy size
+            pad_dim: If specified, silicon anchor/handle xy size
+            middle_fin_dim: If specified, place a middle fin in the center of the coupling gap
+            middle_fin_pad_dim: If specified, place an anchor pad on the left and right of the middle fin
+                (ensure sufficiently far from the bends!).
+            use_radius: use radius (see DC)
+            shift: translate this component in xy
+        """
+        self.waveguide_w = waveguide_w
+        self.nanofin_w = nanofin_w
+        self.interaction_l = interaction_l
+        self.end_l = end_l
+        self.dc_gap_w = dc_gap_w
+        self.beam_gap_w = beam_gap_w
+        self.connector_dim = connector_dim
+        self.pad_dim = pad_dim
+        self.middle_fin_dim = middle_fin_dim
+        self.use_radius = use_radius
+
+        dc = DC(bend_dim=bend_dim, waveguide_w=waveguide_w, gap_w=dc_gap_w,
+                interaction_l=interaction_l, end_bend_dim=end_bend_dim, end_l=end_l, use_radius=use_radius)
+        connectors, pads = [], []
+
+        nanofin = Box((interaction_l, nanofin_w)).center_align(dc)
+        nanofin_y = nanofin_w / 2 + dc_gap_w / 2 + waveguide_w + beam_gap_w
+        nanofins = [copy(nanofin).translate(dx=0, dy=-nanofin_y), copy(nanofin).translate(dx=0, dy=nanofin_y)]
+        if middle_fin_dim is not None:
+            nanofins.append(Box(middle_fin_dim).center_align(dc))
+
+        if pad_dim is not None:
+            pad = Box(pad_dim).center_align(dc)
+            pad_y = nanofin_w / 2 + connector_dim[1] + pad_dim[1] / 2 + nanofin_y
+            pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
+
+        if connector_dim is not None:
+            connector = Box(connector_dim).center_align(dc)
+            conn_y = nanofin_w / 2 + connector_dim[1] / 2 + nanofin_y
+            connectors += [
+                copy(connector).translate(dx=-interaction_l / 2 + connector_dim[0] / 2, dy=-conn_y),
+                copy(connector).translate(dx=-interaction_l / 2 + connector_dim[0] / 2, dy=conn_y),
+                copy(connector).translate(dx=interaction_l / 2 - connector_dim[0] / 2, dy=-conn_y),
+                copy(connector).translate(dx=interaction_l / 2 - connector_dim[0] / 2, dy=conn_y)
+            ]
+
+        super(LateralNemsTDC, self).__init__(*([dc] + nanofins + connectors + pads), shift=shift)
+        self.dc, self.connectors, self.pads, self.nanofins = dc, connectors, pads, nanofins
+
+    @property
+    def input_ports(self) -> np.ndarray:
+        return self.dc.input_ports + self.shift
+
+    @property
+    def output_ports(self) -> np.ndarray:
+        return self.dc.output_ports
+
+    def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], clearout_layer: str,
+                   contact_box_dim: Dim2, clearout_box_dim: Dim2, clearout_etch_stop_layer: Optional[str] = None,
+                   clearout_etch_stop_grow: float = 0) -> Multilayer:
+
+
+        component_to_layer = {GroupedPattern(*[Box(contact_box_dim).center_align(pad) for pad in self.pads]): layer
+                              for layer in metal_stack_layers}
+
+        clearout = Box(clearout_box_dim).center_align(self.center)
+        component_to_layer[clearout] = clearout_layer
+        component_to_layer[self] = waveguide_layer
+        if clearout_etch_stop_grow > 0 and clearout_etch_stop_layer is not None:
+            component_to_layer[clearout.grow(clearout_etch_stop_grow)] = clearout_etch_stop_layer
+
+        return Multilayer(component_to_layer)
+
+
+class LateralNemsDiffPS(GroupedPattern):
+    def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, end_l: float,
+                 gap_w: float, taper_l: float, interport_w: float, num_taper_evaluations: int = 100,
+                 connector_dim: Optional[Dim2] = None, pad_dim: Optional[Dim2] = None,
+                 gap_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                 wg_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                 shift: Tuple[float, float] = (0, 0)):
+        """NEMS differential phase shifter
+
+        Args:
+            waveguide_w: waveguide width
+            nanofin_w: nanofin width (initial, before tapering)
+            phaseshift_l: phase shift length
+            end_l: end length
+            gap_w: gap width (initial, before tapering)
+            taper_l: taper length
+            interport_w: interport distance between waveguides
+            num_taper_evaluations: number of taper evalulations (see gdspy)
+            connector_dim: connector xy size
+            pad_dim: silicon anchor/handle xy size
+            gap_taper: gap taper polynomial params (recommend same as wg_taper)
+            wg_taper: wg taper polynomial params (recommend same as gap_taper)
+            shift: translate this component in xy
+        """
+        self.waveguide_w = waveguide_w
+        self.nanofin_w = nanofin_w
+        self.phaseshift_l = phaseshift_l
+        self.end_l = end_l
+        self.gap_w = gap_w
+        self.taper_l = taper_l
+        self.interport_w = interport_w
+        self.num_taper_evaluations = num_taper_evaluations
+        self.connector_dim = connector_dim
+        self.pad_dim = pad_dim
+        self.gap_taper = gap_taper
+        self.wg_taper = wg_taper
+
+        ps = LateralNemsPhaseShifter(waveguide_w, nanofin_w, phaseshift_l, end_l, gap_w, taper_l,
+                                     num_taper_evaluations, shift, gap_taper, wg_taper)
+        connectors, pads = [], []
+
+        upper_ps, lower_ps = copy(ps).translate(dy=interport_w / 2), copy(ps).translate(dy=-interport_w / 2)
+
+        if pad_dim is not None:
+            pad_dy = nanofin_w + connector_dim[1] + pad_dim[1] / 2 + gap_w + waveguide_w / 2
+            side_pad = Box(pad_dim).center_align(lower_ps)
+            center_pad = Box((pad_dim[0], interport_w - waveguide_w - 2 * connector_dim[1] - 2 * gap_w - nanofin_w)).center_align(
+                lower_ps).translate(dy=interport_w / 2)
+            side_pads = [copy(side_pad).translate(dy=-pad_dy),
+                         copy(side_pad).translate(dy=pad_dy + interport_w)]
+            pads += [*side_pads, center_pad]
+
+        if connector_dim is not None:
+            for _ps in (upper_ps, lower_ps):
+                connector = Box(connector_dim).center_align(_ps)
+                conn_y = nanofin_w + connector_dim[1] / 2 + gap_w + waveguide_w / 2
+                connectors += [
+                    copy(connector).translate(dx=-phaseshift_l / 2 + connector_dim[0] / 2, dy=-conn_y),
+                    copy(connector).translate(dx=-phaseshift_l / 2 + connector_dim[0] / 2, dy=conn_y),
+                    copy(connector).translate(dx=phaseshift_l / 2 - connector_dim[0] / 2, dy=-conn_y),
+                    copy(connector).translate(dx=phaseshift_l / 2 - connector_dim[0] / 2, dy=conn_y)
+                ]
+
+        super(LateralNemsDiffPS, self).__init__(*([upper_ps, lower_ps] + connectors + pads), shift=shift)
+        self.upper_ps, self.lower_ps, self.connectors, self.pads = upper_ps, lower_ps, connectors, pads
+
+    def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], clearout_layer: str,
+                   clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
+                   clearout_etch_stop_grow: float = 0) -> Multilayer:
+
+        component_to_layer = {GroupedPattern(*[Box(contact_box_dim).center_align(pad) for pad in self.pads]): layer
+                              for layer in metal_stack_layers}
+
+        for ps in (self.upper_ps, self.lower_ps):
+            clearout = Box(clearout_box_dim).center_align(ps.center)
+            component_to_layer[clearout] = clearout_layer
+            if clearout_etch_stop_grow > 0 and clearout_etch_stop_layer is not None:
+                component_to_layer[clearout.grow(clearout_etch_stop_grow)] = clearout_etch_stop_layer
+
+        component_to_layer[self] = waveguide_layer
+        return Multilayer(component_to_layer)
+
+# class MemsTempPDCoupler(GroupedPattern):
+#     def __init__(self, waveguide_w: float, interaction_l: float, end_l: float, gap_w: float, taper_l: float,
+#                  interport_w: float, num_taper_evaluations: int = 100, shift: Tuple[float, float] = (0, 0),
+#                  gap_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+#                  wg_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+#                  connector_dim: Optional[Dim2] = None, pad_dim: Optional[Dim2] = None):
 
 #
-# class RingResonator(Component):
-#     def __init__(self, waveguide_width: float, taper_length: float = 0,
+# class RingResonator(Pattern):
+#     def __init__(self, waveguide_w: float, taper_l: float = 0,
 #                  taper_params: Union[np.ndarray, List[float]] = None,
-#                  length: float = 5, num_taper_evaluations: int = 100, end_length: float = 0,
+#                  length: float = 5, num_taper_evaluations: int = 100, end_l: float = 0,
 #                  shift: Dim2 = (0, 0), layer: int = 0):
-#         self.end_length = end_length
+#         self.end_l = end_l
 #         self.length = length
-#         self.waveguide_width = waveguide_width
-#         p = Path(waveguide_width).segment(end_length, layer=layer) if end_length > 0 else Path(waveguide_width)
-#         if end_length > 0:
-#             p.segment(end_length, layer=layer)
-#         if taper_length > 0 or taper_params is not None:
-#             p.poly_taper(taper_length, taper_params, num_taper_evaluations, layer)
+#         self.waveguide_w = waveguide_w
+#         p = Path(waveguide_w).segment(end_l, layer=layer) if end_l > 0 else Path(waveguide_w)
+#         if end_l > 0:
+#             p.segment(end_l, layer=layer)
+#         if taper_l > 0 or taper_params is not None:
+#             p.poly_taper(taper_l, taper_params, num_taper_evaluations, layer)
 #         p.segment(length, layer=layer)
-#         if taper_length > 0 or taper_params is not None:
-#             p.poly_taper(taper_length, taper_params, num_taper_evaluations, layer, inverted=True)
-#         if end_length > 0:
-#             p.segment(end_length, layer=layer)
+#         if taper_l > 0 or taper_params is not None:
+#             p.poly_taper(taper_l, taper_params, num_taper_evaluations, layer, inverted=True)
+#         if end_l > 0:
+#             p.segment(end_l, layer=layer)
 #         super(RingResonator, self).__init__(p, shift=shift)
 #
 #     @property

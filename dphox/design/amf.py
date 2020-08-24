@@ -459,8 +459,7 @@ class AMFPhotonicChip:
         self.grating.put(nd.cp.x(), nd.cp.y(), 90 * np.sign(angle))
 
     def triangular_mesh(self, n: int, arm_l: float, gap_w: float, interaction_l: float, interport_w: float,
-                        radius: float,
-                        trench_gap: float, with_grating_taps: float = 1, tap_notch: float = 1,
+                        radius: float, trench_gap: float, with_grating_taps: float = 1, tap_notch: float = 1,
                         ignore_internal_sampling: bool = False):
 
         num_straight = (n - 1) - (np.hstack([np.arange(1, n), np.arange(n - 2, 0, -1)]) + 1)

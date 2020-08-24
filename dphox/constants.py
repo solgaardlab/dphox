@@ -81,43 +81,69 @@ AMF_STACK = {
 
 AIM_STACK = {
     'layers': {
-        'si_ridge': [707, 727],  # ream
-        'si': [709, 727],  # seam
-        'sin_bot': [733, 727],  # fnam
-        'sin_top': [735, 727],  # snam
-        'sin_ox_open': [737, 727],  # tzam
-        'trench': [726, 727]  # diam
-    },
-    'cross_sections': {
-        'si_ridge_xs': [
-            {
-                'layer': [707, 727],  # rib etch
-                'growy': 0.004
-            }
-        ],
-        'waveguide_xs': [
-            {
-                'layer': [709, 727],  # waveguide
-                'growy': 0.004
-            }
-        ],
-        'sin_bot_xs': [
-            {
-                'layer': [733, 727],  # sin_bot
-            }
-        ],
-        'sin_top_xs': [
-            {
-                'layer': [735, 727],  # sin_top
-            }
-        ],
-        'trench_xs': [
-            {
-                'layer': [726, 727]  # trench
-            }
-        ]
+        'ream': (707, 727),  # ream, ridge etch
+        'seam': (709, 727),  # seam, silicon etch
+        'fnam': (733, 727),  # fnam, nitride waveguide
+        'snam': (735, 727),  # snam, nitride waveguide
+        'ndam': (791, 727),  # ndam, n implant
+        'nnam': (792, 727),  # nnam, nn implant
+        'nnnam': (793, 727),  # nnnam, nnn implant
+        'pdam': (794, 727),  # pdam, p implant
+        'ppam': (795, 727),  # ppam, pp implant
+        'pppam': (796, 727),  # pppam, ppp implant
+        'tram': (718, 727),  # tram, detector trench
+        'ngam': (776, 727),  # ngam, n-type ion
+        'esam': (720, 727),  # esam, etch nitride etch stop
+        'caam': (721, 727),  # detector contact
+        'cbam': (722, 727),  # contact to Si Level
+        'm1am': (710, 727),  # metal 1 contact to caam/cbam
+        'v1am': (715, 727),  # via to m1am
+        'm2am': (725, 727),  # metal 2 level
+        'vaam': (771, 727),  # aluminum via to m2am
+        'tzam': (737, 727),  # tzam
+        'diam': (726, 727),  # diam, dicing channel
+        'paam': (779, 727),  # metal passivation
+
     }
 }
 
+AIM_PDK = {
+    'cl_band_1p_tap_si': {
+        'a0': (0, 5, 180),
+        'a1': (0, -5, 180),
+        'b0': (40, 5, 0),
+        'b1': (40, -5, 0)
+    },
+    'cl_band_vertical_coupler_si': {
+        'b0': (0, 0, -90),
+    },
+    'cl_band_splitter_4port_si': {
+        'a0': (0, 5, 180),
+        'a1': (0, -5, 180),
+        'b0': (200, 5, 0),
+        'b1': (200, -5, 0)
+    },
+    'cl_band_thermo_optic_switch': {
+        'a0': (0, 5, 180),
+        'a1': (0, -5, 180),
+        'b0': (550, 5, 0),
+        'b1': (550, -5, 0),
+        'p': (272.3, 62.5, 0),
+        'n': (277.3, 62.5, 0)
+    },
+    'cl_band_photodetector_analog': {
+        'a0': 'input',
+        'p': 'p_anode',
+        'n': 'n_anode'
+    },
+    'cl_band_photodetector_digital': {
+        'a0': 'input',
+        'p': 'p_anode',
+        'n': 'n_anode'
+    },
+}
+
+
 AIM_PDK_PASSIVE_PATH = '../../aim_lib/APSUNY_v35a_passive.design'
 AIM_PDK_WAVEGUIDE_PATH = '../../aim_lib/APSUNY_v35_waveguides.design'
+AIM_PDK_ACTIVE_PATH = '../../aim_lib/APSUNY_v35_actives.design'
