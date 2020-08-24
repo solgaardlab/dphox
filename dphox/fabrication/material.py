@@ -11,8 +11,8 @@ class Material:
         return self.name
 
 
-SILICON = Material('Silicon', (0.3, 0.3, 0.3), 12.6)
-POLYSILICON = Material('Poly-Si', (0.5, 0.5, 0.5), 12.6)
+SILICON = Material('Silicon', (0.3, 0.3, 0.3), 12.114)
+POLYSILICON = Material('Poly-Si', (0.5, 0.5, 0.5), 12.114)
 OXIDE = Material('Oxide', (0.6, 0, 0), 2.085)
 NITRIDE = Material('Nitride', (0, 0, 0.7), 3.985)
 LS_NITRIDE = Material('Low-Stress Nitride', (0, 0.4, 1))
