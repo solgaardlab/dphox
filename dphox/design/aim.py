@@ -75,8 +75,9 @@ class AIMNazca:
         return device.nazca_cell('nems_ps')
 
     def nems_diff_ps(self, waveguide_w, nanofin_w, interport_w, phaseshift_l, end_l, gap_w,
-                     taper_l, num_taper_evaluations, pad_dim, connector_dim, gap_taper, wg_taper,
-                     contact_box_dim, clearout_box_dim, clearout_etch_stop_grow,
+                     taper_l, pad_dim, connector_dim,
+                     contact_box_dim, clearout_box_dim, clearout_etch_stop_grow, gap_taper=None, wg_taper=None,
+                     num_taper_evaluations=100,
                      shift: Dim2 = (0, 0)):
         c = LateralNemsDiffPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, interport_w=interport_w,
                               phaseshift_l=phaseshift_l, end_l=end_l, gap_w=gap_w, taper_l=taper_l,
@@ -102,11 +103,9 @@ class AIMNazca:
             pad = self.bond_pad(pad_w=pad_w, pad_l=pad_l)
             for i in range(n_pads):
                 lattice_bond_pads.append(pad.put(i * pitch, 0, 270))
-                message = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='cc', layer=10, height=50)
+                message = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='cc', layer='ream', height=30)
                 message.put(-pitch / 2 + i * pitch, -pad_l / 2)
         return bond_pad_array
-
-
 
 # class AIMPhotonicChip:
 #     def __init__(self, passive_filepath: str, waveguides_filepath: str, active_filepath: str,

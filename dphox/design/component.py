@@ -13,7 +13,7 @@ try:
 except ImportError:
     pass
 
-from simphox.typing import *
+from ..typing import *
 
 
 class Path(gy.Path):
@@ -237,7 +237,7 @@ class Multilayer:
                 for poly in pattern.shapely_polys:
                     nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
             for idx, port in enumerate(self.input_ports):
-                nd.Pin(f'a{idx}').put(*port)
+                nd.Pin(f'a{idx}').put(*port, 180)
             for idx, port in enumerate(self.output_ports):
                 nd.Pin(f'b{idx}').put(*port)
             nd.put_stub()
@@ -556,7 +556,7 @@ class LateralNemsPS(GroupedPattern):
             pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
 
         if connector_dim is not None:
-            connector = Box(connector_dim).center_align(waveguide)
+            connector = Box(self.connector_dim).center_align(waveguide)
             conn_y = nanofin_w + connector_dim[1] / 2
             connectors += [
                 copy(connector).translate(dx=end_l + connector_dim[0] / 2, dy=-conn_y),
@@ -710,7 +710,7 @@ class LateralNemsDiffPS(GroupedPattern):
         self.wg_taper = wg_taper
 
         ps = LateralNemsPS(waveguide_w, nanofin_w, phaseshift_l, end_l, gap_w, taper_l,
-                           num_taper_evaluations, shift, gap_taper, wg_taper)
+                           num_taper_evaluations, gap_taper=gap_taper, wg_taper=wg_taper)
         connectors, pads = [], []
 
         upper_ps, lower_ps = copy(ps).translate(dy=interport_w / 2), copy(ps).translate(dy=-interport_w / 2)
@@ -741,11 +741,11 @@ class LateralNemsDiffPS(GroupedPattern):
 
     @property
     def input_ports(self) -> np.ndarray:
-        return np.vstack(self.upper_ps.input_ports, self.lower_ps.input_ports)
+        return np.vstack((self.upper_ps.input_ports, self.lower_ps.input_ports))
 
     @property
     def output_ports(self) -> np.ndarray:
-        return np.vstack(self.upper_ps.output_ports, self.lower_ps.output_ports)
+        return np.vstack((self.upper_ps.output_ports, self.lower_ps.output_ports))
 
     def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], via_stack_layers: List[str],
                    clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
@@ -914,3 +914,4 @@ def multilayer(waveguide_pattern: Pattern, pads: List[Pattern], clearout_areas: 
             pattern_to_layer[clearout.grow(clearout_etch_stop_grow)] = clearout_etch_stop_layer
 
     return Multilayer(pattern_to_layer)
+

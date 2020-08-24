@@ -108,7 +108,7 @@ AIM_STACK = {
     'cross_sections': {
         'pad_xs': [
             {
-                'layer': 779  # mlam
+                'layer': 779  # paam
             },
             {
                 'layer': 725,  # pad

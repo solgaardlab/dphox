@@ -1,7 +1,7 @@
 import nazca as nd
 import numpy as np
-from simphox.design.amf import AMFPhotonicChip, NazcaVisualizer
-from simphox.constants import AMF_STACK
+from dphox.design.amf import AMFPhotonicChip, NazcaVisualizer
+from dphox.constants import AMF_STACK
 
 if __name__ == 'main':
     waveguide_w = 0.5
