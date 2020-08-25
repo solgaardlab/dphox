@@ -116,6 +116,11 @@ AIM_STACK = {
                 'growy': 60
             }
         ],
+        'waveguide_xs': [
+            {
+                'layer': 709
+            }
+        ]
     }
 }
 

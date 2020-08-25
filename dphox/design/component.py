@@ -202,6 +202,17 @@ class Pattern:
             rib_pattern = rib_pattern - self.pattern
         return Pattern(rib_pattern.geoms if subtract else rib_pattern)
 
+    def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> nd.Cell:
+        with nd.Cell(cell_name) as cell:
+            for poly in self.shapely_polys:
+                nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
+            for idx, port in enumerate(self.input_ports):
+                nd.Pin(f'a{idx}').put(*port, 180)
+            for idx, port in enumerate(self.output_ports):
+                nd.Pin(f'b{idx}').put(*port)
+            nd.put_stub()
+        return cell
+
 
 class Multilayer:
     def __init__(self,
@@ -368,6 +379,7 @@ class DC(Pattern):
         upper_path.translate(dx=0, dy=interport_distance)
 
         super(DC, self).__init__(lower_path, upper_path, shift=shift)
+        self.lower_path, self.upper_path = Pattern(lower_path), Pattern(upper_path)
 
     @property
     def input_ports(self) -> np.ndarray:
@@ -409,6 +421,7 @@ class MZI(Pattern):
         upper_path.translate(dx=0, dy=waveguide_w + 2 * bend_dim[1] + gap_w)
 
         super(MZI, self).__init__(lower_path, upper_path, shift=shift)
+        self.lower_path, self.upper_path = Pattern(lower_path), Pattern(upper_path)
 
     @property
     def input_ports(self) -> np.ndarray:
@@ -478,10 +491,18 @@ class MMI(Pattern):
 class Waveguide(Pattern):
     def __init__(self, waveguide_w: float, length: float, taper_l: float = 0,
                  taper_params: Union[np.ndarray, Tuple[float, ...]] = None,
+                 slot_dim: Optional[Dim2] = None, slot_taper_l: float = 0,
+                 slot_taper_params: Union[np.ndarray, Tuple[float, ...]] = None,
                  num_taper_evaluations: int = 100, end_l: float = 0, shift: Dim2 = (0, 0)):
-        self.end_l = end_l
         self.length = length
         self.waveguide_w = waveguide_w
+        self.taper_l = taper_l
+        self.taper_params = taper_params
+        self.slot_dim = slot_dim
+        self.slot_taper_l = slot_taper_l
+        self.slot_taper_params = slot_taper_params
+        self.end_l = end_l
+
         p = Path(waveguide_w)
         if end_l > 0:
             p.segment(end_l)
@@ -496,7 +517,7 @@ class Waveguide(Pattern):
 
     @property
     def input_ports(self) -> np.ndarray:
-        return np.asarray((0, 0)) + self.shift
+        return np.asarray(((0, 0),)) + self.shift
 
     @property
     def output_ports(self) -> np.ndarray:
@@ -559,13 +580,13 @@ class LateralNemsPS(GroupedPattern):
             connector = Box(self.connector_dim).center_align(waveguide)
             conn_y = nanofin_w + connector_dim[1] / 2
             connectors += [
-                copy(connector).translate(dx=end_l + connector_dim[0] / 2, dy=-conn_y),
-                copy(connector).translate(dx=end_l + connector_dim[0] / 2, dy=conn_y),
-                copy(connector).translate(dx=end_l + phaseshift_l - connector_dim[0] / 2, dy=-conn_y),
-                copy(connector).translate(dx=end_l + phaseshift_l - connector_dim[0] / 2, dy=conn_y)
+                copy(connector).translate(dx=-phaseshift_l / 2 + connector_dim[0] / 2, dy=-conn_y),
+                copy(connector).translate(dx=-phaseshift_l / 2 + connector_dim[0] / 2, dy=conn_y),
+                copy(connector).translate(dx=phaseshift_l / 2 - connector_dim[0] / 2, dy=-conn_y),
+                copy(connector).translate(dx=phaseshift_l / 2 - connector_dim[0] / 2, dy=conn_y)
             ]
 
-        super(LateralNemsPS, self).__init__(*([waveguide] + nanofins), shift=shift)
+        super(LateralNemsPS, self).__init__(*([waveguide] + nanofins + pads + connectors), shift=shift)
         self.waveguide, self.connectors, self.pads, self.nanofins = waveguide, connectors, pads, nanofins
 
     @property
@@ -847,19 +868,6 @@ class NemsMillerNode(GroupedPattern):
         super(NemsMillerNode, self).__init__(*([dc] + nanofins + connectors + pads), shift=shift)
         self.dc, self.connectors, self.nanofins, self.pads = dc, connectors, nanofins, pads
 
-# class Node:
-#     def __init__(self, tunable_splitter: Union[nd.Cell, gy.Cell], input_phase: Union[nd.Cell, gy.Cell]):
-#
-#
-#
-# def mesh_nazca(n, node_cell: nd.Cell, grating_cell: nd.Cell, equal_bends: bool = True, rectangular: bool = False):
-#     if rectangular:
-#         num_straight = np.zeros(n)
-#         num_straight[::2] = 1
-#     else:
-#         num_straight = (n - 1) - (np.hstack([np.arange(1, n), np.arange(n - 2, 0, -1)]) + 1)
-#     n_mzis = (n - num_straight) // 2
-
 
 #
 # class RingResonator(Pattern):
@@ -914,4 +922,3 @@ def multilayer(waveguide_pattern: Pattern, pads: List[Pattern], clearout_areas: 
             pattern_to_layer[clearout.grow(clearout_etch_stop_grow)] = clearout_etch_stop_layer
 
     return Multilayer(pattern_to_layer)
-
