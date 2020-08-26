@@ -1,6 +1,7 @@
 from collections import defaultdict
 
 import gdspy as gy
+import nazca as nd
 from copy import deepcopy as copy
 from shapely.vectorized import contains
 from shapely.geometry import Polygon, MultiPolygon, CAP_STYLE
@@ -9,7 +10,6 @@ from descartes import PolygonPatch
 
 try:
     import plotly.graph_objects as go
-    import nazca as nd
 except ImportError:
     pass
 
@@ -17,8 +17,8 @@ from ..typing import *
 
 
 class Path(gy.Path):
-    def poly_taper(self, length: float, taper_params: Union[np.ndarray, Tuple[float, ...]],
-                   num_taper_evaluations: int = 100, layer: int = 0, inverted: bool = False):
+    def polynomial_taper(self, length: float, taper_params: Union[np.ndarray, Tuple[float, ...]],
+                         num_taper_evaluations: int = 100, layer: int = 0, inverted: bool = False):
         curr_width = self.w * 2
         taper_params = np.asarray(taper_params)
         self.parametric(lambda u: (length * u, 0),
@@ -89,6 +89,11 @@ class Path(gy.Path):
             self.sbend(end_bend_dim[:2], layer, not inverted)
             if end_bend_dim[-1] > 0:
                 self.segment(end_bend_dim[-1], layer=layer)
+        return self
+
+    def trombone(self, height: float, radius: float):
+        self.turn(radius, np.pi / 2, number_of_points=199).segment(height)
+        self.turn(radius, -np.pi, number_of_points=199).segment(height).turn(radius, np.pi / 2, number_of_points=199)
         return self
 
     def to(self, port: Dim2):
@@ -507,10 +512,10 @@ class Waveguide(Pattern):
         if end_l > 0:
             p.segment(end_l)
         if taper_l > 0 or taper_params is not None:
-            p.poly_taper(taper_l, taper_params, num_taper_evaluations)
+            p.polynomial_taper(taper_l, taper_params, num_taper_evaluations)
         p.segment(length)
         if taper_l > 0 or taper_params is not None:
-            p.poly_taper(taper_l, taper_params, num_taper_evaluations, inverted=True)
+            p.polynomial_taper(taper_l, taper_params, num_taper_evaluations, inverted=True)
         if end_l > 0:
             p.segment(end_l)
         super(Waveguide, self).__init__(p, shift=shift)
@@ -530,8 +535,7 @@ class LateralNemsPS(GroupedPattern):
                  connector_dim: Optional[Dim2] = None, pad_dim: Optional[Dim2] = None,
                  gap_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                  wg_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
-                 shift: Tuple[float, float] = (0, 0),
-                 ):
+                 shift: Tuple[float, float] = (0, 0)):
         """NEMS single-mode phase shifter
 
         Args:
@@ -665,7 +669,7 @@ class LateralNemsTDC(GroupedPattern):
 
         if connector_dim is not None:
             connector = Box(connector_dim).center_align(dc)
-            conn_y = nanofin_w / 2 + connector_dim[1] / 2 + nanofin_y
+            conn_y = nanofin_w + connector_dim[1] / 2 + nanofin_y
             connectors += [
                 copy(connector).translate(dx=-interaction_l / 2 + connector_dim[0] / 2, dy=-conn_y),
                 copy(connector).translate(dx=-interaction_l / 2 + connector_dim[0] / 2, dy=conn_y),
@@ -807,6 +811,72 @@ class MemsMonitorCoupler(Pattern):
         self.pads = pads[:1]
 
 
+class Interposer(Pattern):
+    def __init__(self, waveguide_w: float, n: int, period: float, radius: float, trombone_radius: Optional[float] = None,
+                 final_period: Optional[float] = None, self_coupling_extension_dim: Optional[Dim2] = None,
+                 horiz_dist: float = 0, shift: Optional[Dim2] = (0, 0)):
+        trombone_radius = radius if trombone_radius is None else trombone_radius
+        final_period = period if final_period is None else final_period
+        period_diff = final_period - period
+        paths = []
+        init_pos = np.zeros((n, 2))
+        final_pos = np.zeros_like(init_pos)
+        for idx in range(n):
+            radius = period_diff / 2 if not radius else radius
+            angle_r = np.sign(period_diff) * np.arccos(1 - np.abs(period_diff) / 4 / radius)
+            angled_length = np.abs(period_diff / np.sin(angle_r))
+            x_length = np.abs(period_diff / np.tan(angle_r))
+            angle = angle_r
+            path = Path(waveguide_w).segment(length=0).translate(dx=0, dy=period * idx)
+            mid = int(np.ceil(n / 2))
+            max_length_diff = (angled_length - x_length) * (mid - 1)
+            num_trombones = int(np.ceil(max_length_diff / 2 / (final_period - 3 * radius)))
+            length_diff = (angled_length - x_length) * idx if idx < mid else (angled_length - x_length) * (n - 1 - idx)
+            path.segment(horiz_dist)
+            if idx < mid:
+                path.turn(radius, -angle)
+                path.segment(angled_length * (mid - idx - 1))
+                path.turn(radius, angle)
+                path.segment(x_length * (idx + 1))
+            else:
+                path.turn(radius, angle)
+                path.segment(angled_length * (mid - n + idx))
+                path.turn(radius, -angle)
+                path.segment(x_length * (n - idx))
+            for _ in range(num_trombones):
+                path.trombone(length_diff / 2 / num_trombones, radius=trombone_radius)
+            paths.append(path)
+            init_pos[idx] = np.asarray((0, period * idx))
+            final_pos[idx] = np.asarray((path.x, path.y))
+
+        if self_coupling_extension_dim is not None:
+            dx, dy = final_pos[0, 0], final_pos[0, 1]
+            radius, grating_length = self_coupling_extension_dim
+            self_coupling_path = Path(width=waveguide_w).rotate(-np.pi).translate(dx=dx, dy=dy - final_period)
+            self_coupling_path.turn(radius, np.pi)
+            self_coupling_path.segment(length=grating_length + 5)
+            self_coupling_path.turn(radius=radius, angle=np.pi / 2)
+            self_coupling_path.segment(length=final_period * (n + 1) + 2 * radius)
+            self_coupling_path.turn(radius=radius, angle=np.pi / 2)
+            self_coupling_path.segment(length=grating_length + 5)
+            self_coupling_path.turn(radius=radius, angle=np.pi)
+            paths.append(self_coupling_path)
+
+        super(Interposer, self).__init__(*paths, shift=shift)
+        self.self_coupling_path = None if self_coupling_extension_dim is None else paths[-1]
+        self.paths = paths
+        self.init_pos = init_pos
+        self.final_pos = final_pos
+
+    @property
+    def input_ports(self) -> np.ndarray:
+        return self.init_pos + self.shift
+
+    @property
+    def output_ports(self) -> np.ndarray:
+        return self.final_pos + self.shift
+
+
 class NemsMillerNode(GroupedPattern):
     def __init__(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
                  gap_w: float, bend_radius: float, bend_extension: float, lr_nanofin_w: float,
@@ -868,8 +938,26 @@ class NemsMillerNode(GroupedPattern):
         super(NemsMillerNode, self).__init__(*([dc] + nanofins + connectors + pads), shift=shift)
         self.dc, self.connectors, self.nanofins, self.pads = dc, connectors, nanofins, pads
 
+    @property
+    def input_ports(self) -> np.ndarray:
+        bend_height = 2 * self.bend_radius + self.bend_extension
+        return np.asarray(((0, 0), (0, self.waveguide_w + 2 * bend_height + self.gap_w)))
 
-#
+    @property
+    def output_ports(self) -> np.ndarray:
+        # TODO(sunil): change this to correct method
+        return self.input_ports + np.asarray((self.size[0], 0))
+
+    def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], via_stack_layers: List[str],
+                   clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
+                   doping_stack_layer: Optional[str] = None,
+                   clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
+        return multilayer(self, self.pads, ((self.center[0], self.pads[1].center[1]),),
+                          waveguide_layer, metal_stack_layers,
+                          via_stack_layers, clearout_layer, clearout_etch_stop_layer, contact_box_dim,
+                          clearout_box_dim, doping_stack_layer, clearout_etch_stop_grow, via_shrink, doping_grow)
+
+
 # class RingResonator(Pattern):
 #     def __init__(self, waveguide_w: float, taper_l: float = 0,
 #                  taper_params: Union[np.ndarray, List[float]] = None,
@@ -882,10 +970,10 @@ class NemsMillerNode(GroupedPattern):
 #         if end_l > 0:
 #             p.segment(end_l, layer=layer)
 #         if taper_l > 0 or taper_params is not None:
-#             p.poly_taper(taper_l, taper_params, num_taper_evaluations, layer)
+#             p.polynomial_taper(taper_l, taper_params, num_taper_evaluations, layer)
 #         p.segment(length, layer=layer)
 #         if taper_l > 0 or taper_params is not None:
-#             p.poly_taper(taper_l, taper_params, num_taper_evaluations, layer, inverted=True)
+#             p.polynomial_taper(taper_l, taper_params, num_taper_evaluations, layer, inverted=True)
 #         if end_l > 0:
 #             p.segment(end_l, layer=layer)
 #         super(RingResonator, self).__init__(p, shift=shift)
@@ -899,7 +987,7 @@ class NemsMillerNode(GroupedPattern):
 #         return self.input_ports + np.asarray((self.size[0], 0))
 
 
-def multilayer(waveguide_pattern: Pattern, pads: List[Pattern], clearout_areas: Tuple,
+def multilayer(waveguide_pattern: Pattern, pads: List[Pattern], clearout_areas: Tuple[Union[Dim2, Pattern], ...],
                waveguide_layer: str, metal_stack_layers: List[str],
                via_stack_layers: List[str], clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2,
                clearout_box_dim: Dim2, doping_stack_layer: Optional[str] = None,
@@ -910,7 +998,7 @@ def multilayer(waveguide_pattern: Pattern, pads: List[Pattern], clearout_areas: 
     pattern_to_layer.update({GroupedPattern(*[Box(contact_box_dim).center_align(pad).grow(-via_shrink)
                                               for pad in pads]): layer for layer in via_stack_layers})
     if doping_stack_layer is not None:
-        pattern_to_layer[GroupedPattern(*[Box(contact_box_dim).center_align(pad).grow(doping_grow)
+        pattern_to_layer[GroupedPattern(*[Box(pad.size).center_align(pad).grow(doping_grow)
                                           for pad in pads])] = doping_stack_layer
 
     pattern_to_layer[waveguide_pattern] = waveguide_layer

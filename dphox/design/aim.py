@@ -2,11 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thu Apr 23 17:19:16 2020
-@author: Yu Miao, Sunil Pai, Nate Abebe, Rebecca Hwang
+@author: Sunil Pai, Nate Abebe, Rebecca Hwang, Yu Miao
 """
-
-import nazca as nd
-from typing import Dict
 
 from . import *
 from ..constants import AIM_PDK_WAVEGUIDE_PATH, AIM_PDK_PASSIVE_PATH, AIM_PDK_ACTIVE_PATH, AIM_STACK, AIM_PDK
@@ -48,7 +45,7 @@ class AIMNazca:
 
     def nems_tdc(self, waveguide_w, nanofin_w, interaction_l, end_l, dc_gap_w,
                  beam_gap_w, bend_dim, pad_dim, connector_dim, middle_fin_dim, use_radius,
-                 contact_box_dim, clearout_box_dim, clearout_etch_stop_grow,
+                 contact_box_dim, clearout_box_dim, clearout_etch_stop_grow: float = 0.5,
                  diff_ps: Optional[nd.Cell] = None) -> nd.Cell:
         c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w, interaction_l=interaction_l,
                            end_l=end_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
@@ -60,10 +57,11 @@ class AIMNazca:
                               contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
                               clearout_etch_stop_grow=clearout_etch_stop_grow)
         cell = device.nazca_cell('nems_tdc')
-        return _tdc_node(diff_ps, cell) if diff_ps is not None else cell
+        return tdc_node(diff_ps, cell) if diff_ps is not None else cell
 
     def nems_ps(self, waveguide_w, nanofin_w, phaseshift_l, end_l, gap_w,
-                taper_l, pad_dim, connector_dim, contact_box_dim, clearout_box_dim, clearout_etch_stop_grow,
+                taper_l, pad_dim, connector_dim, contact_box_dim, clearout_box_dim,
+                clearout_etch_stop_grow: float = 0.5,
                 gap_taper=None, wg_taper=None, num_taper_evaluations=100) -> nd.Cell:
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l,
                           end_l=end_l, gap_w=gap_w, taper_l=taper_l, num_taper_evaluations=num_taper_evaluations,
@@ -75,9 +73,25 @@ class AIMNazca:
                               clearout_etch_stop_grow=clearout_etch_stop_grow)
         return device.nazca_cell('nems_ps')
 
+    def nems_double_ps(self, waveguide_w, nanofin_w, interport_w, phaseshift_l, end_l, gap_w,
+                       taper_l, pad_dim, connector_dim, contact_box_dim, clearout_box_dim,
+                       clearout_etch_stop_grow: float = 0.5, gap_taper=None, wg_taper=None, num_taper_evaluations=100):
+        with nd.Cell('double_ps') as cell:
+            ps = self.nems_ps(waveguide_w, nanofin_w, phaseshift_l, end_l, gap_w,
+                              taper_l, pad_dim, connector_dim, contact_box_dim, clearout_box_dim,
+                              clearout_etch_stop_grow, gap_taper, wg_taper, num_taper_evaluations)
+            pl = ps.put()
+            nd.Pin('a1').put(pl.pin['a0'])
+            nd.Pin('b1').put(pl.pin['b0'])
+            pu = ps.put(0, interport_w)
+            nd.Pin('a0').put(pu.pin['a0'])
+            nd.Pin('b0').put(pu.pin['b0'])
+        return cell
+
     def nems_diff_ps(self, waveguide_w, nanofin_w, interport_w, phaseshift_l, end_l, gap_w,
                      taper_l, pad_dim, connector_dim,
-                     contact_box_dim, clearout_box_dim, clearout_etch_stop_grow, gap_taper=None, wg_taper=None,
+                     contact_box_dim, clearout_box_dim, clearout_etch_stop_grow: float = 0.5, gap_taper=None,
+                     wg_taper=None,
                      num_taper_evaluations=100) -> nd.Cell:
         c = LateralNemsDiffPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, interport_w=interport_w,
                               phaseshift_l=phaseshift_l, end_l=end_l, gap_w=gap_w, taper_l=taper_l,
@@ -89,6 +103,43 @@ class AIMNazca:
                               contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
                               clearout_etch_stop_grow=clearout_etch_stop_grow)
         return device.nazca_cell('nems_diff_ps')
+
+    def nems_miller_node(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
+                         gap_w: float, bend_radius: float, bend_extension: float, lr_nanofin_w: float,
+                         ud_nanofin_w: float, lr_gap_w: float, ud_gap_w: float,
+                         contact_box_dim: Dim2, clearout_box_dim: Dim2, clearout_etch_stop_grow: float = 0.5,
+                         lr_pad_dim: Optional[Dim2] = None,
+                         ud_pad_dim: Optional[Dim2] = None, lr_connector_dim: Optional[Dim2] = None,
+                         ud_connector_dim: Optional[Dim2] = None, ) -> nd.Cell:
+        c = NemsMillerNode(waveguide_w=waveguide_w, upper_interaction_l=upper_interaction_l, gap_w=gap_w,
+                           lower_interaction_l=lower_interaction_l, bend_radius=bend_radius,
+                           bend_extension=bend_extension, lr_nanofin_w=lr_nanofin_w, ud_nanofin_w=ud_nanofin_w,
+                           lr_gap_w=lr_gap_w, ud_gap_w=ud_gap_w, lr_pad_dim=lr_pad_dim,
+                           ud_pad_dim=ud_pad_dim, lr_connector_dim=lr_connector_dim, ud_connector_dim=ud_connector_dim)
+        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
+                              doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
+                              clearout_layer='tram', clearout_etch_stop_layer='esam',
+                              contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
+                              clearout_etch_stop_grow=clearout_etch_stop_grow)
+        return device.nazca_cell('nems_miller_node')
+
+    def interposer(self, waveguide_w: float, n: int, period: float, radius: float,
+                   trombone_radius: Optional[float] = None,
+                   final_period: Optional[float] = None, self_coupling_extension_dim: Optional[Dim2] = None,
+                   horiz_dist: float = 0, with_gratings: bool = True):
+        device = Multilayer({Interposer(waveguide_w, n, period, radius, trombone_radius, final_period,
+                                        self_coupling_extension_dim, horiz_dist): 'seam'})
+        if with_gratings:
+            with nd.Cell('interposer_with_gratings') as cell:
+                interposer = device.nazca_cell('interposer').put()
+                if self_coupling_extension_dim is not None:
+                    x, y = interposer.pin['b0'].x, interposer.pin['b0'].y
+                    self.grating_array(n + 2, period=final_period).put(x, y - final_period)
+                else:
+                    self.grating_array(n, period=final_period).put(interposer.pin['b0'])
+            return cell
+        else:
+            return device.nazca_cell('interposer')
 
     def bond_pad(self, pad_w: float = 60, pad_l: float = 60):
         with nd.Cell(name='bond_pad') as bond_pad:
@@ -135,14 +186,15 @@ class AIMNazca:
     def triangular_mzi_mesh(self, n: int, waveguide_w: float, nanofin_w: float, arm_l: float, end_l: float,
                             ps_gap_w: float, interport_w: float, pad_dim: Optional[Dim2],
                             connector_dim: Optional[Dim2], contact_box_dim: Dim2, clearout_box_dim: Dim2, radius: float,
-                            taper_l: float = 0, clearout_etch_stop_grow: Dim2 = 0.5,
+                            taper_l: float = 0, clearout_etch_stop_grow: float = 0.5,
                             gap_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                             wg_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                             num_taper_evaluations: int = 100, tap_radius: float = 5, custom_dc: bool = False,
-                            interaction_l: float = None, gap_w: float = None):
-        diff_ps = self.nems_diff_ps(waveguide_w, nanofin_w, interport_w, arm_l, 0, ps_gap_w, taper_l,
-                                    pad_dim, connector_dim, contact_box_dim, clearout_box_dim,
-                                    clearout_etch_stop_grow, gap_taper, wg_taper, num_taper_evaluations)
+                            interaction_l: float = None, gap_w: float = None, use_diff_ps: bool = False):
+        ps_params = (waveguide_w, nanofin_w, interport_w, arm_l, 0, ps_gap_w, taper_l,
+                     pad_dim, connector_dim, contact_box_dim, clearout_box_dim,
+                     clearout_etch_stop_grow, gap_taper, wg_taper, num_taper_evaluations)
+        diff_ps = self.nems_diff_ps(*ps_params) if use_diff_ps else self.nems_double_ps(*ps_params)
         ps = self.nems_ps(waveguide_w, nanofin_w, arm_l, 0, ps_gap_w, taper_l,
                           pad_dim, connector_dim, contact_box_dim, clearout_box_dim,
                           clearout_etch_stop_grow, gap_taper, wg_taper, num_taper_evaluations)
@@ -156,7 +208,7 @@ class AIMNazca:
             dc_width = dc.pin['b0'].x - dc.pin['a0'].x
             dc_dummy = Waveguide(waveguide_w, dc_width).nazca_cell('straight_dc_dummy', 'seam')
         tap = self.bidirectional_tap(tap_radius) if tap_radius > 0 else None
-        node, dummy = _mzi_node(diff_ps, dc, tap), _mzi_dummy(ps, dc_dummy, tap)
+        node, dummy = mzi_node(diff_ps, dc, tap), _mzi_dummy(ps, dc_dummy, tap)
         return _triangular_mesh(n, self.waveguide_ic, node, dummy, interport_w, end_l)
 
     def triangular_tdc_mesh(self, n: int, waveguide_w: float, nanofin_w: float, arm_l: float, gap_w: float,
@@ -165,8 +217,9 @@ class AIMNazca:
                             beam_gap_w: float, tdc_pad_dim, tdc_connector_dim, middle_fin_dim,
                             ps_contact_box_dim: Dim2, ps_clearout_box_dim: Dim2,
                             tdc_contact_box_dim: Dim2, tdc_clearout_box_dim: Dim2, radius: float,
-                            clearout_etch_stop_grow: Dim2, gap_taper: Union[np.ndarray, Tuple[float, ...]],
-                            wg_taper: Union[np.ndarray, Tuple[float, ...]], num_taper_evaluations: int = 100,
+                            gap_taper: Union[np.ndarray, Tuple[float, ...]],
+                            wg_taper: Union[np.ndarray, Tuple[float, ...]],
+                            clearout_etch_stop_grow: float = 0.5, num_taper_evaluations: int = 100,
                             tap_radius: float = 10, use_radius: bool = True):
         bend_dim = (radius, (interport_w - gap_w - waveguide_w) / 2)
         diff_ps = self.nems_diff_ps(waveguide_w, nanofin_w, interport_w, arm_l, 0, gap_w, ps_taper_l,
@@ -181,15 +234,26 @@ class AIMNazca:
         dc_width = tdc.bbox[2] - tdc.bbox[0]
         dc_dummy = Waveguide(waveguide_w, dc_width).nazca_cell('straight_tdc_dummy', 'seam')
         tap = self.bidirectional_tap(tap_radius) if tap_radius > 0 else None
-        node, dummy = _mzi_node(diff_ps, tdc, tap), _mzi_dummy(ps, dc_dummy, tap)
+        node, dummy = mzi_node(diff_ps, tdc, tap), _mzi_dummy(ps, dc_dummy, tap)
         return _triangular_mesh(n, self.waveguide_ic, node, dummy, interport_w, end_l)
+
+    def grating_array(self, n: int, period: float, turn_radius: float = 0,
+                      connector_x: float = 0, connector_y: float = 0):
+        with nd.Cell(name=f'grating_array_{n}_{period}') as gratings:
+            for idx in range(n):
+                self.waveguide_ic.strt(length=connector_x).put(0, period * idx)
+                if turn_radius > 0:
+                    self.waveguide_ic.bend(turn_radius, angle=90).put()
+                self.waveguide_ic.strt(length=connector_y).put()
+                self.pdk_cells['cl_band_vertical_coupler_si'].put(nd.cp.x(), nd.cp.y(), -90)
+        return gratings
 
 
 def _mzi_angle(waveguide_w: float, gap_w: float, interport_w: float, radius: float):
     return np.arccos(1 - (interport_w - gap_w - waveguide_w) / 4 / radius) * 180 / np.pi
 
 
-def _mzi_node(diff_ps: nd.Cell, dc: nd.Cell, tap: Optional[nd.Cell] = None):
+def mzi_node(diff_ps: nd.Cell, dc: nd.Cell, tap: Optional[nd.Cell] = None):
     with nd.Cell(name=f'mzi') as node:
         input_ps = diff_ps.put()
         first_dc = dc.put(input_ps.pin['b0'])
@@ -208,7 +272,7 @@ def _mzi_node(diff_ps: nd.Cell, dc: nd.Cell, tap: Optional[nd.Cell] = None):
     return node
 
 
-def _tdc_node(diff_ps: nd.Cell, tdc: nd.Cell, tap: Optional[nd.Cell] = None):
+def tdc_node(diff_ps: nd.Cell, tdc: nd.Cell, tap: Optional[nd.Cell] = None):
     with nd.Cell(name=f'tdc') as node:
         input_ps = diff_ps.put()
         _tdc = tdc.put(input_ps.pin['b0'])
@@ -265,8 +329,8 @@ def _dc_bb_bends(chip: AIMNazca, mzi_bb: nd.Cell, bend_radius: float, interport_
     return cell
 
 
-def _triangular_mesh(n: int, waveguide_ic: nd.interconnects.Interconnect,
-                     node: nd.Cell, dummy: nd.Cell, interport_w: float, end_l: float):
+def _triangular_mesh(n: int, waveguide_ic: nd.interconnects.Interconnect, node: nd.Cell, dummy: nd.Cell,
+                     interport_w: float, end_l: float):
     num_straight = (n - 1) - np.hstack([np.arange(1, n), np.arange(n - 2, 0, -1)]) - 1
     n_layers = num_straight.size
     curr_x = 0
@@ -281,4 +345,7 @@ def _triangular_mesh(n: int, waveguide_ic: nd.interconnects.Interconnect,
                     _dummy = dummy.put(curr_x, interport_w * idx)
                     end = waveguide_ic.strt(end_l).put(_dummy.pin['b0'])
             curr_x = end.pin['b0'].x
+        for idx in range(n):
+            nd.Pin(f'a{idx}').put(0, interport_w * idx, -180)
+            nd.Pin(f'b{idx}').put(curr_x, interport_w * idx, 0)
     return triangular_mesh
