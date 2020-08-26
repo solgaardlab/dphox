@@ -88,6 +88,29 @@ class AIMNazca:
             nd.Pin('b0').put(pu.pin['b0'])
         return cell
 
+    def thermal_double_ps(self, interport_w: float, end_l: float = 0):
+        with nd.Cell('thermal_double_ps') as cell:
+            pl = self.waveguide_ic.strt(end_l)
+            nd.Pin('a1').put(pl.pin['a0'])
+            self.pdk_cells['cl_band_thermo_optic_phase_shifter'].put()
+            pl = self.waveguide_ic.strt(end_l)
+            nd.Pin('b1').put(pl.pin['b0'])
+            pu = self.waveguide_ic.strt(end_l).put(0, interport_w)
+            nd.Pin('a0').put(pu.pin['a0'])
+            self.pdk_cells['cl_band_thermo_optic_phase_shifter'].put()
+            pu = self.waveguide_ic.strt(end_l)
+            nd.Pin('b0').put(pu.pin['b0'])
+        return cell
+
+    def thermal_ps(self, end_l: float = 0):
+        with nd.Cell('thermal_ps') as cell:
+            pu = self.waveguide_ic.strt(end_l).put()
+            nd.Pin('a0').put(pu.pin['a0'])
+            self.pdk_cells['cl_band_thermo_optic_phase_shifter'].put()
+            pu = self.waveguide_ic.strt(end_l)
+            nd.Pin('b0').put(pu.pin['b0'])
+        return cell
+
     def nems_diff_ps(self, waveguide_w, nanofin_w, interport_w, phaseshift_l, end_l, gap_w,
                      taper_l, pad_dim, connector_dim,
                      contact_box_dim, clearout_box_dim, clearout_etch_stop_grow: float = 0.5, gap_taper=None,
@@ -349,3 +372,16 @@ def _triangular_mesh(n: int, waveguide_ic: nd.interconnects.Interconnect, node: 
             nd.Pin(f'a{idx}').put(0, interport_w * idx, -180)
             nd.Pin(f'b{idx}').put(curr_x, interport_w * idx, 0)
     return triangular_mesh
+
+
+
+
+def _binary_tree_analyzer(n: int, waveguide_ic: nd.interconnects.Interconnect, node: nd.Cell, dummy: nd.Cell,
+                          interport_w: float, end_l: float):
+    pass
+
+def _binary_tree_recursive(waveguide_ic: nd.interconnects.Interconnect, node: nd.Cell, dummy: nd.Cell,
+                           interport_w: float, end_l: float):
+    pass
+
+
