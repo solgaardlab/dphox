@@ -118,14 +118,26 @@ class AIMNazca:
             nd.Pin('b0').put(100, 0, 0)
         return cell
     def nems_psv3(self, waveguide_w, nanofin_w, phaseshift_l, end_l, gap_w,
-                taper_l, pad_dim, connector_dim, contact_box_dim, clearout_box_dim, clearout_etch_stop_grow,
-                gap_taper=None, wg_taper=None, num_taper_evaluations=100, version=3,
-                taper2_l=0,gap2_taper=None, wg2_taper=None) -> nd.Cell:
-        c = LateralNemsPSNate(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, nanofin_radius= 0,
-                          end_l=end_l, gap_w=gap_w, taper_l=taper_l, num_taper_evaluations=num_taper_evaluations,
-                          pad_dim=pad_dim, connector_tether_dim=connector_dim, gap_taper=gap_taper, wg_taper=wg_taper,
-                          version=version,
-                          taper2_l=taper2_l,gap2_taper=gap2_taper, wg2_taper=wg2_taper,)
+                contact_box_dim: Dim2, clearout_box_dim: Dim2,
+                nanofin_radius: float = 2,
+                taper1_l:float = 0, 
+                pad_dim: Optional[Dim3] = None, connector_tether_dim: Optional[Dim4] = None, clearout_etch_stop_grow: float = 0,
+                gap1_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None, wg1_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                num_taper_evaluations=100, shift: Tuple[float, float] = (0, 0),
+                taper2_l:float = 0,
+                gap2_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None, wg2_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                oxide_crossing_l: float = 5, gap_electrode:float = 1 ) -> nd.Cell:
+        c = LateralNemsPSNate(waveguide_w = waveguide_w, nanofin_w = nanofin_w, phaseshift_l = phaseshift_l,
+                            end_l = end_l,
+                            nanofin_radius = nanofin_radius, gap_w = gap_w, taper1_l = taper1_l,
+                            num_taper_evaluations = num_taper_evaluations,
+                            pad_dim = pad_dim, connector_tether_dim = connector_tether_dim,
+                            gap1_taper = gap1_taper,
+                            wg1_taper = wg1_taper,
+                            shift = shift, 
+                            taper2_l = taper2_l,
+                            wg2_taper = wg2_taper,
+                            oxide_crossing_l = oxide_crossing_l, gap_electrode = gap_electrode)
         device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
                               doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
                               clearout_layer='tram', clearout_etch_stop_layer='esam',
