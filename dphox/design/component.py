@@ -754,7 +754,7 @@ class LateralNemsPSNate(GroupedPattern):
 class LateralNemsPS(GroupedPattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, end_l: float,
                  nanofin_radius: float, gap_w: float, taper_l: float, num_taper_evaluations: int = 100,
-                 pad_dim: Optional[Dim3] = None, connector_tether_dim: Optional[Dim4] = None,
+                 pad_dim: Optional[Dim3] = None, connector_tether_dim: Optional[Dim5] = None,
                  gap_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                  wg_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                  shift: Tuple[float, float] = (0, 0)):
@@ -762,13 +762,15 @@ class LateralNemsPS(GroupedPattern):
         Args:
             waveguide_w: waveguide width
             nanofin_w: nanofin width (initial, before tapering)
+            nanofin_radius: nanofin radius
             phaseshift_l: phase shift length
             end_l: end length
             gap_w: gap width (initial, before tapering)
             taper_l: taper length
-            num_taper_evaluations: number of taper evalulations (see gdspy)
+            num_taper_evaluations: number of taper evaluations (see gdspy)
             pad_dim: silicon handle xy size followed by distance between pad and fin to actuate
-            connector_tether_dim: dimensions for the connector tether (x, y for tether box and thickness of fin and connectors to fin)
+            connector_tether_dim: dimensions for the connector tether (x, y, fin thickness,
+                                    fin connector thickness, connector radius).
             gap_taper: gap taper polynomial params (recommend same as wg_taper)
             wg_taper: wg taper polynomial params (recommend same as gap_taper)
             shift: translate this component in xy
@@ -799,8 +801,6 @@ class LateralNemsPS(GroupedPattern):
         nanofins = [Pattern(poly) for poly in (rect - gap_path)]
         nanofin_y = nanofin_w / 2 + waveguide_w / 2 + gap_w
         connectors, pads = [], []
-        nanofin_start_x = rect.bounds[0]
-        total_length = phaseshift_l + 2 * taper_l
         connectors += [
             Pattern(Path(nanofin_w).rotate(np.pi).translate(rect.bounds[0], wg.center[1] + nanofin_y).turn(nanofin_radius, -np.pi / 2)),
             Pattern(Path(nanofin_w, initial_point=(rect.bounds[2], wg.center[1] + nanofin_y)).turn(nanofin_radius, np.pi / 2)),

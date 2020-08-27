@@ -1,130 +1,99 @@
-import nazca as nd
-import numpy as np
+# import nazca as nd
+# import numpy as np
 # from dphox.design.aim import AIMPhotonicChip
-from dphox.design.aim import AIMNazca
+# from dphox.design.aim import AIMNazca
+
+import nazca as nd
+from dphox.design.aim import AIMNazca, mzi_node, tdc_node
 
 if __name__ == 'main':
-    pass
 
-    # chip = AIMPhotonicChip(
-    #     passive_filepath='/Users/sunilpai/Documents/research/simphox/aim_lib/APSUNY_v35a_passive.gds',
-    #     waveguides_filepath='/Users/sunilpai/Documents/research/simphox/aim_lib/APSUNY_v35_waveguides.gds',
-    #     active_filepath='/Users/sunilpai/Documents/research/simphox/aim_lib/APSUNY_v35a_active.gds',
-    # )
-    #
-    # waveguide_w = 0.5
-    # interport_w = 70
-    # arm_l = 150
-    # end_l = 202
-    # tdc_interaction_w = 100
-    # mzi_interation_w = 45
-    # gap_w = 0.3
-    # gap_w_id = 0.6
-    # cp_radius = 35
-    # trench_gap = 12
-    #
-    # dc_kwargs = {
-    #     'gap_w': gap_w,
-    #     'interaction_l': tdc_interaction_w,
-    #     'interport_w': interport_w,
-    #     'end_l': end_l,
-    #     'radius': cp_radius
-    # }
-    #
-    # mzi_kwargs = {
-    #     'gap_w': gap_w,
-    #     'interaction_l': mzi_interation_w,
-    #     'interport_w': interport_w,
-    #     'end_l': end_l - 120,
-    #     'arm_l': arm_l,
-    #     'radius': cp_radius
-    # }
-    #
-    # with nd.Cell('mems_phase_shifter_chiplet') as mems_phase_shifter_chiplet:
-    #     dc_l = chip.cl_band_splitter_4port_si.put(20, 700)
-    #     upper_arm = chip.cl_band_waveguide_si(length=170).put(dc_l.pin['b0'])
-    #     tap_upper = chip.cl_band_1p_tap_si.put(flip=True)
-    #     lower_arm = chip.cl_band_waveguide_si(length=170).put(dc_l.pin['b1'])
-    #     tap_lower = chip.cl_band_1p_tap_si.put()
-    #     chip.cl_band_waveguide_si(angle=90).put(tap_upper.pin['b1'])
-    #     chip.cl_band_waveguide_si(length=25).put()
-    #     chip.cl_band_waveguide_si(angle=-90).put()
-    #     chip.cl_band_waveguide_si(length=200).put()
-    #     chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
-    #     chip.cl_band_waveguide_si(angle=-90).put(tap_lower.pin['b1'])
-    #     chip.cl_band_waveguide_si(length=25).put()
-    #     chip.cl_band_waveguide_si(angle=90).put()
-    #     chip.cl_band_waveguide_si(length=200).put()
-    #     chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
-    #     dc_r = chip.cl_band_splitter_4port_si.put(tap_upper.pin['b0'])
-    #     chip.cl_band_waveguide_si(angle=-90).put(dc_l.pin['a0'])
-    #     chip.cl_band_waveguide_si(angle=90).put()
-    #     chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), 90)
-    #     chip.cl_band_waveguide_si(angle=90).put(dc_l.pin['a1'])
-    #     chip.cl_band_waveguide_si(angle=-90).put()
-    #     chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), 90)
-    #     chip.cl_band_waveguide_si(angle=90).put(dc_r.pin['b0'])
-    #     chip.cl_band_waveguide_si(angle=-90).put()
-    #     chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
-    #     chip.cl_band_waveguide_si(angle=-90).put(dc_r.pin['b1'])
-    #     chip.cl_band_waveguide_si(angle=90).put()
-    #     chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
-    #     dc = chip.dc(**dc_kwargs).put(0, 500)
-    #     chip.cl_band_vertical_coupler_si.put(dc.pin['a0'].x, dc.pin['a0'].y, 90)
-    #     chip.cl_band_vertical_coupler_si.put(dc.pin['a1'].x, dc.pin['a1'].y, 90)
-    #     chip.cl_band_vertical_coupler_si.put(dc.pin['b0'].x, dc.pin['b0'].y, -90)
-    #     chip.cl_band_vertical_coupler_si.put(dc.pin['b1'].x, dc.pin['b1'].y, -90)
-    #
-    #     mzi = chip.mzi(**mzi_kwargs).put(0, -120)
-    #     chip.cl_band_vertical_coupler_si.put(mzi.pin['a0'].x, mzi.pin['a0'].y, 90)
-    #     chip.cl_band_vertical_coupler_si.put(mzi.pin['a1'].x, mzi.pin['a1'].y, 90)
-    #     chip.cl_band_vertical_coupler_si.put(mzi.pin['b0'].x, mzi.pin['b0'].y, -90)
-    #     chip.cl_band_vertical_coupler_si.put(mzi.pin['b1'].x, mzi.pin['b1'].y, -90)
-    #     mps = chip.microbridge_ps(bridge_w=5, bridge_l=100,
-    #                               tether_l=10, tether_w=5,
-    #                               block_w=1, block_l=arm_l, radius=2)
-    #     mps.put(mzi.pin['c1'], flip=True)
-    #     mps.put(mzi.pin['c0'])
-    #     mps.put(upper_arm.pin['a0'].x + 10, upper_arm.pin['a0'].y)
-    #     mps.put(lower_arm.pin['a0'].x + 10, lower_arm.pin['a0'].y, flip=True)
-    #     bridge_l = 100
-    #     mtdc = chip.microbridge_ps(bridge_w=5, bridge_l=bridge_l,
-    #                                tether_l=10, tether_w=5,
-    #                                block_w=0.48, block_l=tdc_interaction_w, radius=1)
-    #     mtdc.put(dc.pin['c1'], flip=True, flop=True)
-    #     mtdc.put(dc.pin['c0'], flop=True)
-    #
-    #     use_mps = [False, True, True, True, False]
-    #     use_bus = [True, False, True, False, True]
-    #     for idx, racetrack_l in enumerate(np.linspace(100, 500, 5)):
-    #         interaction_l = 5
-    #         radius = 20
-    #         waveguide = chip.cl_band_waveguide_si(length=300).put(0, idx * 100, 0)
-    #         chip.cl_band_vertical_coupler_si.put(waveguide.pin['a0'].x, waveguide.pin['a0'].y, 90)
-    #         rr = chip.ring_resonator(radius=20, gap_w=0.2, racetrack_l=racetrack_l, interaction_l=interaction_l,
-    #                                  interaction_angle=30).put(waveguide.pin['b0'])
-    #         waveguide = chip.cl_band_waveguide_si(length=300).put(rr.pin['b0'])
-    #         chip.cl_band_vertical_coupler_si.put(nd.cp.x(), nd.cp.y(), -90)
-    #         if use_mps[idx]:
-    #             # phase shifter
-    #             mps.put(rr.pin['c0'].x + interaction_l / 2 - arm_l / 2,
-    #                     rr.pin['c0'].y + waveguide_w + 2 * radius + gap_w / 2, flip=True)
-    #         if use_bus[idx]:
-    #             # bus
-    #             chip.cl_band_waveguide_si(length=5).put(rr.pin['c0'].x + interaction_l / 2 - 2.5,
-    #                                                     rr.pin['c0'].y + 2 * waveguide_w + 2 * radius + gap_w)
-    #
-    #     shallow_trench = chip.shallow_trench(length=500, width=900)
-    #     shallow_trench2 = chip.shallow_trench(length=500, width=600)
-    #     shallow_trench.put(65, shallow_trench.bbox[3] / 2 + 100)
-    #     shallow_trench2.put(35, -shallow_trench.bbox[3] / 2 - 480)
-    #
-    #     tdc = nd.load_gds('tdc_v2.gds')  # insert rebecca's filepath (or scripted cell) here
-    #     tdc.put(0, -550, flip=True)
-    #     static = nd.load_gds('static.gds')  # insert nate's filepath (or scripted cell) here
-    #     static.put(1100, -850)
-    #
-    # mems_phase_shifter_chiplet.put(0, 0)
-    #
-    # nd.export_gds(filename='mems_phase_shifter_chiplet.gds')
+    chip = AIMNazca(
+        passive_filepath='/home/exx/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
+        waveguides_filepath='/home/exx/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
+        active_filepath='/home/exx/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
+    )
 
+    nems_mesh = chip.triangular_nems_mzi_mesh(
+        n=5, waveguide_w=0.48, nanofin_w=0.1,
+        nanofin_radius=2, connector_tether_dim=None,
+        interport_w=50, arm_l=50,
+        ps_gap_w=0.15, pad_dim=(50, 15, 2),
+        contact_box_dim=(40, 10),
+        clearout_box_dim=(50, 2),
+        radius=15, end_l=30
+    )
+
+    thermal_mesh = chip.triangular_thermal_mzi_mesh(
+        n=5, waveguide_w=0.48,
+        interport_w=50, radius=15, end_l=20
+    )
+
+    interposer = chip.interposer(
+        n=14,
+        waveguide_w=0.48,
+        period=50,
+        final_period=127,
+        radius=60,
+        trombone_radius=10,
+        self_coupling_extension_dim=(30, 200),
+        with_gratings=True,
+        horiz_dist=200
+    )
+    dc = chip.custom_dc()[0]
+    # dc = chip.pdk_dc(radius=15, interport_w=50)
+
+    # miller = chip.nems_miller_node(waveguide_w=0.48, upper_interaction_l=30, lower_interaction_l=50,
+    #                                gap_w=0.1, bend_radius = 10, bend_extension = 20, lr_nanofin_w = 0.2,
+    #                                ud_nanofin_w = 0.2, lr_gap_w = 0.5, ud_gap_w = 0.3, lr_pad_dim = (10, 20),
+    #                                ud_pad_dim = (50, 20), lr_connector_dim = (2, 0.1), ud_connector_dim = (0.1, 2),
+    #                                contact_box_dim=(40, 10), clearout_box_dim=(52, 50),)
+
+    psv3_gap = [chip.nems_double_ps(gap_w=gap_w, interport_w=30) for i, gap_w in enumerate((0.2, 0.25, 0.3, 0.35, 0.4))]
+    psv3_taper = [chip.nems_double_ps(gap_taper=(0, -taper_change), wg_taper=(0, -taper_change), taper_l=5,
+                                      interport_w=40) for i, taper_change in enumerate((0.2, 0.25, 0.3, 0.35, 0.4))]
+    psv3_tether = [chip.nems_double_ps(gap_w=gap_w, connector_tether_dim=(2, 0.5, 50, 0.15),
+                                       interport_w=30) for i, gap_w in enumerate((0.2, 0.3, 0.4))]
+
+    with nd.Cell('tier1') as tier1:
+        for i, ps in enumerate(psv3_gap):
+            mzi_node(ps, dc, include_input_ps=False).put(0, i * 60)
+        for i, ps in enumerate(psv3_taper):
+            mzi_node(ps, dc, include_input_ps=False).put(400, i * 60)
+        for i, ps in enumerate(psv3_tether):
+            mzi_node(ps, dc, include_input_ps=False).put(800, i * 60)
+
+    tdc_tether = chip.nems_tdc(waveguide_w=0.48, nanofin_w=0.1, nanofin_radius=2, interaction_l=30, end_l=5,
+                               dc_gap_w=0.15, beam_gap_w=0.2,
+                               bend_dim=(20, 10), pad_dim=(30, 5, 2), use_radius=True, dc_taper_l=5,
+                               dc_taper=(0, -0.35), beam_taper=(0, -0.2),
+                               contact_box_dim=(10, 5), clearout_box_dim=(15, 2),
+                               connector_tether_dim=(2, 0.5, 40, 0.15), middle_fin_dim=None)
+
+    ps_tether = chip.nems_ps(waveguide_w=0.48, nanofin_w=0.1, nanofin_radius=2, phaseshift_l=50,
+                             end_l=5, connector_tether_dim=(2, 0.5, 50, 0.15, ), pad_dim=(50, 7.5, 2), gap_w=0.15,
+                             taper_l=0, contact_box_dim=(50, 5), clearout_box_dim=(50, 3))
+
+    tdc = chip.nems_tdc(waveguide_w=0.48, nanofin_w=0.1, nanofin_radius=2, interaction_l=40, end_l=5, dc_gap_w=0.3,
+                        beam_gap_w=0.15,
+                        bend_dim=(10, 10), pad_dim=(10, 5, 2), use_radius=True, dc_taper_l=5, dc_taper=(0, -0.3),
+                        beam_taper=(0, -0.2),
+                        contact_box_dim=(10, 5), clearout_box_dim=(15, 2), connector_tether_dim=None,
+                        middle_fin_dim=None)
+
+    ps = chip.nems_ps(waveguide_w=0.48, nanofin_w=0.1, nanofin_radius=2, phaseshift_l=50,
+                      end_l=5, connector_tether_dim=(2, 0.5, 20, 0.15), pad_dim=(50, 7.5, 2), gap_w=0.15, taper_l=0,
+                      contact_box_dim=(50, 5), clearout_box_dim=(50, 3))
+
+    nems = nems_mesh.put(0, -200, flip=True)
+    thermal = thermal_mesh.put(0, 50)
+    interposer.put(thermal.pin['a4'])
+    interposer.put(thermal.pin['b4'], flip=True)
+    tdc_tether.put(2000, 1000)
+    ps_tether.put(3000, 1200)
+    tdc.put(4000, 1400)
+    ps.put(5000, 1600)
+
+    tier1.put(8000, 0)
+
+    nd.export_gds(filename='test.gds')

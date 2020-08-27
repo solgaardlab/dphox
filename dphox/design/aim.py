@@ -360,6 +360,21 @@ class AIMNazca:
                 self.pdk_cells['cl_band_vertical_coupler_si'].put(nd.cp.x(), nd.cp.y(), -90)
         return gratings
 
+    def testing_tap_line(self, n_taps: int, radius: float = 5, tap_period: float = 85):
+        with nd.Cell(name=f'testing_tap_line_{n_taps}_{radius}_{tap_period}') as testing_tap_line:
+            grating = self.pdk_cells['cl_band_vertical_coupler_si'].put()
+            pin = grating.pin['b0']
+            for tap in range(n_taps):
+                self.waveguide_ic.strt(tap_period).put(pin)
+                tap = self.pdk_cells['cl_band_1p_tap_si'].put()
+                self.waveguide_ic.bend(radius, np.pi / 2).put(tap.pin['a0'])
+                self.waveguide_ic.bend(radius, np.pi / 2).put(tap.pin['b0'])
+                pin = tap.pin['b0']
+            self.pdk_cells['cl_band_vertical_coupler_si'].put(flip=True)
+        return testing_tap_line
+
+
+
 
 def _mzi_angle(waveguide_w: float, gap_w: float, interport_w: float, radius: float):
     return np.arccos(1 - (interport_w - gap_w - waveguide_w) / 4 / radius) * 180 / np.pi
