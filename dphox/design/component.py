@@ -8,7 +8,6 @@ from shapely.geometry import Polygon, MultiPolygon, CAP_STYLE
 from shapely.ops import cascaded_union
 from descartes import PolygonPatch
 
-import nazca as nd
 try:
     import plotly.graph_objects as go
 except ImportError:
@@ -102,17 +101,22 @@ class Path(gy.Path):
 
 
 class Pattern:
-    def __init__(self, *polygons: Union[Path, gy.Polygon, gy.FlexPath, Polygon], shift: Dim2 = (0, 0)):
+    def __init__(self, *polygons: Union[Path, gy.Polygon, gy.FlexPath, Polygon], shift: Dim2 = (0, 0),
+                 call_union: bool = True):
         self.shift = shift
         self.config = copy(self.__dict__)
         self.polys = polygons
+        self.call_union = call_union
         self.pattern = self._pattern()
         if shift != (0, 0):
             self.translate(shift[0], shift[1])
 
     def _pattern(self) -> MultiPolygon:
-        pattern = cascaded_union(self.shapely_polys)
-        return pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern])
+        if not self.call_union:
+            return MultiPolygon(self.shapely_polys)
+        else:
+            pattern = cascaded_union(self.shapely_polys)
+            return pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern])
 
     @property
     def shapely_polys(self):
@@ -266,9 +270,9 @@ class Multilayer:
         layer_to_polys = defaultdict(list)
         for component, layer in self.pattern_to_layer.items():
             layer_to_polys[layer].extend(component.shapely_polys)
-        pattern_dict = {layer: cascaded_union(polys) for layer, polys in layer_to_polys.items()}
-        pattern_dict = {layer: (pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern]))
-                        for layer, pattern in pattern_dict.items()}
+        pattern_dict = {layer: MultiPolygon(polys) for layer, polys in layer_to_polys.items()}
+        # pattern_dict = {layer: (pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern]))
+        #                 for layer, pattern in pattern_dict.items()}
         return pattern_dict
 
     def plot(self, ax, layer_to_color: Dict[Union[int, str], Union[Dim3, str]], alpha: float = 0.5):
@@ -595,6 +599,7 @@ class WaveguideChange(Pattern):
     def output_ports(self) -> np.ndarray:
         return self.input_ports + np.asarray((self.size[0], 0))
 
+
 class WaveguideIntermediate(Pattern):
     def __init__(self, waveguide_in_w: float, length: float, transition_length: float = 5,
                  taper_in_l: float = 0,
@@ -636,6 +641,7 @@ class WaveguideIntermediate(Pattern):
     @property
     def output_ports(self) -> np.ndarray:
         return self.input_ports + np.asarray((self.size[0], 0))
+
 
 class LateralNemsPSNate(GroupedPattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, end_l: float,
@@ -745,7 +751,6 @@ class LateralNemsPSNate(GroupedPattern):
                           clearout_box_dim, doping_stack_layer, clearout_etch_stop_grow, via_shrink, doping_grow)
 
 
-
 class LateralNemsPS(GroupedPattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, end_l: float,
                  nanofin_radius: float, gap_w: float, taper_l: float, num_taper_evaluations: int = 100,
@@ -832,7 +837,8 @@ class LateralNemsPS(GroupedPattern):
         return np.asarray((0, 0)) + self.shift
     @property
     def output_ports(self) -> np.ndarray:
-        return self.input_ports + np.asarray((self.size[0], 0))
+        return self.input_ports + np.asarray((self.phaseshift_l + 2 * self.taper_l, 0))
+
     def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], via_stack_layers: List[str],
                    clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
                    doping_stack_layer: Optional[str] = None,
@@ -1130,16 +1136,16 @@ class Interposer(Pattern):
             dx, dy = final_pos[0, 0], final_pos[0, 1]
             radius, grating_length = self_coupling_extension_dim
             self_coupling_path = Path(width=waveguide_w).rotate(-np.pi).translate(dx=dx, dy=dy - final_period)
-            self_coupling_path.turn(radius, np.pi, tolerance=0.001)
+            self_coupling_path.turn(radius, -np.pi, tolerance=0.001)
             self_coupling_path.segment(length=grating_length + 5)
             self_coupling_path.turn(radius=radius, angle=np.pi / 2, tolerance=0.001)
-            self_coupling_path.segment(length=final_period * (n + 1) + 2 * radius)
+            self_coupling_path.segment(length=final_period * (n + 1) - 6 * radius)
             self_coupling_path.turn(radius=radius, angle=np.pi / 2, tolerance=0.001)
             self_coupling_path.segment(length=grating_length + 5)
-            self_coupling_path.turn(radius=radius, angle=np.pi, tolerance=0.001)
+            self_coupling_path.turn(radius=radius, angle=-np.pi, tolerance=0.001)
             paths.append(self_coupling_path)
 
-        super(Interposer, self).__init__(*paths, shift=shift)
+        super(Interposer, self).__init__(*paths, call_union=False, shift=shift)
         self.self_coupling_path = None if self_coupling_extension_dim is None else paths[-1]
         self.paths = paths
         self.init_pos = init_pos
