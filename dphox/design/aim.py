@@ -109,7 +109,7 @@ class AIMNazca:
                            taper_l: float = 5, pad_dim: Dim3 = (50, 5, 2),
                            connector_tether_dim: float = None, contact_box_dim: Dim2 = (50, 5),
                            clearout_box_dim: Dim2 = (65, 3), clearout_etch_stop_grow: float = 0.5,
-                           gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100,
+                           gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100, top: bool = False,
                            name: str = 'nems_singlemode_ps'):
         with nd.Cell(name) as cell:
             ps = self.nems_ps(waveguide_w=waveguide_w, nanofin_w=nanofin_w, nanofin_radius=nanofin_radius,
@@ -118,10 +118,10 @@ class AIMNazca:
                               contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
                               clearout_etch_stop_grow=clearout_etch_stop_grow, gap_taper=gap_taper,
                               wg_taper=wg_taper, num_taper_evaluations=num_taper_evaluations)
-            pl = ps.put()
+            pl = ps.put() if top else self.waveguide_ic.strt(phaseshift_l).put()
             nd.Pin('a0').put(pl.pin['a0'])
             nd.Pin('b0').put(pl.pin['b0'])
-            pu = self.waveguide_ic.strt(phaseshift_l + 2 * taper_l).put(0, interport_w)
+            pu = self.waveguide_ic.strt(phaseshift_l).put(0, interport_w) if top else ps.put(0, interport_w)
             nd.Pin('a1').put(pu.pin['a0'])
             nd.Pin('b1').put(pu.pin['b0'])
         return cell
@@ -142,27 +142,31 @@ class AIMNazca:
             nd.Pin('a0').put(0, 0, -180)
             nd.Pin('b0').put(100, 0, 0)
         return cell
+
     def nems_psv3(self, waveguide_w, nanofin_w, phaseshift_l, end_l, gap_w,
-                contact_box_dim: Dim2, clearout_box_dim: Dim2,
-                nanofin_radius: float = 2,
-                taper1_l:float = 0, 
-                pad_dim: Optional[Dim3] = None, connector_tether_dim: Optional[Dim4] = None, clearout_etch_stop_grow: float = 0,
-                gap1_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None, wg1_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
-                num_taper_evaluations=100, shift: Tuple[float, float] = (0, 0),
-                taper2_l:float = 0,
-                gap2_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None, wg2_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
-                oxide_crossing_l: float = 5, gap_electrode:float = 1 ) -> nd.Cell:
-        c = LateralNemsPSNate(waveguide_w = waveguide_w, nanofin_w = nanofin_w, phaseshift_l = phaseshift_l,
-                            end_l = end_l,
-                            nanofin_radius = nanofin_radius, gap_w = gap_w, taper1_l = taper1_l,
-                            num_taper_evaluations = num_taper_evaluations,
-                            pad_dim = pad_dim, connector_tether_dim = connector_tether_dim,
-                            gap1_taper = gap1_taper,
-                            wg1_taper = wg1_taper,
-                            shift = shift, 
-                            taper2_l = taper2_l,
-                            wg2_taper = wg2_taper,
-                            oxide_crossing_l = oxide_crossing_l, gap_electrode = gap_electrode)
+                  contact_box_dim: Dim2, clearout_box_dim: Dim2,
+                  nanofin_radius: float = 2,
+                  taper1_l: float = 0,
+                  pad_dim: Optional[Dim3] = None, connector_tether_dim: Optional[Dim4] = None,
+                  clearout_etch_stop_grow: float = 0,
+                  gap1_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                  wg1_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                  num_taper_evaluations=100, shift: Tuple[float, float] = (0, 0),
+                  taper2_l: float = 0,
+                  gap2_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                  wg2_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                  oxide_crossing_l: float = 5, gap_electrode: float = 1) -> nd.Cell:
+        c = LateralNemsPSNate(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l,
+                              end_l=end_l,
+                              nanofin_radius=nanofin_radius, gap_w=gap_w, taper1_l=taper1_l,
+                              num_taper_evaluations=num_taper_evaluations,
+                              pad_dim=pad_dim, connector_tether_dim=connector_tether_dim,
+                              gap1_taper=gap1_taper,
+                              wg1_taper=wg1_taper,
+                              shift=shift,
+                              taper2_l=taper2_l,
+                              wg2_taper=wg2_taper,
+                              oxide_crossing_l=oxide_crossing_l, gap_electrode=gap_electrode)
         device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
                               doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
                               clearout_layer='tram', clearout_etch_stop_layer='esam',
@@ -360,28 +364,31 @@ class AIMNazca:
                 self.pdk_cells['cl_band_vertical_coupler_si'].put(nd.cp.x(), nd.cp.y(), -90)
         return gratings
 
-    def testing_tap_line(self, n_taps: int, radius: float = 5, tap_period: float = 85):
-        with nd.Cell(name=f'testing_tap_line_{n_taps}_{radius}_{tap_period}') as testing_tap_line:
-            grating = self.pdk_cells['cl_band_vertical_coupler_si'].put()
+    def testing_tap_line(self, n_taps: int, radius: float = 5, inter_tap_gap: float = 40):
+        with nd.Cell(name=f'testing_tap_line_{n_taps}_{radius}_{inter_tap_gap}') as testing_tap_line:
+            self.pdk_cells['cl_band_vertical_coupler_si'].put(0, 0, -90)
+            grating = self.waveguide_ic.bend(radius, 90).put()
             pin = grating.pin['b0']
-            for tap in range(n_taps):
-                self.waveguide_ic.strt(tap_period).put(pin)
+            for idx in range(n_taps):
+                self.waveguide_ic.strt(inter_tap_gap).put(pin)
                 tap = self.pdk_cells['cl_band_1p_tap_si'].put()
-                self.waveguide_ic.bend(radius, np.pi / 2).put(tap.pin['a0'])
-                self.waveguide_ic.bend(radius, np.pi / 2).put(tap.pin['b0'])
+                self.waveguide_ic.bend(radius, -90).put(tap.pin['a1'])
+                nd.Pin(f'a{2 * idx}').put()
+                self.waveguide_ic.bend(radius, 90).put(tap.pin['b1'])
+                nd.Pin(f'a{2 * idx + 1}').put()
                 pin = tap.pin['b0']
-            self.pdk_cells['cl_band_vertical_coupler_si'].put(flip=True)
+            self.waveguide_ic.strt(inter_tap_gap).put(pin)
+            self.waveguide_ic.bend(radius, 90).put()
+            self.pdk_cells['cl_band_vertical_coupler_si'].put(nd.cp.x(), nd.cp.y(), -90)
+            nd.put_stub()
         return testing_tap_line
-
-
-
 
 def _mzi_angle(waveguide_w: float, gap_w: float, interport_w: float, radius: float):
     return np.arccos(1 - (interport_w - gap_w - waveguide_w) / 4 / radius) * 180 / np.pi
 
 
 def mzi_node(diff_ps: nd.Cell, dc: nd.Cell, tap: Optional[nd.Cell] = None, name: Optional[str] = 'mzi',
-             include_input_ps: bool = True, ):
+             include_input_ps: bool = True, grating: Optional[nd.Cell] = None, detector: Optional[nd.Cell] = None):
     with nd.Cell(name=name) as node:
         if include_input_ps:
             input_ps = diff_ps.put()
@@ -402,10 +409,16 @@ def mzi_node(diff_ps: nd.Cell, dc: nd.Cell, tap: Optional[nd.Cell] = None, name:
         else:
             nd.Pin('b0').put(second_dc.pin['b0'])
             nd.Pin('b1').put(second_dc.pin['b1'])
+        if detector is not None and grating is not None:
+            grating.put(node.pin['b0'].x, node.pin['b0'].y, -90)
+            detector.put(node.pin['b1'])
+        elif detector is not None:
+            detector.put(node.pin['b0'])
+            detector.put(node.pin['b1'])
     return node
 
 
-def tdc_node(diff_ps: nd.Cell, tdc: nd.Cell, tap: Optional[nd.Cell] = None, with_gratings: bool = True):
+def tdc_node(diff_ps: nd.Cell, tdc: nd.Cell, tap: Optional[nd.Cell] = None, detector: Optional[nd.Cell] = None):
     with nd.Cell(name=f'tdc') as node:
         input_ps = diff_ps.put()
         _tdc = tdc.put(input_ps.pin['b0'])
@@ -419,6 +432,9 @@ def tdc_node(diff_ps: nd.Cell, tdc: nd.Cell, tap: Optional[nd.Cell] = None, with
         else:
             nd.Pin('b0').put(_tdc.pin['b0'])
             nd.Pin('b1').put(_tdc.pin['b1'])
+        if detector is not None:
+            detector.put(node.pin['b0'])
+            detector.put(node.pin['b1'])
     return node
 
 
