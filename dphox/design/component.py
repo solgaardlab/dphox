@@ -8,6 +8,7 @@ from shapely.geometry import Polygon, MultiPolygon, CAP_STYLE
 from shapely.ops import cascaded_union
 from descartes import PolygonPatch
 
+import nazca as nd
 try:
     import plotly.graph_objects as go
 except ImportError:
@@ -560,6 +561,224 @@ class Waveguide(Pattern):
     def output_ports(self) -> np.ndarray:
         return self.input_ports + np.asarray((self.size[0], 0))
 
+class WaveguideChange(Pattern):
+    def __init__(self, waveguide_w_in: float, length: float, taper_in_l: float = 0,
+                 taper_in_params: Union[np.ndarray, Tuple[float, ...]] = None,
+                 taper_out_l: float = 0,
+                 taper_out_params: Union[np.ndarray, Tuple[float, ...]] = None,
+                 slot_dim: Optional[Dim2] = None, slot_taper_l: float = 0,
+                 slot_taper_params: Union[np.ndarray, Tuple[float, ...]] = None,
+                 num_taper_evaluations: int = 100, end_l: float = 0, shift: Dim2 = (0, 0)):
+        self.length = length
+        self.waveguide_w_in = waveguide_w_in
+        self.taper_in_l = taper_in_l
+        self.taper_in_params = taper_in_params
+        self.taper_out_l = taper_out_l
+        self.taper_out_params = taper_out_params
+        self.slot_dim = slot_dim
+        self.slot_taper_l = slot_taper_l
+        self.slot_taper_params = slot_taper_params
+        self.end_l = end_l
+
+        p = Path(waveguide_w_in)
+        if end_l > 0:
+            p.segment(end_l)
+        if taper_in_l > 0 or taper_in_params is not None:
+            p.polynomial_taper(taper_in_l, taper_in_params, num_taper_evaluations)
+        p.segment(length)
+        if taper_out_l > 0 or taper_out_params is not None:
+            p.polynomial_taper(taper_out_l, taper_out_params, num_taper_evaluations, inverted=True)
+        if end_l > 0:
+            p.segment(end_l)
+        super(WaveguideChange, self).__init__(p, shift=shift)
+
+    @property
+    def input_ports(self) -> np.ndarray:
+        return np.asarray(((0, 0),)) + self.shift
+
+    @property
+    def output_ports(self) -> np.ndarray:
+        return self.input_ports + np.asarray((self.size[0], 0))
+
+class WaveguideIntermediate(Pattern):
+    def __init__(self, waveguide_w_in: float, length: float, transition_length: float = 5,
+                 taper_in_l: float = 0,
+                 taper_in_params: Union[np.ndarray, Tuple[float, ...]] = None,
+                 taper_out_l: float = 0,
+                 taper_out_params: Union[np.ndarray, Tuple[float, ...]] = None,
+                 slot_dim: Optional[Dim2] = None, slot_taper_l: float = 0,
+                 slot_taper_params: Union[np.ndarray, Tuple[float, ...]] = None,
+                 num_taper_evaluations: int = 100, end_l: float = 0, shift: Dim2 = (0, 0)):
+        self.length = length
+        self.waveguide_w_in = waveguide_w_in
+        self.taper_in_l = taper_in_l
+        self.taper_in_params = taper_in_params
+        self.taper_out_l = taper_out_l
+        self.taper_out_params = taper_out_params
+        self.slot_dim = slot_dim
+        self.slot_taper_l = slot_taper_l
+        self.slot_taper_params = slot_taper_params
+        self.end_l = end_l
+
+        p = Path(waveguide_w_in)
+        if end_l > 0:
+            p.segment(end_l)
+        if taper_in_l > 0 or taper_in_params is not None:
+            p.polynomial_taper(taper_in_l, taper_in_params, num_taper_evaluations)
+        p.segment(transition_length)
+        if taper_out_l > 0 or taper_out_params is not None:
+            p.polynomial_taper(taper_out_l, taper_out_params, num_taper_evaluations, inverted=True)
+        p.segment(length)
+        if taper_out_l > 0 or taper_out_params is not None:
+            p.polynomial_taper(taper_out_l, taper_out_params, num_taper_evaluations)
+        p.segment(transition_length)
+        if taper_in_l > 0 or taper_in_params is not None:
+            p.polynomial_taper(taper_in_l, taper_in_params, num_taper_evaluations, inverted=True)
+        if end_l > 0:
+            p.segment(end_l)
+        
+        super(WaveguideIntermediate, self).__init__(p, shift=shift)
+
+    @property
+    def input_ports(self) -> np.ndarray:
+        return np.asarray(((0, 0),)) + self.shift
+
+    @property
+    def output_ports(self) -> np.ndarray:
+        return self.input_ports + np.asarray((self.size[0], 0))
+
+class LateralNemsPSNate(GroupedPattern):
+    def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, end_l: float,
+                 nanofin_radius: float, gap_w: float, taper_l: float, num_taper_evaluations: int = 100,
+                 pad_dim: Optional[Dim3] = None, connector_tether_dim: Optional[Dim4] = None,
+                 gap_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                 wg_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                 shift: Tuple[float, float] = (0, 0), 
+                 version: int = 0,
+                 taper2_l: float = 0, gap2_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                 wg2_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                 oxide_crossing_l: float = 5, gap_electrode:float = 1.0
+                 ):
+        """NEMS single-mode phase shifter
+
+        Args:
+            waveguide_w: waveguide wial, before tapering)
+            taper_l: taper lengthdth
+            nanofin_w: nanofin width (initial, before tapering)
+            phaseshift_l: phase shift length
+            end_l: end length
+            gap_w: gap width (initi
+            num_taper_evaluations: number of taper evalulations (see gdspy)
+            pad_dim: silicon handle xy size followed by distance between pad and fin to actuate
+            connector_tether_dim: dimensions for the connector tether (x, y for tether box and thickness of fin and connectors to fin)
+            gap_taper: gap taper polynomial params (recommend same as wg_taper)
+            wg_taper: wg taper polynomial params (recommend same as gap_taper)
+            shift: translate this component in xy
+        """
+        self.waveguide_w = waveguide_w
+        self.nanofin_w = nanofin_w
+        self.phaseshift_l = phaseshift_l
+        self.end_l = end_l
+        self.gap_w = gap_w
+        self.taper_l = taper_l
+        self.num_taper_evaluations = num_taper_evaluations
+        self.pad_dim = pad_dim
+        self.gap_taper = gap_taper
+        self.wg_taper = wg_taper
+        self.nanofin_radius = nanofin_radius
+        self.connector_tether_dim = connector_tether_dim
+
+        ### Nate edit make PSV3 ###
+        if version == 3:
+            waveguide = WaveguideChange(waveguide_w_in=waveguide_w, taper_in_l=taper_l, taper_in_params=wg_taper, 
+                                taper_out_l=taper_l, taper_out_params=wg_taper, 
+                                length=oxide_crossing_l, end_l=end_l,
+                                num_taper_evaluations=num_taper_evaluations)
+            waveguide = WaveguideIntermediate(waveguide_w_in=waveguide_w, taper_in_l=taper_l, taper_in_params=wg_taper, 
+                                taper_out_l=taper2_l, taper_out_params=wg2_taper,
+                                transition_length=oxide_crossing_l, 
+                                length=phaseshift_l, end_l=end_l,
+                                num_taper_evaluations=num_taper_evaluations)    
+            # waveguide = Waveguide(waveguide_w, taper_l=taper_l, taper_params=wg_taper, length=phaseshift_l, end_l=end_l,
+            #                     num_taper_evaluations=num_taper_evaluations)
+            waveguide_w_int=waveguide_w + np.sum(wg_taper) - np.sum(wg2_taper)
+            print(waveguide_w_int)
+            box_w = nanofin_w * 2 + gap_w * 2 + waveguide_w
+            print(box_w, nanofin_w, gap_w, waveguide_w)
+
+            rect = WaveguideIntermediate(waveguide_w_in=waveguide.size[1] + nanofin_w * 2 + gap_w * 2, taper_in_l=0, taper_in_params=None, 
+                                taper_out_l=taper2_l, taper_out_params=wg2_taper,
+                                transition_length=oxide_crossing_l, 
+                                length=phaseshift_l, end_l=0,
+                                num_taper_evaluations=num_taper_evaluations).center_align(waveguide).pattern
+            print(waveguide.size[1])
+            # rect = Box((waveguide.size[0] - 2 * (taper_l + end_l) , box_w)).center_align(waveguide).pattern #actually defines the nanofin positive feature
+            gap_path = WaveguideIntermediate(waveguide_w_in=waveguide.size[1] + gap_w * 2, taper_in_l=0, taper_in_params=None, 
+                                taper_out_l=taper2_l, taper_out_params=wg2_taper,
+                                transition_length=oxide_crossing_l, 
+                                length=phaseshift_l, end_l=0,
+                                num_taper_evaluations=num_taper_evaluations).center_align(waveguide).pattern
+            # gap_path = Box((waveguide.size[0] - 2 * (taper_l + end_l) , box_w - waveguide_w)).center_align(waveguide).pattern 
+            nanofins = [Pattern(poly) for poly in (rect - gap_path)]
+            # nanofins = [Pattern(poly) for poly in (rect)]
+        else: 
+
+            box_w = nanofin_w * 2 + gap_w * 2 + waveguide_w
+            waveguide = Waveguide(waveguide_w, taper_l=taper_l, taper_params=wg_taper, length=phaseshift_l, end_l=end_l,
+                                num_taper_evaluations=num_taper_evaluations)
+            rect = Box((waveguide.size[0] - 2 * end_l, box_w)).center_align(waveguide).pattern
+            gap_path = Waveguide(waveguide_w + gap_w * 2, taper_params=gap_taper,
+                                taper_l=taper_l, length=phaseshift_l, end_l=end_l,
+                                num_taper_evaluations=num_taper_evaluations).pattern
+            
+            ### Nate edit to be fixed ###
+            ### Hack to remove nanofiins when gap_path would erase rectangle completely
+            try:
+                nanofins = [Pattern(poly) for poly in (rect - gap_path)]
+            except TypeError:
+                print("'Polygon' object is not iterable")
+                nanofins = []
+            ##############################
+
+        connectors, pads = [], [] #here pads are actually electrodes
+
+        if pad_dim is not None:
+            pad = Box(pad_dim).center_align(waveguide)
+            pad_y = gap_electrode + gap_w + nanofin_w + waveguide_w_int/2 + pad_dim[1] / 2
+            pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
+
+        if connector_tether_dim is not None:
+            connector = Box(self.connector_tether_dim).center_align(waveguide)
+            conn_y = waveguide.size[1] + nanofin_w * 2 + gap_w * 2 + connector_tether_dim[1] / 2
+            # conn_y = rect.size[0] + nanofin_w + connector_tether_dim[1] / 2
+            x_shift = 2 * (oxide_crossing_l + taper2_l) + phaseshift_l
+            connectors += [
+                copy(connector).translate(dx=-x_shift / 2 + connector_tether_dim[0] / 2, dy=-conn_y),
+                copy(connector).translate(dx=-x_shift / 2 + connector_tether_dim[0] / 2, dy=conn_y),
+                copy(connector).translate(dx=x_shift / 2 - connector_tether_dim[0] / 2, dy=-conn_y),
+                copy(connector).translate(dx=x_shift / 2 - connector_tether_dim[0] / 2, dy=conn_y)
+            ]
+        connectors=[]
+        super(LateralNemsPSNate, self).__init__(*([waveguide] + nanofins + pads + connectors), shift=shift)
+        self.waveguide, self.connectors, self.pads, self.nanofins = waveguide, connectors, pads, nanofins
+
+    @property
+    def input_ports(self) -> np.ndarray:
+        return np.asarray((0, 0)) + self.shift
+
+    @property
+    def output_ports(self) -> np.ndarray:
+        return self.input_ports + np.asarray((self.phaseshift_l, 0))
+
+    def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], via_stack_layers: List[str],
+                   clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
+                   doping_stack_layer: Optional[str] = None,
+                   clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
+        return multilayer(self, self.pads, (self.center,), waveguide_layer, metal_stack_layers,
+                          via_stack_layers, clearout_layer, clearout_etch_stop_layer, contact_box_dim,
+                          clearout_box_dim, doping_stack_layer, clearout_etch_stop_grow, via_shrink, doping_grow)
+
+
 
 class LateralNemsPS(GroupedPattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, end_l: float,
@@ -569,7 +788,6 @@ class LateralNemsPS(GroupedPattern):
                  wg_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                  shift: Tuple[float, float] = (0, 0)):
         """NEMS single-mode phase shifter
-
         Args:
             waveguide_w: waveguide width
             nanofin_w: nanofin width (initial, before tapering)
@@ -596,31 +814,20 @@ class LateralNemsPS(GroupedPattern):
         self.wg_taper = wg_taper
         self.nanofin_radius = nanofin_radius
         self.connector_tether_dim = connector_tether_dim
-
         box_w = nanofin_w * 2 + gap_w * 2 + waveguide_w
         wg = Waveguide(waveguide_w, taper_l=taper_l, taper_params=wg_taper, length=phaseshift_l, end_l=end_l,
-                       num_taper_evaluations=num_taper_evaluations)
+                              num_taper_evaluations=num_taper_evaluations)
         rect = Box((wg.size[0] - 2 * end_l, box_w)).center_align(wg).pattern
         gap_path = Waveguide(waveguide_w + gap_w * 2, taper_params=gap_taper,
                              taper_l=taper_l, length=phaseshift_l, end_l=end_l,
                              num_taper_evaluations=num_taper_evaluations).pattern
         nanofins = [Pattern(poly) for poly in (rect - gap_path)]
         nanofin_y = nanofin_w / 2 + waveguide_w / 2 + gap_w
-
         connectors, pads = [], []
-
-        nanofin_start_x = rect.bounds[0]
-        connectors += [
-            Pattern(Path(nanofin_w).rotate(np.pi).translate(nanofin_start_x, wg.center[1] + nanofin_y).turn(nanofin_radius, -np.pi / 2)),
-            Pattern(Path(nanofin_w, initial_point=(nanofin_start_x + phaseshift_l, wg.center[1] + nanofin_y)).turn(nanofin_radius, np.pi / 2)),
-            Pattern(Path(nanofin_w).rotate(np.pi).translate(nanofin_start_x, wg.center[1] - nanofin_y).turn(nanofin_radius, np.pi / 2)),
-            Pattern(Path(nanofin_w, initial_point=(nanofin_start_x + phaseshift_l, wg.center[1] - nanofin_y)).turn(nanofin_radius, -np.pi / 2))]
-
         if pad_dim is not None:
             pad = Box(pad_dim[:2]).center_align(wg)
             pad_y = nanofin_w + pad_dim[2] + pad_dim[1] / 2
             pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
-
         if connector_tether_dim is not None:
             conn = Box((connector_tether_dim[3], connector_tether_dim[1])).center_align(wg)
             conn_fin = Box(connector_tether_dim[2:]).center_align(wg)
@@ -646,18 +853,14 @@ class LateralNemsPS(GroupedPattern):
                 Pattern(Path(connector_tether_dim[3], initial_point=(conn_fin_start_x + connector_tether_dim[2],
                                                                      wg.center[1] - conn_fin_y)).turn(nanofin_radius,
                                                                                                       -np.pi / 2))]
-
         super(LateralNemsPS, self).__init__(*([wg] + nanofins + pads + connectors), shift=shift)
         self.waveguide, self.connectors, self.pads, self.nanofins = wg, connectors, pads, nanofins
-
     @property
     def input_ports(self) -> np.ndarray:
         return np.asarray((0, 0)) + self.shift
-
     @property
     def output_ports(self) -> np.ndarray:
-        return self.input_ports + np.asarray((self.phaseshift_l, 0))
-
+        return self.input_ports + np.asarray((self.size[0], 0))
     def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], via_stack_layers: List[str],
                    clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
                    doping_stack_layer: Optional[str] = None,
@@ -665,6 +868,7 @@ class LateralNemsPS(GroupedPattern):
         return multilayer(self, self.pads, (self.center,), waveguide_layer, metal_stack_layers,
                           via_stack_layers, clearout_layer, clearout_etch_stop_layer, contact_box_dim,
                           clearout_box_dim, doping_stack_layer, clearout_etch_stop_grow, via_shrink, doping_grow)
+
 
 
 class LateralNemsTDC(GroupedPattern):

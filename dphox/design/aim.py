@@ -117,6 +117,21 @@ class AIMNazca:
             nd.Pin('a0').put(0, 0, -180)
             nd.Pin('b0').put(100, 0, 0)
         return cell
+    def nems_psv3(self, waveguide_w, nanofin_w, phaseshift_l, end_l, gap_w,
+                taper_l, pad_dim, connector_dim, contact_box_dim, clearout_box_dim, clearout_etch_stop_grow,
+                gap_taper=None, wg_taper=None, num_taper_evaluations=100, version=3,
+                taper2_l=0,gap2_taper=None, wg2_taper=None) -> nd.Cell:
+        c = LateralNemsPSNate(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, nanofin_radius= 0,
+                          end_l=end_l, gap_w=gap_w, taper_l=taper_l, num_taper_evaluations=num_taper_evaluations,
+                          pad_dim=pad_dim, connector_tether_dim=connector_dim, gap_taper=gap_taper, wg_taper=wg_taper,
+                          version=version,
+                          taper2_l=taper2_l,gap2_taper=gap2_taper, wg2_taper=wg2_taper,)
+        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
+                              doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
+                              clearout_layer='tram', clearout_etch_stop_layer='esam',
+                              contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
+                              clearout_etch_stop_grow=clearout_etch_stop_grow)
+        return device.nazca_cell('nems_psv3')
 
     # def nems_diff_ps(self, waveguide_w, nanofin_w, interport_w, phaseshift_l, end_l, gap_w,
     #                  taper_l, pad_dim, connector_dim,
