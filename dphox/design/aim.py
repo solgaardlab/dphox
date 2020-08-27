@@ -239,7 +239,7 @@ class AIMNazca:
                 message.put(-pitch / 2 + i * pitch, -pad_l / 2)
         return bond_pad_array
 
-    def custom_dc(self, waveguide_w: float = 0.48, bend_dim: Dim2 = (20, 30.78 / 2), gap_w: float = 0.3,
+    def custom_dc(self, waveguide_w: float = 0.48, bend_dim: Dim2 = (20, 50.78 / 2), gap_w: float = 0.3,
                   interaction_l: float = 40, end_l: float = 0, end_bend_dim: Optional[Dim3] = None,
                   use_radius: bool = True) -> Tuple[nd.Cell, nd.Cell]:
         dc = DC(bend_dim, waveguide_w, gap_w, interaction_l, end_l, end_bend_dim, use_radius)
