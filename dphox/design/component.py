@@ -538,7 +538,10 @@ class Waveguide(Pattern):
             p.segment(end_l)
         if taper_l > 0 and taper_params is not None:
             p.polynomial_taper(taper_l, taper_params, num_taper_evaluations)
-        p.segment(length - 2 * taper_l)
+        if taper_params is not None:
+            p.segment(length - 2 * taper_l)
+        else:
+            p.segment(length)
         if taper_l > 0 and taper_params is not None:
             p.polynomial_taper(taper_l, taper_params, num_taper_evaluations, inverted=True)
         if end_l > 0:

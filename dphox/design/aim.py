@@ -373,8 +373,10 @@ class AIMNazca:
                 self.waveguide_ic.strt(inter_tap_gap).put(pin)
                 tap = self.pdk_cells['cl_band_1p_tap_si'].put()
                 self.waveguide_ic.bend(radius, -90).put(tap.pin['a1'])
+                self.waveguide_ic.strt(2 * radius).put()
                 nd.Pin(f'a{2 * idx}').put()
-                self.waveguide_ic.bend(radius, 90).put(tap.pin['b1'])
+                self.waveguide_ic.bend(radius, 180).put(tap.pin['b1'])
+                self.waveguide_ic.bend(radius, -90).put()
                 nd.Pin(f'a{2 * idx + 1}').put()
                 pin = tap.pin['b0']
             self.waveguide_ic.strt(inter_tap_gap).put(pin)
@@ -385,7 +387,6 @@ class AIMNazca:
 
 def _mzi_angle(waveguide_w: float, gap_w: float, interport_w: float, radius: float):
     return np.arccos(1 - (interport_w - gap_w - waveguide_w) / 4 / radius) * 180 / np.pi
-
 
 def mzi_node(diff_ps: nd.Cell, dc: nd.Cell, tap: Optional[nd.Cell] = None, name: Optional[str] = 'mzi',
              include_input_ps: bool = True, grating: Optional[nd.Cell] = None, detector: Optional[nd.Cell] = None):
@@ -409,11 +410,9 @@ def mzi_node(diff_ps: nd.Cell, dc: nd.Cell, tap: Optional[nd.Cell] = None, name:
         else:
             nd.Pin('b0').put(second_dc.pin['b0'])
             nd.Pin('b1').put(second_dc.pin['b1'])
-        if detector is not None and grating is not None:
+        if grating is not None:
             grating.put(node.pin['b0'].x, node.pin['b0'].y, -90)
-            detector.put(node.pin['b1'])
-        elif detector is not None:
-            detector.put(node.pin['b0'])
+        if detector is not None:
             detector.put(node.pin['b1'])
     return node
 
