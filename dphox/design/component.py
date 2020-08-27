@@ -92,8 +92,8 @@ class Path(gy.Path):
         return self
 
     def trombone(self, height: float, radius: float):
-        self.turn(radius, np.pi / 2, number_of_points=199).segment(height)
-        self.turn(radius, -np.pi, number_of_points=199).segment(height).turn(radius, np.pi / 2, number_of_points=199)
+        self.turn(radius, np.pi / 2, tolerance=0.001).segment(height)
+        self.turn(radius, -np.pi, tolerance=0.001).segment(height).turn(radius, np.pi / 2, tolerance=0.001)
         return self
 
     def to(self, port: Dim2):
@@ -532,10 +532,10 @@ class Waveguide(Pattern):
         p = Path(waveguide_w)
         if end_l > 0:
             p.segment(end_l)
-        if taper_l > 0 or taper_params is not None:
+        if taper_l > 0 and taper_params is not None:
             p.polynomial_taper(taper_l, taper_params, num_taper_evaluations)
         p.segment(length)
-        if taper_l > 0 or taper_params is not None:
+        if taper_l > 0 and taper_params is not None:
             p.polynomial_taper(taper_l, taper_params, num_taper_evaluations, inverted=True)
         if end_l > 0:
             p.segment(end_l)
@@ -599,7 +599,7 @@ class LateralNemsPS(GroupedPattern):
 
         box_w = nanofin_w * 2 + gap_w * 2 + waveguide_w
         wg = Waveguide(waveguide_w, taper_l=taper_l, taper_params=wg_taper, length=phaseshift_l, end_l=end_l,
-                              num_taper_evaluations=num_taper_evaluations)
+                       num_taper_evaluations=num_taper_evaluations)
         rect = Box((wg.size[0] - 2 * end_l, box_w)).center_align(wg).pattern
         gap_path = Waveguide(waveguide_w + gap_w * 2, taper_params=gap_taper,
                              taper_l=taper_l, length=phaseshift_l, end_l=end_l,
@@ -608,6 +608,13 @@ class LateralNemsPS(GroupedPattern):
         nanofin_y = nanofin_w / 2 + waveguide_w / 2 + gap_w
 
         connectors, pads = [], []
+
+        nanofin_start_x = rect.bounds[0]
+        connectors += [
+            Pattern(Path(nanofin_w).rotate(np.pi).translate(nanofin_start_x, wg.center[1] + nanofin_y).turn(nanofin_radius, -np.pi / 2)),
+            Pattern(Path(nanofin_w, initial_point=(nanofin_start_x + phaseshift_l, wg.center[1] + nanofin_y)).turn(nanofin_radius, np.pi / 2)),
+            Pattern(Path(nanofin_w).rotate(np.pi).translate(nanofin_start_x, wg.center[1] - nanofin_y).turn(nanofin_radius, np.pi / 2)),
+            Pattern(Path(nanofin_w, initial_point=(nanofin_start_x + phaseshift_l, wg.center[1] - nanofin_y)).turn(nanofin_radius, -np.pi / 2))]
 
         if pad_dim is not None:
             pad = Box(pad_dim[:2]).center_align(wg)
@@ -649,7 +656,7 @@ class LateralNemsPS(GroupedPattern):
 
     @property
     def output_ports(self) -> np.ndarray:
-        return self.input_ports + np.asarray((self.size[0], 0))
+        return self.input_ports + np.asarray((self.phaseshift_l, 0))
 
     def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], via_stack_layers: List[str],
                    clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
@@ -722,16 +729,16 @@ class LateralNemsTDC(GroupedPattern):
             nanofins = [Pattern(poly) for poly in (nanofin_box - gap_taper_wg)]
 
         # if connector_tether_dim is None: # ??
-        # nanofin_start_x = nanofin.bounds[0]
-        # connectors += [
-        #     Pattern(Path(nanofin_w).rotate(np.pi).translate(nanofin_start_x, dc.center[1] + nanofin_y).turn(
-        #         nanofin_radius, -np.pi / 2)),
-        #     Pattern(Path(nanofin_w, initial_point=(nanofin_start_x + interaction_l, dc.center[1] + nanofin_y)).turn(
-        #         nanofin_radius, np.pi / 2)),
-        #     Pattern(Path(nanofin_w).rotate(np.pi).translate(nanofin_start_x, dc.center[1] - nanofin_y).turn(
-        #         nanofin_radius, np.pi / 2)),
-        #     Pattern(Path(nanofin_w, initial_point=(nanofin_start_x + interaction_l, dc.center[1] - nanofin_y)).turn(
-        #         nanofin_radius, -np.pi / 2))]
+        nanofin_start_x = nanofin.bounds[0]
+        connectors += [
+            Pattern(Path(nanofin_w).rotate(np.pi).translate(nanofin_start_x, dc.center[1] + nanofin_y).turn(
+                nanofin_radius, -np.pi / 2)),
+            Pattern(Path(nanofin_w, initial_point=(nanofin_start_x + interaction_l, dc.center[1] + nanofin_y)).turn(
+                nanofin_radius, np.pi / 2)),
+            Pattern(Path(nanofin_w).rotate(np.pi).translate(nanofin_start_x, dc.center[1] - nanofin_y).turn(
+                nanofin_radius, np.pi / 2)),
+            Pattern(Path(nanofin_w, initial_point=(nanofin_start_x + interaction_l, dc.center[1] - nanofin_y)).turn(
+                nanofin_radius, -np.pi / 2))]
 
         if connector_tether_dim is not None:
             conn = Box((connector_tether_dim[3], connector_tether_dim[1])).center_align(dc)
@@ -947,13 +954,13 @@ class Interposer(Pattern):
             dx, dy = final_pos[0, 0], final_pos[0, 1]
             radius, grating_length = self_coupling_extension_dim
             self_coupling_path = Path(width=waveguide_w).rotate(-np.pi).translate(dx=dx, dy=dy - final_period)
-            self_coupling_path.turn(radius, np.pi)
+            self_coupling_path.turn(radius, np.pi, tolerance=0.001)
             self_coupling_path.segment(length=grating_length + 5)
-            self_coupling_path.turn(radius=radius, angle=np.pi / 2)
+            self_coupling_path.turn(radius=radius, angle=np.pi / 2, tolerance=0.001)
             self_coupling_path.segment(length=final_period * (n + 1) + 2 * radius)
-            self_coupling_path.turn(radius=radius, angle=np.pi / 2)
+            self_coupling_path.turn(radius=radius, angle=np.pi / 2, tolerance=0.001)
             self_coupling_path.segment(length=grating_length + 5)
-            self_coupling_path.turn(radius=radius, angle=np.pi)
+            self_coupling_path.turn(radius=radius, angle=np.pi, tolerance=0.001)
             paths.append(self_coupling_path)
 
         super(Interposer, self).__init__(*paths, shift=shift)
