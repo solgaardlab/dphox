@@ -72,7 +72,7 @@ if __name__ == 'main':
     detector = chip.pdk_cells['cl_band_photodetector_digital']
     grating = chip.pdk_cells['cl_band_vertical_coupler_si']
 
-    with nd.Cell('tier1') as gridsearch:
+    with nd.Cell('gridsearch') as gridsearch:
         line = testing_tap_line.put()
         port_idx = 0
         for i, ps in enumerate(psv3_gap):

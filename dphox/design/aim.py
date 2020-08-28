@@ -66,7 +66,7 @@ class AIMNazca:
         return self.tdc_node(diff_ps, cell) if diff_ps is not None else cell
 
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
-                phaseshift_l: float = 50,
+                phaseshift_l: float = 100,
                 end_l: float = 5, gap_w: float = 0.15, taper_l: float = 5, pad_dim: Dim3 = (50, 5, 2),
                 anchor: float = None, contact_box_dim: Dim2 = (50, 5),
                 clearout_box_dim: Dim2 = (65, 3), clearout_etch_stop_grow: float = 0.5,
@@ -84,10 +84,9 @@ class AIMNazca:
         return device.nazca_cell(name)
 
     def nems_double_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, interport_w: float = 40,
-                       phaseshift_l: float = 50,
-                       end_l: float = 0, gap_w: float = 0.15, taper_l: float = 5, pad_dim: Dim3 = (50, 5, 2),
-                       anchor: float = None, contact_box_dim: Dim2 = (50, 5),
-                       clearout_box_dim: Dim2 = (65, 3), clearout_etch_stop_grow: float = 0.5,
+                       phaseshift_l: float = 100, end_l: float = 0, gap_w: float = 0.15, taper_l: float = 5,
+                       pad_dim: Dim3 = (50, 5, 2), anchor: float = None, contact_box_dim: Dim2 = (50, 5),
+                       clearout_box_dim: Dim2 = (100, 3), clearout_etch_stop_grow: float = 0.5,
                        gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100,
                        name: str = 'nems_double_ps'):
         with nd.Cell(name) as cell:
@@ -106,10 +105,10 @@ class AIMNazca:
         return cell
 
     def nems_singlemode_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, interport_w: float = 40,
-                           phaseshift_l: float = 50, end_l: float = 0, gap_w: float = 0.15,
+                           phaseshift_l: float = 100, end_l: float = 0, gap_w: float = 0.15,
                            taper_l: float = 5, pad_dim: Dim3 = (50, 5, 2),
-                           anchor: float = None, contact_box_dim: Dim2 = (50, 5),
-                           clearout_box_dim: Dim2 = (65, 3), clearout_etch_stop_grow: float = 0.5,
+                           anchor: Dim5 = None, contact_box_dim: Dim2 = (50, 5),
+                           clearout_box_dim: Dim2 = (100, 3), clearout_etch_stop_grow: float = 0.5,
                            gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100, top: bool = False,
                            name: str = 'nems_singlemode_ps'):
         with nd.Cell(name) as cell:
@@ -238,7 +237,7 @@ class AIMNazca:
     def pdk_dc(self, radius: float, interport_w: float) -> nd.Cell:
         return _dc_bb_bends(self, self.pdk_cells['cl_band_splitter_4port_si'], radius, interport_w)
 
-    def bidirectional_tap(self, radius: float):
+    def bidirectional_tap(self, radius: float, mesh_bend: bool = False):
         with nd.Cell(name=f'bidirectional_tap_{radius}') as cell:
             tap = self.pdk_cells['cl_band_1p_tap_si'].put()
             nd.Pin('a0').put(tap.pin['a0'])
@@ -246,10 +245,14 @@ class AIMNazca:
             nd.Pin('b0').put(tap.pin['b0'])
             nd.Pin('b1').put(tap.pin['b1'])
             self.waveguide_ic.bend(radius, angle=-90).put(tap.pin['a1'])
+            if mesh_bend:
+                self.waveguide_ic.bend(radius, angle=90).put(tap.pin['b1'])
             pd0 = self.pdk_cells['cl_band_photodetector_digital'].put()
             nd.Pin('p0').put(pd0.pin['p'])
             nd.Pin('n0').put(pd0.pin['n'])
             self.waveguide_ic.bend(radius, angle=90).put(tap.pin['b1'])
+            if mesh_bend:
+                self.waveguide_ic.bend(radius, angle=90).put(tap.pin['b1'])
             pd1 = self.pdk_cells['cl_band_photodetector_digital'].put()
             nd.Pin('p1').put(pd1.pin['p'])
             nd.Pin('n1').put(pd1.pin['n'])
@@ -270,7 +273,7 @@ class AIMNazca:
             dc_width = dc.pin['b0'].x - dc.pin['a0'].x
             dc_dummy = Waveguide(waveguide_w, dc_width).nazca_cell('straight_dc_dummy', 'seam')
         tap = self.bidirectional_tap(tap_radius) if tap_radius > 0 else None
-        node, dummy = self.mzi_node(diff_ps, dc, tap), _mzi_dummy(ps, dc_dummy, tap)
+        node, dummy = self.mzi_node(diff_ps, dc, tap, tap, sep=end_l), self._mzi_dummy(ps, dc_dummy, tap, tap, sep=end_l)
         return _triangular_mesh(n, self.waveguide_ic, node, dummy, interport_w, end_l)
 
     def triangular_nems_mzi_mesh(self, n: int, waveguide_w: float, nanofin_w: float,
@@ -308,7 +311,7 @@ class AIMNazca:
             #     self.waveguide_ic.strt(dc_width / 2 - 20).put()
             #     tap.put()
             #     self.waveguide_ic.strt(dc_width / 2 - 20).put()
-        node, dummy = self.mzi_node(diff_ps, dc, tap), _mzi_dummy(ps, dc_dummy, tap)
+        node, dummy = self.mzi_node(diff_ps, dc, tap, tap, sep=end_l), self._mzi_dummy(ps, dc_dummy, tap, tap, sep=end_l)
         return _triangular_mesh(n, self.waveguide_ic, node, dummy, interport_w, end_l)
 
     def triangular_nems_tdc_mesh(self, n: int, waveguide_w: float, nanofin_w: float,
@@ -342,13 +345,13 @@ class AIMNazca:
         dc_width = tdc.bbox[2] - tdc.bbox[0]
         dc_dummy = Waveguide(waveguide_w, dc_width).nazca_cell('straight_tdc_dummy', 'seam')
         tap = self.bidirectional_tap(tap_radius) if tap_radius > 0 else None
-        node, dummy = self.mzi_node(diff_ps, tdc, tap), _mzi_dummy(ps, dc_dummy, tap)
+        node, dummy = self.mzi_node(diff_ps, tdc, tap, tap), self._mzi_dummy(ps, dc_dummy, tap, tap)
         return _triangular_mesh(n, self.waveguide_ic, node, dummy, interport_w, end_l)
 
     def mzi_node(self, diff_ps: nd.Cell, dc: nd.Cell, tap_internal: Optional[nd.Cell] = None,
                  tap_external: Optional[nd.Cell] = None, name: Optional[str] = 'mzi',
                  include_input_ps: bool = True, grating: Optional[nd.Cell] = None, detector: Optional[nd.Cell] = None,
-                 detector_loopback_params: Dim2 = None):
+                 detector_loopback_params: Dim2 = None, sep: float = 0):
         with nd.Cell(name=name) as node:
             if include_input_ps:
                 input_ps = diff_ps.put()
@@ -362,12 +365,13 @@ class AIMNazca:
             if tap_internal is not None:
                 upper_sampler = tap_internal.put(first_dc.pin['b0'])
                 lower_sampler = tap_internal.put(first_dc.pin['b1'])
-                nd.Pin('b0').put(upper_sampler.pin['b0'])
-                nd.Pin('b1').put(lower_sampler.pin['b0'])
-                internal_ps = diff_ps.put(first_dc.pin['b0'])
+                if sep > 0:
+                    conn = self.waveguide_ic.strt(sep).put(upper_sampler.pin['b0'])
+                    self.waveguide_ic.strt(sep).put(lower_sampler.pin['b0'])
+                    internal_ps = diff_ps.put(conn.pin['b0'])
+                else:
+                    internal_ps = diff_ps.put(upper_sampler.pin['b0'])
             else:
-                nd.Pin('b0').put(first_dc.pin['b0'])
-                nd.Pin('b1').put(first_dc.pin['b1'])
                 internal_ps = diff_ps.put(first_dc.pin['b0'])
             second_dc = dc.put(internal_ps.pin['b0'])
             if tap_external is not None:
@@ -462,35 +466,45 @@ class AIMNazca:
                 self.waveguide_ic.bend(radius=10, angle=180, width=final_taper_width).put()
         return drop_port_array
 
+    def _tdc_dummy(self, ps: nd.Cell, dc_dummy: nd.Cell, tap: Optional[nd.Cell] = None):
+        with nd.Cell(name=f'tdc_dummy') as dummy:
+            input_ps = ps.put()
+            tdc_dummy = dc_dummy.put(input_ps.pin['b0'])
+            nd.Pin('a0').put(input_ps.pin['a0'])
+            if tap is not None:
+                lower_sampler = tap.put(tdc_dummy.pin['b0'])
+                nd.Pin('b0').put(lower_sampler.pin['b0'])
+            else:
+                nd.Pin('b0').put(tdc_dummy.pin['b0'])
+        return dummy
+
+    def _mzi_dummy(self, ps: nd.Cell, dc_dummy: nd.Cell, tap_internal: Optional[nd.Cell] = None,
+                   tap_external: Optional[nd.Cell] = None, sep: float = 0):
+        with nd.Cell(name=f'tdc_dummy') as dummy:
+            input_ps = ps.put()
+            _dc_dummy = dc_dummy.put(input_ps.pin['b0'])
+            if tap_internal is not None:
+                lower_sampler = tap_internal.put(_dc_dummy.pin['b0'])
+                if sep > 0:
+                    conn = self.waveguide_ic.strt(sep).put(lower_sampler.pin['b0'])
+                    internal_ps = ps.put(conn.pin['b0'])
+                else:
+                    internal_ps = ps.put(lower_sampler.pin['b0'])
+            else:
+                internal_ps = ps.put(_dc_dummy.pin['b0'])
+            _dc_dummy = dc_dummy.put(internal_ps.pin['b0'])
+            if tap_external is not None:
+                lower_sampler = tap_external.put(_dc_dummy.pin['b0'])
+                nd.Pin('b0').put(lower_sampler.pin['b0'])
+            else:
+                nd.Pin('b0').put(_dc_dummy.pin['b0'])
+        return dummy
+
+
 def _mzi_angle(waveguide_w: float, gap_w: float, interport_w: float, radius: float):
     return np.arccos(1 - (interport_w - gap_w - waveguide_w) / 4 / radius) * 180 / np.pi
 
 
-def _tdc_dummy(ps: nd.Cell, dc_dummy: nd.Cell, tap: Optional[nd.Cell] = None):
-    with nd.Cell(name=f'tdc_dummy') as dummy:
-        input_ps = ps.put()
-        tdc_dummy = dc_dummy.put(input_ps.pin['b0'])
-        nd.Pin('a0').put(input_ps.pin['a0'])
-        if tap is not None:
-            lower_sampler = tap.put(tdc_dummy.pin['b0'])
-            nd.Pin('b0').put(lower_sampler.pin['b0'])
-        else:
-            nd.Pin('b0').put(tdc_dummy.pin['b0'])
-    return dummy
-
-
-def _mzi_dummy(ps: nd.Cell, dc_dummy: nd.Cell, tap: Optional[nd.Cell] = None):
-    with nd.Cell(name=f'tdc_dummy') as dummy:
-        input_ps = ps.put()
-        _dc_dummy = dc_dummy.put(input_ps.pin['b0'])
-        internal_ps = ps.put(_dc_dummy.pin['b0'])
-        _dc_dummy = dc_dummy.put(internal_ps.pin['b0'])
-        if tap is not None:
-            lower_sampler = tap.put(_dc_dummy.pin['b0'])
-            nd.Pin('b0').put(lower_sampler.pin['b0'])
-        else:
-            nd.Pin('b0').put(_dc_dummy.pin['b0'])
-    return dummy
 
 
 def _dc_bb_bends(chip: AIMNazca, mzi_bb: nd.Cell, bend_radius: float, interport_w: float):
