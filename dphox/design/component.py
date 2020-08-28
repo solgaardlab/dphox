@@ -6,6 +6,7 @@ from copy import deepcopy as copy
 from shapely.vectorized import contains
 from shapely.geometry import Polygon, MultiPolygon, CAP_STYLE
 from shapely.ops import cascaded_union
+from shapely.affinity import translate
 from descartes import PolygonPatch
 
 try:
@@ -105,7 +106,16 @@ class Pattern:
                  call_union: bool = True):
         self.shift = shift
         self.config = copy(self.__dict__)
-        self.polys = polygons
+        self.polys = []
+        for shape in polygons:
+            if not isinstance(shape, Polygon):
+                if isinstance(shape, MultiPolygon):
+                    polygons = list(shape)
+                else:
+                    polygons = shape.get_polygons() if isinstance(shape, gy.FlexPath) else shape.polygons
+                self.polys += [Polygon(polygon_point_list) for polygon_point_list in polygons]
+            else:
+                self.polys.append(shape)
         self.call_union = call_union
         self.pattern = self._pattern()
         if shift != (0, 0):
@@ -113,24 +123,10 @@ class Pattern:
 
     def _pattern(self) -> MultiPolygon:
         if not self.call_union:
-            return MultiPolygon(self.shapely_polys)
+            return MultiPolygon(self.polys)
         else:
-            pattern = cascaded_union(self.shapely_polys)
+            pattern = cascaded_union(self.polys)
             return pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern])
-
-    @property
-    def shapely_polys(self):
-        polygon_list = []
-        for shape in self.polys:
-            if not isinstance(shape, Polygon):
-                if isinstance(shape, MultiPolygon):
-                    polygons = list(shape)
-                else:
-                    polygons = shape.get_polygons() if isinstance(shape, gy.FlexPath) else shape.polygons
-                polygon_list += [Polygon(polygon_point_list) for polygon_point_list in polygons]
-            else:
-                polygon_list.append(shape)
-        return polygon_list
 
     def mask(self, shape: Shape, grid_spacing: GridSpacing):
         x_, y_ = np.mgrid[0:grid_spacing[0] * shape[0]:grid_spacing[0], 0:grid_spacing[1] * shape[1]:grid_spacing[1]]
@@ -151,11 +147,7 @@ class Pattern:
         return (b[2] + b[0]) / 2, (b[3] + b[1]) / 2  # (avgx, avgy)
 
     def translate(self, dx: float = 0, dy: float = 0) -> "Pattern":
-        new_polys = []
-        for path in self.shapely_polys:
-            path = gy.Polygon(np.asarray(path.exterior.coords.xy).T)
-            new_polys.append(path.translate(dx, dy))
-        self.polys = new_polys
+        self.polys = [translate(path, dx, dy) for path in self.polys]
         self.pattern = self._pattern()
         self.shift = (self.shift[0] + dx, self.shift[1] + dy)
         self.config["shift"] = self.shift
@@ -179,6 +171,15 @@ class Pattern:
         p = c[1] if isinstance(c, tuple) else (
             c.bounds[1] if bottom and not opposite or opposite and not bottom else c.bounds[3])
         self.translate(dy=p - x)
+        return self
+
+    def flip(self, horiz: bool = False):
+        new_polys = []
+        for poly in self.polys:
+            points = np.asarray(poly.exterior.coords.xy)
+            new_points = np.stack((-points[0], points[1])) if horiz else np.stack((points[0], -points[1]))
+            new_polys.append(Polygon(new_points.T))
+        self.polys = new_polys
         return self
 
     def to_gds(self, cell: gy.Cell):
@@ -208,6 +209,10 @@ class Pattern:
     def output_ports(self) -> np.ndarray:
         return np.asarray([])
 
+    @property
+    def contact_ports(self) -> np.ndarray:
+        return np.asarray([])
+
     def grow(self, grow_d: float, subtract: bool = False, cap_style: int = CAP_STYLE.square) -> "Pattern":
         rib_pattern = self.pattern.buffer(grow_d, cap_style=cap_style)
         if subtract:
@@ -216,12 +221,14 @@ class Pattern:
 
     def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> nd.Cell:
         with nd.Cell(cell_name) as cell:
-            for poly in self.shapely_polys:
+            for poly in self.polys:
                 nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
             for idx, port in enumerate(self.input_ports):
                 nd.Pin(f'a{idx}').put(*port, 180)
             for idx, port in enumerate(self.output_ports):
                 nd.Pin(f'b{idx}').put(*port)
+            for idx, port in enumerate(self.contact_ports):
+                nd.Pin(f'c{idx}').put(*port)
             nd.put_stub()
         return cell
 
@@ -257,7 +264,7 @@ class Multilayer:
     def nazca_cell(self, cell_name: str) -> nd.Cell:
         with nd.Cell(cell_name) as cell:
             for pattern, layer in self.pattern_to_layer.items():
-                for poly in pattern.shapely_polys:
+                for poly in pattern.polys:
                     nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
             for idx, port in enumerate(self.input_ports):
                 nd.Pin(f'a{idx}').put(*port, 180)
@@ -269,7 +276,7 @@ class Multilayer:
     def _layer_to_pattern(self) -> Dict[Union[int, str], MultiPolygon]:
         layer_to_polys = defaultdict(list)
         for component, layer in self.pattern_to_layer.items():
-            layer_to_polys[layer].extend(component.shapely_polys)
+            layer_to_polys[layer].extend(component.polys)
         pattern_dict = {layer: MultiPolygon(polys) for layer, polys in layer_to_polys.items()}
         # pattern_dict = {layer: (pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern]))
         #                 for layer, pattern in pattern_dict.items()}
@@ -331,10 +338,10 @@ class GratingPad(Pattern):
 
 
 class GroupedPattern(Pattern):
-    def __init__(self, *patterns: Pattern, shift: Dim2 = (0, 0)):
+    def __init__(self, *patterns: Pattern, shift: Dim2 = (0, 0), call_union: bool = True):
         self.patterns = patterns
         super(GroupedPattern, self).__init__(*sum([list(pattern.polys) for pattern in patterns], []),
-                                             shift=shift)
+                                             shift=shift, call_union=call_union)
 
     @classmethod
     def component_with_gratings(cls, component: Pattern, grating: GratingPad) -> "GroupedPattern":
@@ -649,10 +656,10 @@ class WaveguideIntermediate(Pattern):
 class LateralNemsPSNate(GroupedPattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, end_l: float,
                  nanofin_radius: float, gap_w: float, taper1_l: float, num_taper_evaluations: int = 100,
-                 pad_dim: Optional[Dim3] = None, connector_tether_dim: Optional[Dim4] = None,
+                 pad_dim: Optional[Dim3] = None, tether_connector_dim: Optional[Dim4] = None,
                  gap1_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                  wg1_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
-                 shift: Tuple[float, float] = (0, 0), 
+                 shift: Tuple[float, float] = (0, 0),
                  taper2_l: float = 0, gap2_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                  wg2_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                  oxide_crossing_l: float = 5, gap_electrode:float = 1.0
@@ -667,7 +674,7 @@ class LateralNemsPSNate(GroupedPattern):
             gap_w: gap width (initi
             num_taper_evaluations: number of taper evalulations (see gdspy)
             pad_dim: silicon handle xy size followed by distance between pad and fin to actuate
-            connector_tether_dim: dimensions for the connector tether (x, y for tether box and thickness of fin and connectors to fin)
+            tether_connector_dim: dimensions for the connector tether (x, y for tether box and thickness of fin and connectors to fin)
             taper1_l: first taper length
             gap1_taper: first gap taper polynomial params (recommend same as wg_taper)
             wg1_taper: first wg taper polynomial params (recommend same as gap_taper)
@@ -690,7 +697,7 @@ class LateralNemsPSNate(GroupedPattern):
         self.gap2_taper = gap2_taper
         self.wg2_taper = wg2_taper
         self.nanofin_radius = nanofin_radius
-        self.connector_tether_dim = connector_tether_dim
+        self.tether_connector_dim = tether_connector_dim
 
         ### Nate edit make PSV3 ###
         waveguide = WaveguideIntermediate(waveguide_in_w=waveguide_w, taper_in_l=taper1_l, taper_in_params=wg1_taper, 
@@ -723,15 +730,15 @@ class LateralNemsPSNate(GroupedPattern):
             pad_y = gap_electrode + gap_w + nanofin_w + waveguide_int_w/2 + pad_dim[1] / 2
             pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
 
-        if connector_tether_dim is not None:
-            connector = Box(self.connector_tether_dim).center_align(waveguide)
-            conn_y = waveguide.size[1] + nanofin_w * 2 + gap_w * 2 + connector_tether_dim[1] / 2
+        if tether_connector_dim is not None:
+            connector = Box(self.tether_connector).center_align(waveguide)
+            conn_y = waveguide.size[1] + nanofin_w * 2 + gap_w * 2 + tether_connector_dim[1] / 2
             x_shift = 2 * (oxide_crossing_l + taper2_l) + phaseshift_l
             connectors += [
-                copy(connector).translate(dx=-x_shift / 2 + connector_tether_dim[0] / 2, dy=-conn_y),
-                copy(connector).translate(dx=-x_shift / 2 + connector_tether_dim[0] / 2, dy=conn_y),
-                copy(connector).translate(dx=x_shift / 2 - connector_tether_dim[0] / 2, dy=-conn_y),
-                copy(connector).translate(dx=x_shift / 2 - connector_tether_dim[0] / 2, dy=conn_y)
+                copy(connector).translate(dx=-x_shift / 2 + tether_connector_dim[0] / 2, dy=-conn_y),
+                copy(connector).translate(dx=-x_shift / 2 + tether_connector_dim[0] / 2, dy=conn_y),
+                copy(connector).translate(dx=x_shift / 2 - tether_connector_dim[0] / 2, dy=-conn_y),
+                copy(connector).translate(dx=x_shift / 2 - tether_connector_dim[0] / 2, dy=conn_y)
             ]
         connectors=[]
         super(LateralNemsPSNate, self).__init__(*([waveguide] + nanofins + pads + connectors), shift=shift)
@@ -757,9 +764,10 @@ class LateralNemsPSNate(GroupedPattern):
 class LateralNemsPS(GroupedPattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, end_l: float,
                  nanofin_radius: float, gap_w: float, taper_l: float, num_taper_evaluations: int = 100,
-                 pad_dim: Optional[Dim3] = None, connector_tether_dim: Optional[Dim5] = None,
+                 pad_dim: Optional[Dim3] = None, tether_connector: Optional[Dim5] = None,
                  gap_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                  wg_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
+                 boundary_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                  shift: Tuple[float, float] = (0, 0)):
         """NEMS single-mode phase shifter
         Args:
@@ -772,7 +780,7 @@ class LateralNemsPS(GroupedPattern):
             taper_l: taper length
             num_taper_evaluations: number of taper evaluations (see gdspy)
             pad_dim: silicon handle xy size followed by distance between pad and fin to actuate
-            connector_tether_dim: dimensions for the connector tether (x, y, fin thickness,
+            tether_connector: dimensions for the connector tether (x, y, fin thickness,
                                     fin connector thickness, connector radius).
             gap_taper: gap taper polynomial params (recommend same as wg_taper)
             wg_taper: wg taper polynomial params (recommend same as gap_taper)
@@ -788,58 +796,43 @@ class LateralNemsPS(GroupedPattern):
         self.pad_dim = pad_dim
         self.gap_taper = gap_taper
         self.wg_taper = wg_taper
+        self.boundary_taper = boundary_taper
         self.nanofin_radius = nanofin_radius
-        self.connector_tether_dim = connector_tether_dim
+        self.tether_connector = tether_connector
 
         if not phaseshift_l >= 2 * taper_l:
             raise ValueError(f'Require interaction_l >= 2 * dc_taper_l but got {phaseshift_l} < {2 * taper_l}')
 
         box_w = nanofin_w * 2 + gap_w * 2 + waveguide_w
-        wg = Waveguide(waveguide_w, taper_l=taper_l, taper_params=wg_taper, length=phaseshift_l, end_l=end_l,
+        wg = Waveguide(waveguide_w, taper_l=taper_l, taper_params=wg_taper, length=phaseshift_l, end_l=0,
                        num_taper_evaluations=num_taper_evaluations)
-        rect = Box((wg.size[0] - 2 * end_l, box_w)).center_align(wg).pattern
+        boundary = Waveguide(box_w, taper_params=boundary_taper, taper_l=taper_l, length=phaseshift_l,
+                             num_taper_evaluations=num_taper_evaluations, end_l=0).pattern
         gap_path = Waveguide(waveguide_w + gap_w * 2, taper_params=gap_taper,
-                             taper_l=taper_l, length=phaseshift_l, end_l=end_l,
+                             taper_l=taper_l, length=phaseshift_l, end_l=0,
                              num_taper_evaluations=num_taper_evaluations).pattern
-        nanofins = [Pattern(poly) for poly in (rect - gap_path)]
+        nanofins = [Pattern(poly) for poly in (boundary - gap_path)]
         nanofin_y = nanofin_w / 2 + waveguide_w / 2 + gap_w
-        connectors, pads = [], []
+        connectors, pads, tethers = [], [], []
         connectors += [
-            Pattern(Path(nanofin_w).rotate(np.pi).translate(rect.bounds[0], wg.center[1] + nanofin_y).turn(nanofin_radius, -np.pi / 2)),
-            Pattern(Path(nanofin_w, initial_point=(rect.bounds[2], wg.center[1] + nanofin_y)).turn(nanofin_radius, np.pi / 2)),
-            Pattern(Path(nanofin_w).rotate(np.pi).translate(rect.bounds[0], wg.center[1] - nanofin_y).turn(nanofin_radius, np.pi / 2)),
-            Pattern(Path(nanofin_w, initial_point=(rect.bounds[2], wg.center[1] - nanofin_y)).turn(nanofin_radius, -np.pi / 2))]
+            Pattern(Path(nanofin_w).rotate(np.pi).translate(boundary.bounds[0], wg.center[1] + nanofin_y).turn(nanofin_radius, -np.pi / 2)),
+            Pattern(Path(nanofin_w, initial_point=(boundary.bounds[2], wg.center[1] + nanofin_y)).turn(nanofin_radius, np.pi / 2)),
+            Pattern(Path(nanofin_w).rotate(np.pi).translate(boundary.bounds[0], wg.center[1] - nanofin_y).turn(nanofin_radius, np.pi / 2)),
+            Pattern(Path(nanofin_w, initial_point=(boundary.bounds[2], wg.center[1] - nanofin_y)).turn(nanofin_radius, -np.pi / 2))]
         if pad_dim is not None:
             pad = Box(pad_dim[:2]).center_align(wg)
             pad_y = nanofin_w + pad_dim[2] + pad_dim[1] / 2
             pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
-        if connector_tether_dim is not None:
-            conn = Box((connector_tether_dim[3], connector_tether_dim[1])).center_align(wg)
-            conn_fin = Box(connector_tether_dim[2:]).center_align(wg)
-            conn_fin_start_x = conn_fin.bounds[0]
-            conn_y = connector_tether_dim[1] / 2 + nanofin_y
-            conn_fin_y = connector_tether_dim[1] + nanofin_y + connector_tether_dim[3] / 2
-            connectors += [copy(conn).translate(dx=connector_tether_dim[0] / 2, dy=-conn_y),
-                           copy(conn).translate(dx=connector_tether_dim[0] / 2, dy=conn_y),
-                           copy(conn).translate(dx=-connector_tether_dim[0] / 2, dy=-conn_y),
-                           copy(conn).translate(dx=-connector_tether_dim[0] / 2, dy=conn_y)]
-            connectors += [copy(conn_fin).translate(dx=0, dy=-conn_fin_y),
-                           copy(conn_fin).translate(dx=0, dy=conn_fin_y)]
-            connectors += [
-                Pattern(Path(connector_tether_dim[3]).rotate(np.pi).translate(conn_fin_start_x,
-                                                                              wg.center[1] + conn_fin_y).turn(
-                    nanofin_radius, -np.pi / 2)),
-                Pattern(Path(connector_tether_dim[3], initial_point=(conn_fin_start_x + connector_tether_dim[2],
-                                                                     wg.center[1] + conn_fin_y)).turn(nanofin_radius,
-                                                                                                      np.pi / 2)),
-                Pattern(Path(connector_tether_dim[3]).rotate(np.pi).translate(conn_fin_start_x,
-                                                                              wg.center[1] - conn_fin_y).turn(
-                    nanofin_radius, np.pi / 2)),
-                Pattern(Path(connector_tether_dim[3], initial_point=(conn_fin_start_x + connector_tether_dim[2],
-                                                                     wg.center[1] - conn_fin_y)).turn(nanofin_radius,
-                                                                                                      -np.pi / 2))]
-        super(LateralNemsPS, self).__init__(*([wg] + nanofins + pads + connectors), shift=shift)
-        self.waveguide, self.connectors, self.pads, self.nanofins = wg, connectors, pads, nanofins
+        if tether_connector is not None:
+            tether = TetherConnector(fixed_fin_dim=(phaseshift_l, nanofin_w),
+                                     bending_fin_dim=(tether_connector[2], nanofin_w),
+                                     tether_dim=(tether_connector[0], tether_connector[1]),
+                                     loop_connector=(tether_connector[3], tether_connector[4]))
+            top_tether = tether.center_align(nanofins[0]).vert_align(nanofins[0], opposite=True)
+            bottom_tether = tether.flip().center_align(nanofins[1]).vert_align(nanofins[1], bottom=False, opposite=True)
+            tethers += [top_tether, bottom_tether]
+        super(LateralNemsPS, self).__init__(*([wg] + nanofins + pads + connectors + tethers), shift=shift, call_union=False)
+        self.waveguide, self.connectors, self.pads, self.nanofins, self.tethers = wg, connectors, pads, nanofins, tethers
 
     @property
     def input_ports(self) -> np.ndarray:
@@ -864,7 +857,7 @@ class LateralNemsTDC(GroupedPattern):
                  dc_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                  beam_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                  end_l: float = 0, end_bend_dim: Optional[Dim3] = None,
-                 connector_tether_dim: Optional[Dim4] = None, pad_dim: Optional[Dim3] = None,
+                 tether_connector: Optional[Dim4] = None, pad_dim: Optional[Dim3] = None,
                  middle_fin_dim: Optional[Dim2] = None, middle_fin_pad_dim: Optional[Dim2] = None,
                  use_radius: bool = True, shift: Dim2 = (0, 0)):
         """NEMS tunable directional coupler
@@ -879,7 +872,7 @@ class LateralNemsTDC(GroupedPattern):
             interaction_l: interaction length
             end_l: end length before and after the first and last bends
             end_bend_dim: If specified, places an additional end bend (see DC)
-            connector_tether_dim: dimensions for the connector tether (x, y for tether box and thickness of fin and connectors to fin)
+            tether_connector: dimensions for the connector tether (x, y for tether box and thickness of fin and connectors to fin)
             pad_dim: If specified, silicon anchor/handle xy size followed by the pad gap
             middle_fin_dim: If specified, place a middle fin in the center of the coupling gap
             middle_fin_pad_dim: If specified, place an anchor pad on the left and right of the middle fin
@@ -897,13 +890,13 @@ class LateralNemsTDC(GroupedPattern):
         self.pad_dim = pad_dim
         self.middle_fin_dim = middle_fin_dim
         self.middle_fin_pad_dim = middle_fin_pad_dim
-        self.connector_tether_dim = connector_tether_dim
+        self.tether_connector = tether_connector
         self.use_radius = use_radius
 
         dc = DC(bend_dim=bend_dim, waveguide_w=waveguide_w, gap_w=dc_gap_w,
                 coupler_boundary_taper_l=dc_taper_l, coupler_boundary_taper=dc_taper,
                 interaction_l=interaction_l, end_bend_dim=end_bend_dim, end_l=end_l, use_radius=use_radius)
-        connectors, pads = [], []
+        connectors, pads, tethers = [], [], []
 
         nanofin_y = nanofin_w / 2 + dc_gap_w / 2 + waveguide_w + beam_gap_w
         nanofin = Box((interaction_l, nanofin_w)).center_align(dc)
@@ -922,39 +915,20 @@ class LateralNemsTDC(GroupedPattern):
             gap_taper_wg = Waveguide(gap_taper_wg_w, interaction_l, dc_taper_l, beam_taper).center_align(dc).pattern
             nanofins = [Pattern(poly) for poly in (nanofin_box - gap_taper_wg)]
 
-        # if connector_tether_dim is None: # ??
-
         connectors += [
             Pattern(Path(nanofin_w).rotate(np.pi).translate(nanofin.bounds[0], dc.center[1] + nanofin_y).turn(nanofin_radius, -np.pi / 2)),
             Pattern(Path(nanofin_w, initial_point=(nanofin.bounds[2], dc.center[1] + nanofin_y)).turn(nanofin_radius, np.pi / 2)),
             Pattern(Path(nanofin_w).rotate(np.pi).translate(nanofin.bounds[0], dc.center[1] - nanofin_y).turn(nanofin_radius, np.pi / 2)),
             Pattern(Path(nanofin_w, initial_point=(nanofin.bounds[2], dc.center[1] - nanofin_y)).turn(nanofin_radius, -np.pi / 2))]
 
-        if connector_tether_dim is not None:
-            conn = Box((connector_tether_dim[3], connector_tether_dim[1])).center_align(dc)
-            conn_fin = Box(connector_tether_dim[2:]).center_align(dc)
-            conn_fin_start_x = conn_fin.bounds[0]
-            conn_y = connector_tether_dim[1] / 2 + nanofin_y
-            conn_fin_y = connector_tether_dim[1] + nanofin_y + connector_tether_dim[3] / 2
-            connectors += [copy(conn).translate(dx=connector_tether_dim[0] / 2, dy=-conn_y),
-                           copy(conn).translate(dx=connector_tether_dim[0] / 2, dy=conn_y),
-                           copy(conn).translate(dx=-connector_tether_dim[0] / 2, dy=-conn_y),
-                           copy(conn).translate(dx=-connector_tether_dim[0] / 2, dy=conn_y)]
-            connectors += [copy(conn_fin).translate(dx=0, dy=-conn_fin_y),
-                           copy(conn_fin).translate(dx=0, dy=conn_fin_y)]
-            connectors += [
-                Pattern(Path(connector_tether_dim[3]).rotate(np.pi).translate(conn_fin_start_x,
-                                                                              dc.center[1] + conn_fin_y).turn(
-                    nanofin_radius, -np.pi / 2)),
-                Pattern(Path(connector_tether_dim[3], initial_point=(conn_fin_start_x + connector_tether_dim[2],
-                                                                     dc.center[1] + conn_fin_y)).turn(nanofin_radius,
-                                                                                                      np.pi / 2)),
-                Pattern(Path(connector_tether_dim[3]).rotate(np.pi).translate(conn_fin_start_x,
-                                                                              dc.center[1] - conn_fin_y).turn(
-                    nanofin_radius, np.pi / 2)),
-                Pattern(Path(connector_tether_dim[3], initial_point=(conn_fin_start_x + connector_tether_dim[2],
-                                                                     dc.center[1] - conn_fin_y)).turn(nanofin_radius,
-                                                                                                      -np.pi / 2))]
+        if tether_connector is not None:
+            tether = TetherConnector(fixed_fin_dim=(interaction_l, nanofin_w),
+                                     bending_fin_dim=(tether_connector[2], nanofin_w),
+                                     tether_dim=(tether_connector[0], tether_connector[1]),
+                                     loop_connector=(tether_connector[3], tether_connector[4]))
+            top_tether = tether.center_align(nanofins[0]).vert_align(nanofins[0], opposite=True)
+            bottom_tether = tether.flip().center_align(nanofins[1]).vert_align(nanofins[1], bottom=False, opposite=True)
+            tethers += [top_tether, bottom_tether]
 
         if pad_dim is not None:
             pad = Box(pad_dim[:2]).center_align(dc)
@@ -966,7 +940,7 @@ class LateralNemsTDC(GroupedPattern):
             pad_x = middle_fin_pad_dim[0] / 2 + middle_fin_dim[0] / 2
             pads += [copy(pad).translate(dx=pad_x), copy(pad).translate(dx=pad_x)]
 
-        super(LateralNemsTDC, self).__init__(*([dc] + nanofins + connectors + pads), shift=shift)
+        super(LateralNemsTDC, self).__init__(*([dc] + nanofins + connectors + pads), shift=shift, call_union=False)
         self.dc, self.connectors, self.pads, self.nanofins = dc, connectors, pads, nanofins
 
     @property
@@ -1168,6 +1142,35 @@ class Interposer(Pattern):
         return self.final_pos + self.shift
 
 
+class TetherConnector(GroupedPattern):
+    def __init__(self, fixed_fin_dim: Dim2, bending_fin_dim: Dim2, tether_dim: Dim2,
+                 loop_connector: Optional[Dim2] = None):
+        """
+
+        Args:
+            fixed_fin_dim: fixed fin dimension (x, y)
+            bending_fin_dim: fin dimension (x, y)
+            tether_dim: tether dimension
+            loop_connector: loop connector to the fin radius and final width on the top part of loop
+        """
+        self.ps_dim = fixed_fin_dim
+        self.bending_fin_dim = bending_fin_dim
+        self.tether_dim = tether_dim
+        self.loop_connector = loop_connector
+
+        if loop_connector is not None:
+            loop = Pattern(Path(fixed_fin_dim[1]).rotate(np.pi).turn(
+                loop_connector[0], -np.pi, final_width=loop_connector[1]).segment(fixed_fin_dim[0]).turn(
+                loop_connector[0], -np.pi, final_width=fixed_fin_dim[1]), call_union=False)
+            tether = Box(tether_dim).center_align(loop).vert_align(loop, bottom=True, opposite=True)
+            fin = Box(bending_fin_dim).center_align(loop).vert_align(tether, bottom=True, opposite=True)
+            super(TetherConnector, self).__init__(loop, tether, fin, call_union=False)
+        else:
+            tether = Box((tether_dim[0], tether_dim[1]))
+            fin = Box(bending_fin_dim).center_align(tether).vert_align(tether, bottom=True, opposite=True)
+            super(TetherConnector, self).__init__(tether, fin)
+
+
 class NemsMillerNode(GroupedPattern):
     def __init__(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
                  gap_w: float, bend_radius: float, bend_extension: float, lr_nanofin_w: float,
@@ -1249,6 +1252,8 @@ class NemsMillerNode(GroupedPattern):
                           clearout_box_dim, doping_stack_layer, clearout_etch_stop_grow, via_shrink, doping_grow)
 
 
+
+
 # class RingResonator(Pattern):
 #     def __init__(self, waveguide_w: float, taper_l: float = 0,
 #                  taper_params: Union[np.ndarray, List[float]] = None,
@@ -1300,3 +1305,4 @@ def multilayer(waveguide_pattern: Pattern, pads: List[Pattern], clearout_areas: 
             pattern_to_layer[clearout.grow(clearout_etch_stop_grow)] = clearout_etch_stop_layer
 
     return Multilayer(pattern_to_layer)
+

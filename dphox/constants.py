@@ -120,6 +120,11 @@ AIM_STACK = {
             {
                 'layer': 709
             }
+        ],
+        'dice_xs': [
+            {
+                'layer': 726
+            }
         ]
     }
 }
