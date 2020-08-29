@@ -112,8 +112,8 @@ AIM_STACK = {
             },
             {
                 'layer': 725,  # pad
-                'growx': 60,
-                'growy': 60
+                'growx': 10,
+                'growy': 10
             }
         ],
         'waveguide_xs': [
