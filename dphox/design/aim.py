@@ -47,15 +47,15 @@ class AIMNazca:
     def nems_tdc(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
                  interaction_l: float = 50, end_l: float = 5, dc_gap_w: float = 0.2, beam_gap_w: float = 0.15,
                  bend_dim: Dim2 = (10, 20), pad_dim: Dim3 = (50, 5, 2), anchor=None,
-                 middle_fin_dim=None, use_radius: bool = True, contact_box_dim: Dim2 = (50, 0),
-                 clearout_box_dim: Dim2 = (65, 3), dc_taper_l: float = 0,
+                 middle_fin_dim=None, use_radius: bool = True, contact_box_dim: Dim2 = (50, 10),
+                 clearout_box_dim: Dim2 = (65, 3), dc_taper_ls: Union[np.ndarray] = None,
                  dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5,
                  diff_ps: Optional[nd.Cell] = None,
                  name: str = 'nems_tdc') -> nd.Cell:
         c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
                            interaction_l=interaction_l, end_l=end_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
                            bend_dim=bend_dim, pad_dim=pad_dim, anchor=anchor,
-                           middle_fin_dim=middle_fin_dim, use_radius=use_radius, dc_taper_l=dc_taper_l,
+                           middle_fin_dim=middle_fin_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
                            dc_taper=dc_taper, beam_taper=beam_taper)
         device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
                               doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
@@ -67,15 +67,16 @@ class AIMNazca:
 
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
                 phaseshift_l: float = 100,
-                end_l: float = 5, gap_w: float = 0.15, taper_l: float = 5, pad_dim: Dim3 = (50, 5, 2),
+                end_l: float = 5, gap_w: float = 0.15, taper_ls: Union[np.ndarray] = [5], pad_dim: Dim3 = (50, 5, 2),
                 anchor: float = None, contact_box_dim: Dim2 = (50, 5),
                 clearout_box_dim: Dim2 = (65, 3), clearout_etch_stop_grow: float = 0.5,
-                gap_taper=(0, 0.66), wg_taper=(0, 0.66), num_taper_evaluations: int = 100,
+                gap_taper=[(0, 0.66)], wg_taper=[(0, 0.66)], num_taper_evaluations: int = 100,
                 name: str = 'nems_ps') -> nd.Cell:
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
-                          phaseshift_l=phaseshift_l, end_l=end_l, gap_w=gap_w, taper_l=taper_l,
+                          phaseshift_l=phaseshift_l, end_l=end_l, gap_w=gap_w,
                           num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
-                          anchor=anchor, gap_taper=gap_taper, wg_taper=wg_taper)
+                          anchor=anchor, gap_taper=gap_taper, wg_taper=wg_taper,
+                          taper_ls = taper_ls)
         device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
                               doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
                               clearout_layer='tram', clearout_etch_stop_layer='esam',
@@ -84,7 +85,7 @@ class AIMNazca:
         return device.nazca_cell(name)
 
     def nems_double_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, interport_w: float = 40,
-                       phaseshift_l: float = 100, end_l: float = 0, gap_w: float = 0.15, taper_l: float = 5,
+                       phaseshift_l: float = 100, end_l: float = 0, gap_w: float = 0.15, taper_ls: Union[np.ndarray] = [5],
                        pad_dim: Dim3 = (50, 5, 2), anchor: float = None, contact_box_dim: Dim2 = (50, 5),
                        clearout_box_dim: Dim2 = (100, 3), clearout_etch_stop_grow: float = 0.5,
                        gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100,
@@ -92,7 +93,7 @@ class AIMNazca:
         with nd.Cell(name) as cell:
             ps = self.nems_ps(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
                               phaseshift_l=phaseshift_l, end_l=end_l, gap_w=gap_w,
-                              taper_l=taper_l, pad_dim=pad_dim, anchor=anchor,
+                              taper_ls=taper_ls, pad_dim=pad_dim, anchor=anchor,
                               contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
                               clearout_etch_stop_grow=clearout_etch_stop_grow, gap_taper=gap_taper,
                               wg_taper=wg_taper, num_taper_evaluations=num_taper_evaluations)
@@ -106,7 +107,7 @@ class AIMNazca:
 
     def nems_singlemode_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, interport_w: float = 40,
                            phaseshift_l: float = 100, end_l: float = 0, gap_w: float = 0.15,
-                           taper_l: float = 5, pad_dim: Dim3 = (50, 5, 2),
+                           taper_ls: Union[np.ndarray] = [5], pad_dim: Dim3 = (50, 5, 2),
                            anchor: Dim5 = None, contact_box_dim: Dim2 = (50, 5),
                            clearout_box_dim: Dim2 = (100, 3), clearout_etch_stop_grow: float = 0.5,
                            gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100, top: bool = False,
@@ -114,7 +115,7 @@ class AIMNazca:
         with nd.Cell(name) as cell:
             ps = self.nems_ps(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
                               phaseshift_l=phaseshift_l, end_l=end_l, gap_w=gap_w,
-                              taper_l=taper_l, pad_dim=pad_dim, anchor=anchor,
+                              taper_ls=taper_ls, pad_dim=pad_dim, anchor=anchor,
                               contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
                               clearout_etch_stop_grow=clearout_etch_stop_grow, gap_taper=gap_taper,
                               wg_taper=wg_taper, num_taper_evaluations=num_taper_evaluations)
@@ -143,36 +144,17 @@ class AIMNazca:
             nd.Pin('b0').put(100, 0, 0)
         return cell
 
-    def nems_psv3(self, waveguide_w, nanofin_w, phaseshift_l, end_l, gap_w,
-                  contact_box_dim: Dim2, clearout_box_dim: Dim2,
-
-                  taper1_l: float = 0,
-                  pad_dim: Optional[Dim3] = None, anchor: Optional[Dim4] = None,
-                  clearout_etch_stop_grow: float = 0,
-                  gap1_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
-                  wg1_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
-                  num_taper_evaluations=100, shift: Tuple[float, float] = (0, 0),
-                  taper2_l: float = 0,
-                  gap2_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
-                  wg2_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
-                  oxide_crossing_l: float = 5, gap_electrode: float = 1) -> nd.Cell:
-        c = LateralNemsPSNate(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l,
-                              end_l=end_l,
-                              gap_w=gap_w, taper1_l=taper1_l,
-                              num_taper_evaluations=num_taper_evaluations,
-                              pad_dim=pad_dim, anchor=anchor,
-                              gap1_taper=gap1_taper,
-                              wg1_taper=wg1_taper,
-                              shift=shift,
-                              taper2_l=taper2_l,
-                              wg2_taper=wg2_taper,
-                              oxide_crossing_l=oxide_crossing_l, gap_electrode=gap_electrode)
+    def test_waveguide(self, waveguide_w, length, taper_ls, taper_params, end_l, symmetric = True):
+        c = Waveguide(waveguide_w, length,
+                            taper_params = taper_params,
+                            num_taper_evaluations = 100, end_l = end_l,
+                            symmetric = symmetric, 
+                            taper_ls = taper_ls)
         device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
                               doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
-                              clearout_layer='tram', clearout_etch_stop_layer='esam',
-                              contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
-                              clearout_etch_stop_grow=clearout_etch_stop_grow)
-        return device.nazca_cell('nems_psv3')
+                              clearout_layer='tram', clearout_etch_stop_layer='esam'
+        )
+        return device.nazca_cell('test_waveguide')
 
     def nems_miller_node(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
                          gap_w: float, bend_radius: float, bend_extension: float, lr_nanofin_w: float,
@@ -180,7 +162,7 @@ class AIMNazca:
                          contact_box_dim: Dim2, clearout_box_dim: Dim2, clearout_etch_stop_grow: float = 0.5,
                          lr_pad_dim: Optional[Dim2] = None,
                          ud_pad_dim: Optional[Dim2] = None, lr_connector_dim: Optional[Dim2] = None,
-                         ud_connector_dim: Optional[Dim2] = None, name: str = 'nems_tdc') -> nd.Cell:
+                         ud_connector_dim: Optional[Dim2] = None, name: str = 'nems_miller_node') -> nd.Cell:
         c = NemsMillerNode(waveguide_w=waveguide_w, upper_interaction_l=upper_interaction_l, gap_w=gap_w,
                            lower_interaction_l=lower_interaction_l, bend_radius=bend_radius,
                            bend_extension=bend_extension, lr_nanofin_w=lr_nanofin_w, ud_nanofin_w=ud_nanofin_w,
@@ -280,18 +262,18 @@ class AIMNazca:
                                  arm_l: float, end_l: float, ps_end_l: float, ps_gap_w: float, interport_w: float,
                                  pad_dim: Optional[Dim3], anchor: Optional[Dim2], contact_box_dim: Dim2,
                                  clearout_box_dim: Dim2, radius: float,
-                                 taper_l: float = 0, clearout_etch_stop_grow: float = 0.5,
+                                 taper_ls: Union[np.ndarray] = [0], clearout_etch_stop_grow: float = 0.5,
                                  gap_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                                  wg_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
                                  num_taper_evaluations: int = 100, tap_radius: float = 5, custom_dc: bool = False,
                                  interaction_l: float = None, gap_w: float = None, ):
         diff_ps = self.nems_double_ps(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
                                       interport_w=interport_w, phaseshift_l=arm_l, end_l=ps_end_l, gap_w=ps_gap_w,
-                                      pad_dim=pad_dim, gap_taper=gap_taper, wg_taper=wg_taper, taper_l=taper_l,
+                                      pad_dim=pad_dim, gap_taper=gap_taper, wg_taper=wg_taper, taper_ls=taper_ls,
                                       contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
                                       clearout_etch_stop_grow=clearout_etch_stop_grow)
         ps = self.nems_ps(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
-                          phaseshift_l=arm_l, end_l=ps_end_l, gap_w=ps_gap_w, taper_l=taper_l,
+                          phaseshift_l=arm_l, end_l=ps_end_l, gap_w=ps_gap_w, taper_ls=taper_ls,
                           pad_dim=pad_dim, anchor=anchor, contact_box_dim=contact_box_dim,
                           clearout_box_dim=clearout_box_dim, clearout_etch_stop_grow=clearout_etch_stop_grow,
                           gap_taper=gap_taper, wg_taper=wg_taper, num_taper_evaluations=num_taper_evaluations)
@@ -316,7 +298,7 @@ class AIMNazca:
 
     def triangular_nems_tdc_mesh(self, n: int, waveguide_w: float, nanofin_w: float,
                                  phaseshift_l: float, gap_w: float, interaction_l: float, interport_w: float,
-                                 ps_taper_l: float, ps_pad_dim: Optional[Dim3],
+                                 ps_taper_ls: Union[np.ndarray], ps_pad_dim: Optional[Dim3],
                                  ps_connector_dim: Optional[Dim2], tdc_nanofin_w: float, end_l: float,
                                  tdc_gap_w: float, beam_gap_w: float, tdc_pad_dim, tdc_connector_dim: float,
                                  middle_fin_dim: float, ps_contact_box_dim: Dim2, ps_clearout_box_dim: Dim2,
@@ -328,12 +310,12 @@ class AIMNazca:
         bend_dim = (radius, (interport_w - gap_w - waveguide_w) / 2)
         diff_ps = self.nems_double_ps(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
                                       phaseshift_l=phaseshift_l, end_l=0, gap_w=gap_w,
-                                      taper_l=ps_taper_l, pad_dim=ps_pad_dim, anchor=ps_connector_dim,
+                                      taper_ls=ps_taper_ls, pad_dim=ps_pad_dim, anchor=ps_connector_dim,
                                       contact_box_dim=ps_contact_box_dim, clearout_box_dim=ps_clearout_box_dim,
                                       clearout_etch_stop_grow=clearout_etch_stop_grow, gap_taper=gap_taper,
                                       wg_taper=wg_taper, num_taper_evaluations=num_taper_evaluations)
         ps = self.nems_ps(waveguide_w=waveguide_w, nanofin_w=tdc_nanofin_w,
-                          phaseshift_l=phaseshift_l, end_l=0, gap_w=gap_w, taper_l=ps_taper_l, pad_dim=ps_pad_dim,
+                          phaseshift_l=phaseshift_l, end_l=0, gap_w=gap_w, taper_ls=ps_taper_ls, pad_dim=ps_pad_dim,
                           anchor=ps_connector_dim, contact_box_dim=ps_contact_box_dim,
                           clearout_box_dim=ps_clearout_box_dim, clearout_etch_stop_grow=clearout_etch_stop_grow,
                           gap_taper=gap_taper, wg_taper=wg_taper, num_taper_evaluations=num_taper_evaluations)
