@@ -1,5 +1,5 @@
 import nazca as nd
-from dphox.design.aim import AIMNazca, mzi_node, tdc_node
+from dphox.design.aim import AIMNazca
 
 if __name__ == 'main':
 
@@ -8,6 +8,67 @@ if __name__ == 'main':
         waveguides_filepath='/home/exx/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
         active_filepath='/home/exx/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
     )
+
+    ################################ Nate's Unorganized taper test script ##################################################################################
+    waveguide_w =.48
+    length = 50
+    taper_ls = [5,5] 
+    taper_params = [(0,0.66),(0,-0.74)]
+    end_l = 0
+    anchor = (1,2,3,4,5)
+
+    t_waveguide = chip.test_waveguide( waveguide_w, length, taper_ls, taper_params, end_l)
+    anti_waveguide = chip.test_waveguide( waveguide_w, length, taper_ls, taper_params, end_l, symmetric = False)
+
+    ps = chip.nems_ps(waveguide_w = waveguide_w, phaseshift_l = length, wg_taper = taper_params, gap_taper = taper_params, taper_ls = taper_ls, end_l = end_l,
+                        anchor = anchor )
+
+    ps_no_anchor = chip.nems_ps(waveguide_w = waveguide_w, phaseshift_l = length, wg_taper = taper_params, gap_taper = taper_params, taper_ls = taper_ls, end_l = end_l)
+
+    tdc = chip.nems_tdc(waveguide_w = 0.48, nanofin_w = 0.22,
+                    interaction_l = 41, end_l = 5, dc_gap_w = 0.2, beam_gap_w = 0.15,
+                    bend_dim = (10, 20), pad_dim = (50, 5, 2), anchor=None,
+                    middle_fin_dim=None, use_radius = True, contact_box_dim = (50, 10),
+                    clearout_box_dim = (65, 3), 
+                    dc_taper_ls = [5,5],
+                    dc_taper=[(0,-0.16),(0,0.7)], 
+                    beam_taper=[(0,-0.16),(0,0.7)], clearout_etch_stop_grow  = 0.5,
+                    diff_ps = None,
+                    name = 'nems_tdc')
+
+    tdc_notaper = chip.nems_tdc(waveguide_w = 0.48, nanofin_w = 0.22,
+                    interaction_l = 41, end_l = 5, dc_gap_w = 0.2, beam_gap_w = 0.15,
+                    bend_dim = (10, 20), pad_dim = (50, 5, 2), anchor=None,
+                    middle_fin_dim=None, use_radius = True, contact_box_dim = (50, 10),
+                    clearout_box_dim = (65, 3), 
+                    dc_taper_ls = [0],
+                    dc_taper=None,
+                    beam_taper= None, clearout_etch_stop_grow  = 0.5,
+                    diff_ps = None,
+                    name = 'nems_tdc')
+
+
+
+
+
+
+    t_waveguide.put(0,-10)
+    anti_waveguide.put(0, -20)
+
+    ps.put(0,30)
+    ps_no_anchor.put(0,0)
+
+    tdc.put(2*length,0)
+    tdc_notaper.put(2*length,-50)
+
+
+    nd.export_gds(filename='nems_phase_shifter_test.gds')
+    ##################################################################################################################
+
+    ############## Test script Below is pretty much broken ####################
+    
+    ###################################################################################################################
+
 
     waveguide_w = 0.48
     interport_w = 25
@@ -77,13 +138,13 @@ if __name__ == 'main':
         port_idx = 0
         for i, ps in enumerate(psv3_gap):
             port_idx += 1
-            mzi_node(ps, dc, include_input_ps=False, detector=detector).put(line.pin[f'a{port_idx}'])
+            chip.mzi_node(ps, dc, include_input_ps=False, detector=detector).put(line.pin[f'a{port_idx}'])
         for i, ps in enumerate(psv3_taper):
             port_idx += 1
-            mzi_node(ps, dc, include_input_ps=False, detector=detector).put(line.pin[f'a{port_idx}'])
+            chip.mzi_node(ps, dc, include_input_ps=False, detector=detector).put(line.pin[f'a{port_idx}'])
         for i, ps in enumerate(psv3_tether):
             port_idx += 1
-            mzi_node(ps, dc, include_input_ps=False, detector=detector).put(line.pin[f'a{port_idx}'])
+            chip.mzi_node(ps, dc, include_input_ps=False, detector=detector).put(line.pin[f'a{port_idx}'])
 
     nems = nems_mesh.put(0, 750, flip=True)
     thermal = thermal_mesh.put(0, 1000)

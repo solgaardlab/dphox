@@ -48,14 +48,14 @@ class AIMNazca:
                  interaction_l: float = 50, end_l: float = 5, dc_gap_w: float = 0.2, beam_gap_w: float = 0.15,
                  bend_dim: Dim2 = (10, 20), pad_dim: Dim3 = (50, 5, 2), anchor=None,
                  middle_fin_dim=None, use_radius: bool = True, contact_box_dim: Dim2 = (50, 10),
-                 clearout_box_dim: Dim2 = (65, 3), dc_taper_l: float = 0,
+                 clearout_box_dim: Dim2 = (65, 3), dc_taper_ls: Union[np.ndarray] = None,
                  dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5,
                  diff_ps: Optional[nd.Cell] = None,
                  name: str = 'nems_tdc') -> nd.Cell:
         c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
                            interaction_l=interaction_l, end_l=end_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
                            bend_dim=bend_dim, pad_dim=pad_dim, anchor=anchor,
-                           middle_fin_dim=middle_fin_dim, use_radius=use_radius, dc_taper_l=dc_taper_l,
+                           middle_fin_dim=middle_fin_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
                            dc_taper=dc_taper, beam_taper=beam_taper)
         device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
                               doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
@@ -162,7 +162,7 @@ class AIMNazca:
                          contact_box_dim: Dim2, clearout_box_dim: Dim2, clearout_etch_stop_grow: float = 0.5,
                          lr_pad_dim: Optional[Dim2] = None,
                          ud_pad_dim: Optional[Dim2] = None, lr_connector_dim: Optional[Dim2] = None,
-                         ud_connector_dim: Optional[Dim2] = None, name: str = 'nems_tdc') -> nd.Cell:
+                         ud_connector_dim: Optional[Dim2] = None, name: str = 'nems_miller_node') -> nd.Cell:
         c = NemsMillerNode(waveguide_w=waveguide_w, upper_interaction_l=upper_interaction_l, gap_w=gap_w,
                            lower_interaction_l=lower_interaction_l, bend_radius=bend_radius,
                            bend_extension=bend_extension, lr_nanofin_w=lr_nanofin_w, ud_nanofin_w=ud_nanofin_w,
