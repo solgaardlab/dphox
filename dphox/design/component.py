@@ -9,7 +9,7 @@ from shapely.ops import cascaded_union, polygonize
 from shapely.affinity import translate
 from descartes import PolygonPatch
 import trimesh
-from trimesh import creation
+from trimesh import creation, visual
 
 try:
     import plotly.graph_objects as go
@@ -196,10 +196,13 @@ class Pattern:
         for path in self.polys:
             cell.add(gy.Polygon(np.asarray(path.exterior.coords.xy).T)) if isinstance(path, Polygon) else cell.add(path)
 
+    def to_trimesh(self, extrude_height: float, start_height: float = 0, engine: str = 'scad') -> trimesh.Trimesh:
+        meshes = [trimesh.creation.extrude_polygon(poly, height=extrude_height).apply_translation((0, 0, start_height))
+                  for poly in self.polys]
+        return trimesh.Trimesh().union(meshes, engine=engine)
+
     def to_stl(self, filename: str, extrude_height: float, engine: str = 'scad'):
-        meshes = [trimesh.creation.extrude_polygon(poly, height=extrude_height) for poly in self.polys]
-        full_mesh = trimesh.Trimesh().union(meshes, engine=engine)
-        full_mesh.export(filename)
+        self.to_trimesh(extrude_height, engine=engine).export(filename)
 
     def plot(self, ax, color):
         ax.add_patch(PolygonPatch(self.pattern, facecolor=color, edgecolor='none'))
@@ -302,6 +305,19 @@ class Multilayer:
         ax.set_xlim((b[0], b[2]))
         ax.set_ylim((b[1], b[3]))
         ax.set_aspect('equal')
+
+    def to_trimesh(self, layer_to_zrange: Dict[str, Tuple[float, float]],
+                   layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad'):
+        meshes = []
+        for layer, zrange in layer_to_zrange.items():
+            zmin, zmax = zrange
+            layer_meshes = [
+                trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
+                for poly in self.layer_to_pattern[layer]]
+            mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
+            mesh.visual.vertex_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
+            meshes.append(mesh)
+        return trimesh.Scene(meshes)
 
 
 class Box(Pattern):
@@ -611,9 +627,10 @@ class Waveguide(Pattern):
 
     #######################################################################################
     ###Adding multilayer directly for testing in a real stack Will be removed if not useful
-    def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], via_stack_layers: List[str],
-                   clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2 = (1, 1),
-                   clearout_box_dim: Dim2 = (1, 1),
+    def multilayer(self, contact_box_dim: Dim2, clearout_box_dim: Dim2,
+                   waveguide_layer: str = 'seam', metal_stack_layers: Tuple[str, ...] = ('m1am', 'm2am'),
+                   via_stack_layers: Tuple[str, ...] = ('cbam', 'v1am'),
+                   clearout_layer: str = 'tram', clearout_etch_stop_layer: str = 'esam',
                    doping_stack_layer: Optional[str] = None,
                    clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
         return multilayer(self, self.pads, (self.center,), waveguide_layer, metal_stack_layers,
@@ -703,10 +720,17 @@ class LateralNemsPS(GroupedPattern):
 
     @property
     def attachment_ports(self) -> np.ndarray:
+        c = self.center
         return np.asarray(self.center)
 
-    def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], via_stack_layers: List[str],
-                   clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
+    # waveguide_layer = 'seam', metal_stack_layers: Tuple[str, ...] = ('m1am', 'm2am'),
+    # doping_stack_layer = 'ppam', via_stack_layers = ['cbam', 'v1am'],
+    # clearout_layer = 'tram', clearout_etch_stop_layer = 'esam',
+
+    def multilayer(self, contact_box_dim: Dim2, clearout_box_dim: Dim2,
+                   waveguide_layer: str = 'seam', metal_stack_layers: Tuple[str, ...] = ('m1am', 'm2am'),
+                   via_stack_layers: Tuple[str, ...] = ('cbam', 'v1am'),
+                   clearout_layer: str = 'tram', clearout_etch_stop_layer: str = 'esam',
                    doping_stack_layer: Optional[str] = None,
                    clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
         return multilayer(self, self.pads, (self.center,), waveguide_layer, metal_stack_layers,
@@ -827,8 +851,10 @@ class LateralNemsTDC(GroupedPattern):
     def attachment_ports(self) -> np.ndarray:
         return np.asarray(self.center)
 
-    def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], via_stack_layers: List[str],
-                   clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
+    def multilayer(self, contact_box_dim: Dim2, clearout_box_dim: Dim2,
+                   waveguide_layer: str = 'seam', metal_stack_layers: Tuple[str, ...] = ('m1am', 'm2am'),
+                   via_stack_layers: Tuple[str, ...] = ('cbam', 'v1am'),
+                   clearout_layer: str = 'tram', clearout_etch_stop_layer: str = 'esam',
                    doping_stack_layer: Optional[str] = None,
                    clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
         return multilayer(self, self.pads, (self.center,), waveguide_layer, metal_stack_layers,
@@ -957,8 +983,13 @@ class NemsAnchor(GroupedPattern):
             connector = GroupedPattern(connector, loop)
         elif straight_connector is not None:
             straight = Box(straight_connector)
-            connector = GroupedPattern(connector, copy(straight).horz_align(connector).vert_align(connector, bottom=False, opposite=True),
-                                       copy(straight).horz_align(connector, left=False, opposite=False).vert_align(connector, bottom=False, opposite=True))
+            connector = GroupedPattern(connector,
+                                       copy(straight).horz_align(connector).vert_align(connector, bottom=False,
+                                                                                       opposite=True),
+                                       copy(straight).horz_align(connector, left=False,
+                                                                 opposite=False).vert_align(connector,
+                                                                                            bottom=False,
+                                                                                            opposite=True))
         a_port = (connector.center[0], connector.bounds[1] + fin_spring_dim[1] / 2)
         a_ports.append(a_port)
         if include_fin_dummy:
@@ -1067,7 +1098,7 @@ class NemsAnchor(GroupedPattern):
 #         # TODO(sunil): change this to correct method
 #         return self.input_ports + np.asarray((self.size[0], 0))
 #
-#     def multilayer(self, waveguide_layer: str, metal_stack_layers: List[str], via_stack_layers: List[str],
+#     def multilayer(self, waveguide_layer: str='seam', metal_stack_layers: Tuple[str, ...] = ('m1am', 'm2am'), via_stack_layers: Tuple[str, ...] = ('cbam', 'v1am'),
 #                    clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
 #                    doping_stack_layer: Optional[str] = None,
 #                    clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
@@ -1115,7 +1146,6 @@ class EutecticOctagon(Pattern):
 #         return self.input_ports + np.asarray((self.size[0], 0))
 
 
-
 class MemsMonitorCoupler(Pattern):
     def __init__(self, waveguide_w: float, interaction_l: float, gap_w: float,
                  end_l: float, detector_wg_l: float, bend_radius: float = 3, pad_dim: Optional[Dim2] = None,
@@ -1148,8 +1178,8 @@ class MemsMonitorCoupler(Pattern):
 
 
 def multilayer(waveguide_pattern: Pattern, pads: List[Pattern], clearout_areas: Tuple[Union[Dim2, Pattern], ...],
-               waveguide_layer: str, metal_stack_layers: List[str],
-               via_stack_layers: List[str], clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2,
+               waveguide_layer: str, metal_stack_layers: Tuple[str, ...],
+               via_stack_layers: Tuple[str, ...], clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2,
                clearout_box_dim: Dim2, doping_stack_layer: Optional[str] = None,
                clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
     pattern_to_layer = {GroupedPattern(*[Box(contact_box_dim).center_align(pad) for pad in pads]): layer

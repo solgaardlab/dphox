@@ -57,8 +57,8 @@ class AIMNazca:
                            bend_dim=bend_dim, pad_dim=pad_dim, anchor=anchor,
                            middle_fin_dim=middle_fin_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
                            dc_taper=dc_taper, beam_taper=beam_taper)
-        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
-                              doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
+        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=('m1am', 'm2am'),
+                              doping_stack_layer='ppam', via_stack_layers=('cbam', 'v1am'),
                               clearout_layer='tram', clearout_etch_stop_layer='esam',
                               contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
                               clearout_etch_stop_grow=clearout_etch_stop_grow)
@@ -75,8 +75,8 @@ class AIMNazca:
                           num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
                           anchor=anchor, gap_taper=gap_taper, wg_taper=wg_taper,
                           taper_ls=taper_ls)
-        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
-                              doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
+        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=('m1am', 'm2am'),
+                              doping_stack_layer='ppam', via_stack_layers=('cbam', 'v1am'),
                               clearout_layer='tram', clearout_etch_stop_layer='esam',
                               contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
                               clearout_etch_stop_grow=clearout_etch_stop_grow)
@@ -132,8 +132,8 @@ class AIMNazca:
                   taper_params: Optional[Tuple[Tuple[float, ...], ...]] = None, symmetric: bool = True):
         c = Waveguide(waveguide_w, length, taper_params=taper_params,
                       num_taper_evaluations=100, symmetric=symmetric, taper_ls=taper_ls)
-        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
-                              doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
+        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=('m1am', 'm2am'),
+                              doping_stack_layer='ppam', via_stack_layers=('cbam', 'v1am'),
                               clearout_layer='tram', clearout_etch_stop_layer='esam')
         return device.nazca_cell('test_waveguide')
 
@@ -149,8 +149,8 @@ class AIMNazca:
     #                        bend_extension=bend_extension, lr_nanofin_w=lr_nanofin_w, ud_nanofin_w=ud_nanofin_w,
     #                        lr_gap_w=lr_gap_w, ud_gap_w=ud_gap_w, lr_pad_dim=lr_pad_dim,
     #                        ud_pad_dim=ud_pad_dim, lr_connector_dim=lr_connector_dim, ud_connector_dim=ud_connector_dim)
-    #     device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
-    #                           doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
+    #     device = c.multilayer(waveguide_layer='seam', metal_stack_layers=('m1am', 'm2am'),
+    #                           doping_stack_layer='ppam', via_stack_layers=('cbam', 'v1am'),
     #                           clearout_layer='tram', clearout_etch_stop_layer='esam',
     #                           contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
     #                           clearout_etch_stop_grow=clearout_etch_stop_grow)
