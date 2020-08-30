@@ -836,42 +836,11 @@ class LateralNemsTDC(GroupedPattern):
                           clearout_box_dim, doping_stack_layer, clearout_etch_stop_grow, via_shrink, doping_grow)
 
 
-class MemsMonitorCoupler(Pattern):
-    def __init__(self, waveguide_w: float, interaction_l: float, gap_w: float,
-                 end_l: float, detector_wg_l: float, bend_radius: float = 3, pad_dim: Optional[Dim2] = None,
-                 rib_pad_w: float = 0):
-        self.waveguide_w = waveguide_w
-        self.interaction_l = interaction_l
-        self.detector_wg_l = detector_wg_l
-        self.gap_w = gap_w
-        self.end_l = end_l
-        self.bend_radius = bend_radius
-        self.pad_dim = pad_dim
-
-        pads = []
-
-        waveguide = Path(width=waveguide_w).segment(interaction_l)
-        monitor_wg = copy(waveguide).translate(dx=0, dy=gap_w + waveguide_w)
-        monitor_left = Path(width=waveguide_w).rotate(np.pi).turn(bend_radius, -np.pi / 2).segment(detector_wg_l).turn(
-            bend_radius, -np.pi / 2).translate(dx=0, dy=gap_w + waveguide_w)
-        monitor_right = Path(width=waveguide_w).turn(bend_radius, np.pi / 2).segment(detector_wg_l).turn(
-            bend_radius, np.pi / 2).translate(dx=interaction_l, dy=gap_w + waveguide_w)
-        pad_y = waveguide_w * 3 / 2 + gap_w + pad_dim[1] / 2 + rib_pad_w
-        pads.append(
-            Path(width=pad_dim[1]).segment(pad_dim[0]).translate(dx=interaction_l / 2 - pad_dim[0] / 2, dy=pad_y))
-        if rib_pad_w > 0:
-            pads.append(Path(width=pad_dim[1]).segment(pad_dim[0]).translate(
-                dx=0, dy=waveguide_w * 3 / 2 + gap_w + rib_pad_w / 2))
-
-        super(MemsMonitorCoupler, self).__init__(waveguide, monitor_wg, monitor_left, monitor_right, *pads)
-        self.pads = pads[:1]
-
-
 class Interposer(Pattern):
     def __init__(self, waveguide_w: float, n: int, period: float, radius: float,
                  trombone_radius: Optional[float] = None,
                  final_period: Optional[float] = None, self_coupling_extension_dim: Optional[Dim2] = None,
-                 horiz_dist: float = 0, num_trombones: int = 1):
+                 horiz_dist: float = 0, num_trombones: int = 1, shift: Dim2 = (0, 0)):
         trombone_radius = radius if trombone_radius is None else trombone_radius
         final_period = period if final_period is None else final_period
         period_diff = final_period - period
@@ -938,7 +907,7 @@ class Interposer(Pattern):
 class NemsAnchor(GroupedPattern):
     def __init__(self, fin_spring_dim: Dim2, connector_dim: Dim2, top_spring_dim: Dim2 = None,
                  loop_connector: Optional[Dim3] = None, pos_electrode_dim: Optional[Dim3] = None,
-                 neg_electrode_dim: Optional[Dim2] = None):
+                 neg_electrode_dim: Optional[Dim2] = None, include_fin_dummy: bool = False):
         """NEMS anchor
 
         Args:
@@ -948,6 +917,7 @@ class NemsAnchor(GroupedPattern):
             loop_connector: loop connector to the fin, final xy dim on the top part of loop
             pos_electrode_dim: positive electrode dimension
             neg_electrode_dim: negative electrode dimension
+            include_fin_dummy: include fin dummy for mechanical simulation
         """
         self.fin_spring_dim = fin_spring_dim
         self.top_spring_dim = top_spring_dim
@@ -961,16 +931,18 @@ class NemsAnchor(GroupedPattern):
 
         top_spring_dim = fin_spring_dim if not top_spring_dim else top_spring_dim
         connector = Box(connector_dim).translate(dy=connector_dim[1] / 2)
-        patterns.append(connector)
+
         if loop_connector is not None:
             loop = Pattern(Path(fin_spring_dim[1]).rotate(np.pi).turn(
                 loop_connector[0], -np.pi, final_width=loop_connector[2], tolerance=0.001).segment(
-                loop_connector[1]).turn(loop_connector[0], -np.pi, final_width=loop_connector[2], tolerance=0.001))
-            loop.center_align(connector).vert_align(connector, bottom=False, opposite=True)
-            patterns.append(loop)
+                loop_connector[1]).turn(loop_connector[0], -np.pi, final_width=loop_connector[2],
+                                        tolerance=0.001).segment(loop_connector[1]))
+            loop.center_align(connector).vert_align(connector, bottom=False, opposite=False)
+            connector = GroupedPattern(connector, loop)
             self.a_ports.append((0, -loop_connector[1] - loop_connector[0] * 2))
         else:
             self.a_ports.append((0, 0))
+        patterns.append(connector)
         if top_spring_dim is not None:
             top_spring = Box(top_spring_dim).center_align(
                 connector).vert_align(connector, bottom=True, opposite=True)
@@ -978,18 +950,19 @@ class NemsAnchor(GroupedPattern):
             if pos_electrode_dim is not None:
                 pos_electrode = Box((pos_electrode_dim[0], pos_electrode_dim[1])).center_align(top_spring).vert_align(
                     top_spring, opposite=True).translate(dy=pos_electrode_dim[2])
-                self.c_ports.append((pos_electrode.center[0], pos_electrode.bounds[3]))
+                self.c_ports.append((pos_electrode.bounds[0], pos_electrode.center[1]))
+                self.c_ports.append((pos_electrode.bounds[1], pos_electrode.center[1]))
                 patterns.append(pos_electrode)
             if neg_electrode_dim is not None:
                 neg_electrode_left = Box(neg_electrode_dim).horz_align(
-                    top_spring, opposite=True).vert_align(top_spring, bottom=False)
+                    top_spring, opposite=True).vert_align(top_spring)
                 neg_electrode_right = Box(neg_electrode_dim).horz_align(
-                    top_spring, left=False, opposite=True).vert_align(top_spring, bottom=False)
+                    top_spring, left=False, opposite=True).vert_align(top_spring)
                 self.c_ports.append((neg_electrode_left.bounds[0], neg_electrode_left.center[1]))
                 self.c_ports.append((neg_electrode_right.bounds[1], neg_electrode_left.center[1]))
                 patterns.extend([neg_electrode_left, neg_electrode_right])
 
-        super(NemsAnchor, self).__init__(*patterns, call_union=False)
+        super(NemsAnchor, self).__init__(*patterns)
 
     @property
     def contact_ports(self) -> np.ndarray:
@@ -1118,6 +1091,38 @@ class EutecticOctagon(Pattern):
 #     @property
 #     def output_ports(self) -> np.ndarray:
 #         return self.input_ports + np.asarray((self.size[0], 0))
+
+
+
+class MemsMonitorCoupler(Pattern):
+    def __init__(self, waveguide_w: float, interaction_l: float, gap_w: float,
+                 end_l: float, detector_wg_l: float, bend_radius: float = 3, pad_dim: Optional[Dim2] = None,
+                 rib_pad_w: float = 0):
+        self.waveguide_w = waveguide_w
+        self.interaction_l = interaction_l
+        self.detector_wg_l = detector_wg_l
+        self.gap_w = gap_w
+        self.end_l = end_l
+        self.bend_radius = bend_radius
+        self.pad_dim = pad_dim
+
+        pads = []
+
+        waveguide = Path(width=waveguide_w).segment(interaction_l)
+        monitor_wg = copy(waveguide).translate(dx=0, dy=gap_w + waveguide_w)
+        monitor_left = Path(width=waveguide_w).rotate(np.pi).turn(bend_radius, -np.pi / 2).segment(detector_wg_l).turn(
+            bend_radius, -np.pi / 2).translate(dx=0, dy=gap_w + waveguide_w)
+        monitor_right = Path(width=waveguide_w).turn(bend_radius, np.pi / 2).segment(detector_wg_l).turn(
+            bend_radius, np.pi / 2).translate(dx=interaction_l, dy=gap_w + waveguide_w)
+        pad_y = waveguide_w * 3 / 2 + gap_w + pad_dim[1] / 2 + rib_pad_w
+        pads.append(
+            Path(width=pad_dim[1]).segment(pad_dim[0]).translate(dx=interaction_l / 2 - pad_dim[0] / 2, dy=pad_y))
+        if rib_pad_w > 0:
+            pads.append(Path(width=pad_dim[1]).segment(pad_dim[0]).translate(
+                dx=0, dy=waveguide_w * 3 / 2 + gap_w + rib_pad_w / 2))
+
+        super(MemsMonitorCoupler, self).__init__(waveguide, monitor_wg, monitor_left, monitor_right, *pads)
+        self.pads = pads[:1]
 
 
 def multilayer(waveguide_pattern: Pattern, pads: List[Pattern], clearout_areas: Tuple[Union[Dim2, Pattern], ...],
