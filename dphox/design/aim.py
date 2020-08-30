@@ -66,13 +66,12 @@ class AIMNazca:
         return self.tdc_node(diff_ps, cell) if diff_ps is not None else cell
 
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 100,
-                end_l: float = 5, gap_w: float = 0.15, taper_ls: Tuple[float, ...] = (5,),
+                gap_w: float = 0.15, taper_ls: Tuple[float, ...] = (5,),
                 pad_dim: Dim3 = (50, 5, 2), anchor: Tuple[float, ...] = None, contact_box_dim: Dim2 = (50, 5),
                 clearout_box_dim: Dim2 = (65, 3), clearout_etch_stop_grow: float = 0.5,
                 gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100,
                 name: str = 'nems_ps') -> nd.Cell:
-        c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
-                          phaseshift_l=phaseshift_l, end_l=end_l, gap_w=gap_w,
+        c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
                           num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
                           anchor=anchor, gap_taper=gap_taper, wg_taper=wg_taper,
                           taper_ls=taper_ls)
@@ -112,15 +111,16 @@ class AIMNazca:
         return cell
 
     def thermal_ps(self):
-        return self.pdk_cells['cl_band_thermo_optic_phase_shifter']
+        with nd.Cell('thermal_double_ps') as cell:
+            self.pdk_cells['cl_band_thermo_optic_phase_shifter'].put(0, 0, 0)
+            nd.Pin('a0').put(0, 0, -180)
+            nd.Pin('b0').put(100, 0, 0)
+        return cell
 
     def waveguide(self, length: float, waveguide_w: float = 0.48, taper_ls: Tuple[float, ...] = (0,),
-                  taper_params: Optional[Tuple[Tuple[float, ...], ...]] = None, end_l: bool = 0, symmetric: bool = True):
-        c = Waveguide(waveguide_w, length,
-                      taper_params=taper_params,
-                      num_taper_evaluations=100, end_l=end_l,
-                      symmetric=symmetric,
-                      taper_ls=taper_ls)
+                  taper_params: Optional[Tuple[Tuple[float, ...], ...]] = None, symmetric: bool = True):
+        c = Waveguide(waveguide_w, length, taper_params=taper_params,
+                      num_taper_evaluations=100, symmetric=symmetric, taper_ls=taper_ls)
         device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
                               doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
                               clearout_layer='tram', clearout_etch_stop_layer='esam')
@@ -201,109 +201,16 @@ class AIMNazca:
             nd.Pin('b1').put(tap.pin['b1'])
             self.waveguide_ic.bend(radius, angle=-90).put(tap.pin['a1'])
             if mesh_bend:
-                self.waveguide_ic.bend(radius, angle=90).put(tap.pin['b1'])
-            pd0 = self.pdk_cells['cl_band_photodetector_digital'].put()
+                pd0 = self.pdk_cells['cl_band_photodetector_digital'].put(flip=True)
+            else:
+                pd0 = self.pdk_cells['cl_band_photodetector_digital'].put()
             nd.Pin('p0').put(pd0.pin['p'])
             nd.Pin('n0').put(pd0.pin['n'])
             self.waveguide_ic.bend(radius, angle=90).put(tap.pin['b1'])
-            # if mesh_bend:
-            #     self.waveguide_ic.bend(radius, angle=90).put(tap.pin['b1'])
             pd1 = self.pdk_cells['cl_band_photodetector_digital'].put()
             nd.Pin('p1').put(pd1.pin['p'])
             nd.Pin('n1').put(pd1.pin['n'])
         return cell
-
-    # def triangular_thermal_mzi_mesh(self, n: int, waveguide_w: float, end_l: float, interport_w: float,
-    #                                 radius: float, tap_radius: float = 5, custom_dc: bool = False,
-    #                                 interaction_l: float = None, gap_w: float = None):
-    #     diff_ps = self.thermal_double_ps(interport_w)
-    #     ps = self.thermal_ps()
-    #     if custom_dc:
-    #         bend_height = (interport_w - gap_w - waveguide_w) / 2
-    #         if interaction_l is None or gap_w is None:
-    #             raise ValueError('Must specify interaction_l and gap_w.')
-    #         dc, dc_dummy = self.custom_dc(waveguide_w, (radius, bend_height), gap_w, interaction_l, 0)
-    #     else:
-    #         dc = self.pdk_dc(radius, interport_w)
-    #         dc_width = dc.pin['b0'].x - dc.pin['a0'].x
-    #         dc_dummy = Waveguide(waveguide_w, dc_width).nazca_cell('straight_dc_dummy', 'seam')
-    #     tap = self.bidirectional_tap(tap_radius) if tap_radius > 0 else None
-    #     node, dummy = self.mzi_node(diff_ps, dc, tap, tap, sep=end_l), self._mzi_dummy(ps, dc_dummy, tap, tap,
-    #                                                                                    sep=end_l)
-    #     return self.triangular_mesh(n, node, dummy, interport_w, end_l)
-
-    # def triangular_nems_mzi_mesh(self, n: int, waveguide_w: float, nanofin_w: float,
-    #                              arm_l: float, end_l: float, ps_end_l: float, ps_gap_w: float, interport_w: float,
-    #                              pad_dim: Optional[Dim3], anchor: Optional[Dim2], contact_box_dim: Dim2,
-    #                              clearout_box_dim: Dim2, radius: float,
-    #                              taper_ls: Tuple[float, ...] = (0,), clearout_etch_stop_grow: float = 0.5,
-    #                              gap_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
-    #                              wg_taper: Optional[Union[np.ndarray, Tuple[float, ...]]] = None,
-    #                              num_taper_evaluations: int = 100, tap_radius: float = 5, custom_dc: bool = False,
-    #                              interaction_l: float = None, gap_w: float = None, ):
-    #     diff_ps = self.nems_double_ps(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
-    #                                   interport_w=interport_w, phaseshift_l=arm_l, end_l=ps_end_l, gap_w=ps_gap_w,
-    #                                   pad_dim=pad_dim, gap_taper=gap_taper, wg_taper=wg_taper, taper_ls=taper_ls,
-    #                                   contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
-    #                                   clearout_etch_stop_grow=clearout_etch_stop_grow)
-    #     ps = self.nems_ps(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
-    #                       phaseshift_l=arm_l, end_l=ps_end_l, gap_w=ps_gap_w, taper_ls=taper_ls,
-    #                       pad_dim=pad_dim, anchor=anchor, contact_box_dim=contact_box_dim,
-    #                       clearout_box_dim=clearout_box_dim, clearout_etch_stop_grow=clearout_etch_stop_grow,
-    #                       gap_taper=gap_taper, wg_taper=wg_taper, num_taper_evaluations=num_taper_evaluations)
-    #
-    #     tap = self.bidirectional_tap(tap_radius) if tap_radius > 0 else None
-    #
-    #     if custom_dc:
-    #         bend_height = (interport_w - gap_w - waveguide_w) / 2
-    #         if interaction_l is None or gap_w is None:
-    #             raise ValueError('Must specify interaction_l and gap_w.')
-    #         dc, dc_dummy = self.custom_dc(waveguide_w, (radius, bend_height), gap_w, interaction_l, 0)
-    #     else:
-    #         dc = self.pdk_dc(radius, interport_w)
-    #         dc_width = dc.pin['b0'].x - dc.pin['a0'].x
-    #         dc_dummy = Waveguide(waveguide_w, dc_width).nazca_cell('straight_dc_dummy', 'seam')
-    #         # with nd.Cell('straight_dc_dummy') as dc_dummy:
-    #         #     self.waveguide_ic.strt(dc_width / 2 - 20).put()
-    #         #     tap.put()
-    #         #     self.waveguide_ic.strt(dc_width / 2 - 20).put()
-    #     node, dummy = self.mzi_node(diff_ps, dc, tap, tap, sep=end_l), self._mzi_dummy(ps, dc_dummy, tap, tap,
-    #                                                                                    sep=end_l)
-    #     return _triangular_mesh(n, self.waveguide_ic, node, dummy, interport_w, end_l)
-    #
-    # def triangular_nems_tdc_mesh(self, n: int, waveguide_w: float, nanofin_w: float,
-    #                              phaseshift_l: float, gap_w: float, interaction_l: float, interport_w: float,
-    #                              ps_taper_ls: Tuple[float, ...], ps_pad_dim: Optional[Dim3],
-    #                              ps_connector_dim: Optional[Dim2], tdc_nanofin_w: float, end_l: float,
-    #                              tdc_gap_w: float, beam_gap_w: float, tdc_pad_dim, tdc_connector_dim: float,
-    #                              middle_fin_dim: float, ps_contact_box_dim: Dim2, ps_clearout_box_dim: Dim2,
-    #                              tdc_contact_box_dim: Dim2, tdc_clearout_box_dim: Dim2, radius: float,
-    #                              gap_taper: Union[np.ndarray, Tuple[float, ...]],
-    #                              wg_taper: Union[np.ndarray, Tuple[float, ...]],
-    #                              clearout_etch_stop_grow: float = 0.5, num_taper_evaluations: int = 100,
-    #                              tap_radius: float = 10, use_radius: bool = True):
-    #     bend_dim = (radius, (interport_w - gap_w - waveguide_w) / 2)
-    #     diff_ps = self.nems_double_ps(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
-    #                                   phaseshift_l=phaseshift_l, end_l=0, gap_w=gap_w,
-    #                                   taper_ls=ps_taper_ls, pad_dim=ps_pad_dim, anchor=ps_connector_dim,
-    #                                   contact_box_dim=ps_contact_box_dim, clearout_box_dim=ps_clearout_box_dim,
-    #                                   clearout_etch_stop_grow=clearout_etch_stop_grow, gap_taper=gap_taper,
-    #                                   wg_taper=wg_taper, num_taper_evaluations=num_taper_evaluations)
-    #     ps = self.nems_ps(waveguide_w=waveguide_w, nanofin_w=tdc_nanofin_w,
-    #                       phaseshift_l=phaseshift_l, end_l=0, gap_w=gap_w, taper_ls=ps_taper_ls, pad_dim=ps_pad_dim,
-    #                       anchor=ps_connector_dim, contact_box_dim=ps_contact_box_dim,
-    #                       clearout_box_dim=ps_clearout_box_dim, clearout_etch_stop_grow=clearout_etch_stop_grow,
-    #                       gap_taper=gap_taper, wg_taper=wg_taper, num_taper_evaluations=num_taper_evaluations)
-    #     tdc = self.nems_tdc(waveguide_w=waveguide_w, nanofin_w=nanofin_w, interaction_l=interaction_l, end_l=end_l,
-    #                         dc_gap_w=tdc_gap_w, beam_gap_w=beam_gap_w, bend_dim=bend_dim, pad_dim=tdc_pad_dim,
-    #                         anchor=tdc_connector_dim, middle_fin_dim=middle_fin_dim,
-    #                         use_radius=use_radius, contact_box_dim=tdc_contact_box_dim,
-    #                         clearout_box_dim=tdc_clearout_box_dim, clearout_etch_stop_grow=clearout_etch_stop_grow)
-    #     dc_width = tdc.bbox[2] - tdc.bbox[0]
-    #     dc_dummy = Waveguide(waveguide_w, dc_width).nazca_cell('straight_tdc_dummy', 'seam')
-    #     tap = self.bidirectional_tap(tap_radius) if tap_radius > 0 else None
-    #     node, dummy = self.mzi_node(diff_ps, tdc, tap, tap), self._mzi_dummy(ps, dc_dummy, tap, tap)
-    #     return _triangular_mesh(n, self.waveguide_ic, node, dummy, interport_w, end_l)
 
     def triangular_mesh(self, n: int, node: nd.Cell, dummy: Optional[nd.Cell] = None,
                         interport_w: float = 50, end_l: float = 30):
@@ -445,7 +352,7 @@ class AIMNazca:
                 self.waveguide_ic.bend(radius=10, angle=180, width=final_taper_width).put()
         return drop_port_array
 
-    def _tdc_dummy(self, ps: nd.Cell, dc_dummy: nd.Cell, tap: Optional[nd.Cell] = None):
+    def tdc_dummy(self, ps: nd.Cell, dc_dummy: nd.Cell, tap: Optional[nd.Cell] = None):
         with nd.Cell(name=f'tdc_dummy') as dummy:
             input_ps = ps.put()
             tdc_dummy = dc_dummy.put(input_ps.pin['b0'])
@@ -457,8 +364,8 @@ class AIMNazca:
                 nd.Pin('b0').put(tdc_dummy.pin['b0'])
         return dummy
 
-    def _mzi_dummy(self, ps: nd.Cell, dc_dummy: nd.Cell, tap_internal: Optional[nd.Cell] = None,
-                   tap_external: Optional[nd.Cell] = None, sep: float = 0):
+    def mzi_dummy(self, ps: nd.Cell, dc_dummy: nd.Cell, tap_internal: Optional[nd.Cell] = None,
+                  tap_external: Optional[nd.Cell] = None, sep: float = 0):
         with nd.Cell(name=f'tdc_dummy') as dummy:
             input_ps = ps.put()
             _dc_dummy = dc_dummy.put(input_ps.pin['b0'])
@@ -478,6 +385,16 @@ class AIMNazca:
             else:
                 nd.Pin('b0').put(_dc_dummy.pin['b0'])
         return dummy
+
+    def ps_tester(self, testing_tap_line: nd.Cell, ps_list: List[nd.Cell], dc: nd.Cell,
+                  detector_loopback_params: Tuple[float, float] = (5, 10), name: str = 'ps_tester'):
+        with nd.Cell(name) as ps_tester:
+            line = testing_tap_line.put()
+            for i, ps in enumerate(ps_list):
+                self.mzi_node(ps, dc, include_input_ps=False,
+                              detector=self.pdk_cells['cl_band_photodetector_digital'],
+                              detector_loopback_params=detector_loopback_params).put(line.pin[f'a{i}'])
+        return ps_tester
 
 
 def _mzi_angle(waveguide_w: float, gap_w: float, interport_w: float, radius: float):
