@@ -45,7 +45,7 @@ class AIMNazca:
         self.dicing_ic = nd.interconnects.Interconnect(width=100, xs='dicing_xs')
 
     def nems_tdc(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
-                 interaction_l: float = 50, end_l: float = 5, dc_gap_w: float = 0.2, beam_gap_w: float = 0.15,
+                 interaction_l: float = 50, dc_gap_w: float = 0.2, beam_gap_w: float = 0.15,
                  bend_dim: Dim2 = (10, 20), pad_dim: Dim3 = (50, 5, 2), anchor=None,
                  middle_fin_dim=None, use_radius: bool = True, contact_box_dim: Dim2 = (50, 10),
                  clearout_box_dim: Dim2 = (65, 3), dc_taper_ls: Tuple[float, ...] = None,
@@ -53,7 +53,7 @@ class AIMNazca:
                  diff_ps: Optional[nd.Cell] = None,
                  name: str = 'nems_tdc') -> nd.Cell:
         c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
-                           interaction_l=interaction_l, end_l=end_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
+                           interaction_l=interaction_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
                            bend_dim=bend_dim, pad_dim=pad_dim, anchor=anchor,
                            middle_fin_dim=middle_fin_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
                            dc_taper=dc_taper, beam_taper=beam_taper)
@@ -82,10 +82,13 @@ class AIMNazca:
                               clearout_etch_stop_grow=clearout_etch_stop_grow)
         return device.nazca_cell(name)
 
-    def nems_anchor(self, fixed_fin_dim: Dim2, bending_fin_dim: Dim2, tether_dim: Dim2,
-                    loop_connector: Optional[Dim2] = None, name: str = 'nems_anchor'):
-        device = Multilayer({NemsAnchor(fixed_fin_dim=fixed_fin_dim, bending_fin_dim=bending_fin_dim,
-                                        tether_dim=tether_dim, loop_connector=loop_connector): 'seam'})
+    def nems_anchor(self, fin_spring_dim: Dim2, connector_dim: Dim2, top_spring_dim: Dim2 = None,
+                    loop_connector: Optional[Dim3] = None, pos_electrode_dim: Optional[Dim3] = None,
+                    neg_electrode_dim: Optional[Dim2] = None, name: str = 'nems_anchor'):
+        device = Multilayer({NemsAnchor(fin_spring_dim=fin_spring_dim, connector_dim=connector_dim,
+                                        top_spring_dim=top_spring_dim, loop_connector=loop_connector,
+                                        pos_electrode_dim=pos_electrode_dim,
+                                        neg_electrode_dim=neg_electrode_dim): 'seam'})
         return device.nazca_cell(name)
 
     def double_ps(self, ps: nd.Cell, interport_w: float = 40,
@@ -178,9 +181,11 @@ class AIMNazca:
             for i in range(n_pads[0]):
                 for j in range(n_pads[1]):
                     lattice_bond_pads.append(pad.put(i * pitch[0], j * pitch[1], 270))
-                    message = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='cc',
-                                      layer='seam', height=pad_dim[0] / 2)
-                    message.put(-pitch[0] / 2 + i * pitch[0], -pad_l / 2 + j * pitch[1])
+                    x = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='cc',
+                                layer='seam', height=pad_dim[0] / 2)
+                    y = nd.text(text=f'{j + 1 if labels is None else labels[i]}', align='cc',
+                                layer='seam', height=pad_dim[0] / 2)
+                    x.put(-pitch[0] / 2 + i * pitch[0], -pad_l / 2 + j * pitch[1])
         return bond_pad_array
 
     def custom_dc(self, waveguide_w: float = 0.48, bend_dim: Dim2 = (20, 50.78 / 2), gap_w: float = 0.3,
@@ -201,12 +206,13 @@ class AIMNazca:
             nd.Pin('b1').put(tap.pin['b1'])
             self.waveguide_ic.bend(radius, angle=-90).put(tap.pin['a1'])
             if mesh_bend:
-                pd0 = self.pdk_cells['cl_band_photodetector_digital'].put(flip=True)
-            else:
-                pd0 = self.pdk_cells['cl_band_photodetector_digital'].put()
+                self.waveguide_ic.bend(radius, angle=-90).put()
+            pd0 = self.pdk_cells['cl_band_photodetector_digital'].put(flip=True)
             nd.Pin('p0').put(pd0.pin['p'])
             nd.Pin('n0').put(pd0.pin['n'])
             self.waveguide_ic.bend(radius, angle=90).put(tap.pin['b1'])
+            if mesh_bend:
+                self.waveguide_ic.bend(radius, angle=90).put()
             pd1 = self.pdk_cells['cl_band_photodetector_digital'].put()
             nd.Pin('p1').put(pd1.pin['p'])
             nd.Pin('n1').put(pd1.pin['n'])
