@@ -267,6 +267,16 @@ class Multilayer:
         return np.vstack(all_output_ports) if len(all_output_ports) > 0 else np.asarray([])
 
     @property
+    def contact_ports(self) -> np.ndarray:
+        contact_ports = [c.contact_ports for c in self.pattern_to_layer.keys() if c.contact_ports.size > 0]
+        return np.vstack(contact_ports) if len(contact_ports) > 0 else np.asarray([])
+
+    @property
+    def attachment_ports(self) -> np.ndarray:
+        attachment_ports = [c.attachment_ports for c in self.pattern_to_layer.keys() if c.attachment_ports.size > 0]
+        return np.vstack(attachment_ports) if len(attachment_ports) > 0 else np.asarray([])
+
+    @property
     def bounds(self) -> Dim4:
         return self.gdspy_cell().get_bounding_box()
 
@@ -286,6 +296,10 @@ class Multilayer:
                 nd.Pin(f'a{idx}').put(*port, 180)
             for idx, port in enumerate(self.output_ports):
                 nd.Pin(f'b{idx}').put(*port)
+            for idx, port in enumerate(self.contact_ports):
+                nd.Pin(f'c{idx}').put(*port)
+            for idx, port in enumerate(self.attachment_ports):
+                nd.Pin(f't{idx}').put(*port)
             nd.put_stub()
         return cell
 
@@ -720,8 +734,9 @@ class LateralNemsPS(GroupedPattern):
 
     @property
     def attachment_ports(self) -> np.ndarray:
-        c = self.center
-        return np.asarray(self.center)
+        dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
+        center = np.asarray(self.center)
+        return np.asarray((center + dy, center - dy))
 
     # waveguide_layer = 'seam', metal_stack_layers: Tuple[str, ...] = ('m1am', 'm2am'),
     # doping_stack_layer = 'ppam', via_stack_layers = ['cbam', 'v1am'],
@@ -970,11 +985,10 @@ class NemsAnchor(GroupedPattern):
         self.neg_electrode_dim = neg_electrode_dim
         patterns = []
         c_ports = []
-        a_ports = []
 
         top_spring_dim = fin_spring_dim if not top_spring_dim else top_spring_dim
         connector = Box(connector_dim).translate()
-        if loop_connector is not None:
+        if loop_connector is not None and straight_connector is None:
             loop = Pattern(Path(fin_spring_dim[1]).rotate(np.pi).turn(
                 loop_connector[1], -np.pi, final_width=loop_connector[2], tolerance=0.001).segment(
                 loop_connector[0]).turn(loop_connector[1], -np.pi, final_width=fin_spring_dim[1],
@@ -991,7 +1005,6 @@ class NemsAnchor(GroupedPattern):
                                                                                             bottom=False,
                                                                                             opposite=True))
         a_port = (connector.center[0], connector.bounds[1] + fin_spring_dim[1] / 2)
-        a_ports.append(a_port)
         if include_fin_dummy:
             patterns.append(Box(fin_spring_dim).center_align(a_port))
         patterns.append(connector)
@@ -1015,15 +1028,12 @@ class NemsAnchor(GroupedPattern):
                 patterns.extend([neg_electrode_left, neg_electrode_right])
 
         super(NemsAnchor, self).__init__(*patterns)
-        self.a_ports, self.c_ports = a_ports, c_ports
+        self.translate(-a_port[0], -a_port[1])
+    #
+    # @property
+    # def contact_ports(self) -> np.ndarray:
+    #     return np.asarray(self.c_ports)
 
-    @property
-    def contact_ports(self) -> np.ndarray:
-        return np.asarray(self.c_ports)
-
-    @property
-    def attachment_ports(self) -> np.ndarray:
-        return np.asarray(self.a_ports)
 
 
 #

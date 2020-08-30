@@ -84,17 +84,21 @@ class AIMNazca:
             return device.nazca_cell(name)
         else:
             with nd.Cell(name) as cell:
-                ps = device.nazca_cell('ps')
+                ps = device.nazca_cell('ps').put()
                 anchor.put(ps.pin['t0'])
-                anchor.put(ps.pin['t1'])
+                anchor.put(ps.pin['t1'], flip=True)
+                nd.Pin('a0').put(ps.pin['a0'])
+                nd.Pin('b0').put(ps.pin['b0'])
             return cell
 
     def nems_anchor(self, fin_spring_dim: Dim2 = (108, 0.15), connector_dim: Dim2 = (51, 0.5),
-                    top_spring_dim: Dim2 = (108, 0.15), loop_connector: Optional[Dim3] = (0.5, 50, 0.15),
+                    top_spring_dim: Dim2 = (108, 0.15), straight_connector: Optional[Dim2] = (0.25, 1),
+                    loop_connector: Optional[Dim3] = (50, 0.5, 0.15),
                     pos_electrode_dim: Optional[Dim3] = (104, 1, 2), neg_electrode_dim: Optional[Dim2] = (2, 3.15),
                     name: str = 'nems_anchor'):
         device = Multilayer({NemsAnchor(fin_spring_dim=fin_spring_dim, connector_dim=connector_dim,
-                                        top_spring_dim=top_spring_dim, loop_connector=loop_connector,
+                                        top_spring_dim=top_spring_dim, straight_connector=straight_connector,
+                                        loop_connector=loop_connector,
                                         pos_electrode_dim=pos_electrode_dim,
                                         neg_electrode_dim=neg_electrode_dim): 'seam'})
         return device.nazca_cell(name)
@@ -132,10 +136,8 @@ class AIMNazca:
                   taper_params: Optional[Tuple[Tuple[float, ...], ...]] = None, symmetric: bool = True):
         c = Waveguide(waveguide_w, length, taper_params=taper_params,
                       num_taper_evaluations=100, symmetric=symmetric, taper_ls=taper_ls)
-        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=('m1am', 'm2am'),
-                              doping_stack_layer='ppam', via_stack_layers=('cbam', 'v1am'),
-                              clearout_layer='tram', clearout_etch_stop_layer='esam')
-        return device.nazca_cell('test_waveguide')
+        device = Multilayer({c: 'seam'})
+        return device.nazca_cell('waveguide')
 
     # def nems_miller_node(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
     #                      gap_w: float, bend_radius: float, bend_extension: float, lr_nanofin_w: float,
@@ -179,21 +181,33 @@ class AIMNazca:
             self.pad_ic.strt(length=pad_l, width=pad_w).put()
         return bond_pad
 
-    def bond_pad_array(self, n_pads: Shape2 = (60, 6), pitch: Union[float, Dim2] = 100,
+    def bond_pad_array(self, n_pads: Shape2 = (60, 3), pitch: Union[float, Dim2] = 100,
                        pad_dim: Dim2 = (40, 40), labels: Optional[np.ndarray] = None):
-        lattice_bond_pads = []
         pad_w, pad_l = pad_dim
         pitch = pitch if isinstance(pitch, tuple) else (pitch, pitch)
         with nd.Cell(name=f'bond_pad_array_{n_pads}_{pitch}') as bond_pad_array:
             pad = self.bond_pad(pad_w=pad_w, pad_l=pad_l)
             for i in range(n_pads[0]):
                 for j in range(n_pads[1]):
-                    lattice_bond_pads.append(pad.put(i * pitch[0], j * pitch[1], 270))
+                    pad.put(i * pitch[0], j * pitch[1], 270)
                     x = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='cc',
                                 layer='seam', height=pad_dim[0] / 2)
                     y = nd.text(text=f'{j + 1 if labels is None else labels[i]}', align='cc',
                                 layer='seam', height=pad_dim[0] / 2)
                     x.put(-pitch[0] / 2 + i * pitch[0], -pad_l / 2 + j * pitch[1])
+                    y.put(pitch[0] / 2 + i * pitch[0], - 3 * pad_l / 2 + j * pitch[1])
+        return bond_pad_array
+
+    def eutectic_array(self, n_pads: Shape2 = (300, 15), pitch: float = 20, width: float = 12):
+        a = width / (1 + np.sqrt(2))
+        pitch = pitch if isinstance(pitch, tuple) else (pitch, pitch)
+        with nd.Cell(name=f'bond_pad_array_{n_pads}_{pitch}') as bond_pad_array:
+            pad = nd.Polygon([(width / 2, a), (a, width / 2), (-a, width / 2), (-width / 2, a),
+                              (-width / 2, -a), (-a, -width / 2), (a, -width / 2), (-width / 2, a)],
+                             layer=779)  # paam
+            for i in range(n_pads[0]):
+                for j in range(n_pads[1]):
+                    pad.put(i * pitch[0], j * pitch[1], 270)
         return bond_pad_array
 
     def custom_dc(self, waveguide_w: float = 0.48, bend_dim: Dim2 = (20, 50.78 / 2), gap_w: float = 0.3,
