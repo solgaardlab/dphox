@@ -841,6 +841,20 @@ class Interposer(Pattern):
                  trombone_radius: Optional[float] = None,
                  final_period: Optional[float] = None, self_coupling_extension_dim: Optional[Dim2] = None,
                  horiz_dist: float = 0, num_trombones: int = 1, shift: Dim2 = (0, 0)):
+        """
+
+        Args:
+            waveguide_w: waveguide width
+            n: number of I/O for interposer
+            period: initial period entering the interposer
+            radius: radius of bends for the interposer
+            trombone_radius: trombone bend radius
+            final_period: final period for the interposer
+            self_coupling_extension_dim: self coupling for alignment
+            horiz_dist: additional horizontal distance (usually to make room for wirebonds)
+            num_trombones: number of trombones
+            shift: translate this component in xy
+        """
         trombone_radius = radius if trombone_radius is None else trombone_radius
         final_period = period if final_period is None else final_period
         period_diff = final_period - period
@@ -931,17 +945,19 @@ class NemsAnchor(GroupedPattern):
 
         top_spring_dim = fin_spring_dim if not top_spring_dim else top_spring_dim
         connector = Box(connector_dim).translate(dy=connector_dim[1] / 2)
-
         if loop_connector is not None:
             loop = Pattern(Path(fin_spring_dim[1]).rotate(np.pi).turn(
-                loop_connector[0], -np.pi, final_width=loop_connector[2], tolerance=0.001).segment(
-                loop_connector[1]).turn(loop_connector[0], -np.pi, final_width=loop_connector[2],
-                                        tolerance=0.001).segment(loop_connector[1]))
+                loop_connector[1], -np.pi, final_width=loop_connector[2], tolerance=0.001).segment(
+                loop_connector[0]).turn(loop_connector[1], -np.pi, final_width=fin_spring_dim[1],
+                                        tolerance=0.001).segment(loop_connector[0]))
             loop.center_align(connector).vert_align(connector, bottom=False, opposite=False)
             connector = GroupedPattern(connector, loop)
-            self.a_ports.append((0, -loop_connector[1] - loop_connector[0] * 2))
+            a_port = (connector_dim[0] / 2, -loop_connector[1] - loop_connector[2] + fin_spring_dim[1] / 2)
         else:
-            self.a_ports.append((0, 0))
+            a_port = (connector_dim[0] / 2, 0)
+        self.a_ports.append(a_port)
+        if include_fin_dummy:
+            patterns.append(Box(fin_spring_dim).center_align(a_port))
         patterns.append(connector)
         if top_spring_dim is not None:
             top_spring = Box(top_spring_dim).center_align(

@@ -67,9 +67,9 @@ class AIMNazca:
 
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 100,
                 gap_w: float = 0.15, taper_ls: Tuple[float, ...] = (5,),
-                pad_dim: Dim3 = (50, 5, 2), anchor: Tuple[float, ...] = None, contact_box_dim: Dim2 = (50, 5),
+                pad_dim: Dim3 = (50, 5, 2), contact_box_dim: Dim2 = (50, 5),
                 clearout_box_dim: Dim2 = (65, 3), clearout_etch_stop_grow: float = 0.5,
-                gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100,
+                gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100, anchor: Optional[nd.Cell] = None,
                 name: str = 'nems_ps') -> nd.Cell:
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
                           num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
@@ -80,11 +80,19 @@ class AIMNazca:
                               clearout_layer='tram', clearout_etch_stop_layer='esam',
                               contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
                               clearout_etch_stop_grow=clearout_etch_stop_grow)
-        return device.nazca_cell(name)
+        if anchor is None:
+            return device.nazca_cell(name)
+        else:
+            with nd.Cell(name) as cell:
+                ps = device.nazca_cell('ps')
+                anchor.put(ps.pin['t0'])
+                anchor.put(ps.pin['t1'])
+            return cell
 
-    def nems_anchor(self, fin_spring_dim: Dim2, connector_dim: Dim2, top_spring_dim: Dim2 = None,
-                    loop_connector: Optional[Dim3] = None, pos_electrode_dim: Optional[Dim3] = None,
-                    neg_electrode_dim: Optional[Dim2] = None, name: str = 'nems_anchor'):
+    def nems_anchor(self, fin_spring_dim: Dim2 = (108, 0.15), connector_dim: Dim2 = (51, 0.5),
+                    top_spring_dim: Dim2 = (108, 0.15), loop_connector: Optional[Dim3] = (0.5, 50, 0.15),
+                    pos_electrode_dim: Optional[Dim3] = (104, 1, 2), neg_electrode_dim: Optional[Dim2] = (2, 3.15),
+                    name: str = 'nems_anchor'):
         device = Multilayer({NemsAnchor(fin_spring_dim=fin_spring_dim, connector_dim=connector_dim,
                                         top_spring_dim=top_spring_dim, loop_connector=loop_connector,
                                         pos_electrode_dim=pos_electrode_dim,
@@ -129,24 +137,24 @@ class AIMNazca:
                               clearout_layer='tram', clearout_etch_stop_layer='esam')
         return device.nazca_cell('test_waveguide')
 
-    def nems_miller_node(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
-                         gap_w: float, bend_radius: float, bend_extension: float, lr_nanofin_w: float,
-                         ud_nanofin_w: float, lr_gap_w: float, ud_gap_w: float,
-                         contact_box_dim: Dim2, clearout_box_dim: Dim2, clearout_etch_stop_grow: float = 0.5,
-                         lr_pad_dim: Optional[Dim2] = None,
-                         ud_pad_dim: Optional[Dim2] = None, lr_connector_dim: Optional[Dim2] = None,
-                         ud_connector_dim: Optional[Dim2] = None, name: str = 'nems_miller_node') -> nd.Cell:
-        c = NemsMillerNode(waveguide_w=waveguide_w, upper_interaction_l=upper_interaction_l, gap_w=gap_w,
-                           lower_interaction_l=lower_interaction_l, bend_radius=bend_radius,
-                           bend_extension=bend_extension, lr_nanofin_w=lr_nanofin_w, ud_nanofin_w=ud_nanofin_w,
-                           lr_gap_w=lr_gap_w, ud_gap_w=ud_gap_w, lr_pad_dim=lr_pad_dim,
-                           ud_pad_dim=ud_pad_dim, lr_connector_dim=lr_connector_dim, ud_connector_dim=ud_connector_dim)
-        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
-                              doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
-                              clearout_layer='tram', clearout_etch_stop_layer='esam',
-                              contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
-                              clearout_etch_stop_grow=clearout_etch_stop_grow)
-        return device.nazca_cell(name)
+    # def nems_miller_node(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
+    #                      gap_w: float, bend_radius: float, bend_extension: float, lr_nanofin_w: float,
+    #                      ud_nanofin_w: float, lr_gap_w: float, ud_gap_w: float,
+    #                      contact_box_dim: Dim2, clearout_box_dim: Dim2, clearout_etch_stop_grow: float = 0.5,
+    #                      lr_pad_dim: Optional[Dim2] = None,
+    #                      ud_pad_dim: Optional[Dim2] = None, lr_connector_dim: Optional[Dim2] = None,
+    #                      ud_connector_dim: Optional[Dim2] = None, name: str = 'nems_miller_node') -> nd.Cell:
+    #     c = NemsMillerNode(waveguide_w=waveguide_w, upper_interaction_l=upper_interaction_l, gap_w=gap_w,
+    #                        lower_interaction_l=lower_interaction_l, bend_radius=bend_radius,
+    #                        bend_extension=bend_extension, lr_nanofin_w=lr_nanofin_w, ud_nanofin_w=ud_nanofin_w,
+    #                        lr_gap_w=lr_gap_w, ud_gap_w=ud_gap_w, lr_pad_dim=lr_pad_dim,
+    #                        ud_pad_dim=ud_pad_dim, lr_connector_dim=lr_connector_dim, ud_connector_dim=ud_connector_dim)
+    #     device = c.multilayer(waveguide_layer='seam', metal_stack_layers=['m1am', 'm2am'],
+    #                           doping_stack_layer='ppam', via_stack_layers=['cbam', 'v1am'],
+    #                           clearout_layer='tram', clearout_etch_stop_layer='esam',
+    #                           contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
+    #                           clearout_etch_stop_grow=clearout_etch_stop_grow)
+    #     return device.nazca_cell(name)
 
     def interposer(self, waveguide_w: float, n: int, period: float, radius: float,
                    trombone_radius: Optional[float] = None,
