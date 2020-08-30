@@ -920,15 +920,17 @@ class Interposer(Pattern):
 
 class NemsAnchor(GroupedPattern):
     def __init__(self, fin_spring_dim: Dim2, connector_dim: Dim2, top_spring_dim: Dim2 = None,
-                 loop_connector: Optional[Dim3] = None, pos_electrode_dim: Optional[Dim3] = None,
-                 neg_electrode_dim: Optional[Dim2] = None, include_fin_dummy: bool = False):
+                 straight_connector: Optional[Dim2] = None, loop_connector: Optional[Dim3] = None,
+                 pos_electrode_dim: Optional[Dim3] = None, neg_electrode_dim: Optional[Dim2] = None,
+                 include_fin_dummy: bool = False):
         """NEMS anchor
 
         Args:
             fin_spring_dim: fixed fin dimension (x, y)
             top_spring_dim: fin dimension (x, y)
             connector_dim: connector dimension
-            loop_connector: loop connector to the fin, final xy dim on the top part of loop
+            straight_connector: straight connector to the fin, box xy (overridden by loop connector)
+            loop_connector: loop connector to the fin, xy dim and final width on the top part of loop
             pos_electrode_dim: positive electrode dimension
             neg_electrode_dim: negative electrode dimension
             include_fin_dummy: include fin dummy for mechanical simulation
@@ -936,12 +938,13 @@ class NemsAnchor(GroupedPattern):
         self.fin_spring_dim = fin_spring_dim
         self.top_spring_dim = top_spring_dim
         self.connector_dim = connector_dim
+        self.straight_connector = straight_connector
         self.loop_connector = loop_connector
         self.pos_electrode_dim = pos_electrode_dim
         self.neg_electrode_dim = neg_electrode_dim
         patterns = []
-        self.c_ports = []
-        self.a_ports = []
+        c_ports = []
+        a_ports = []
 
         top_spring_dim = fin_spring_dim if not top_spring_dim else top_spring_dim
         connector = Box(connector_dim).translate()
@@ -952,10 +955,12 @@ class NemsAnchor(GroupedPattern):
                                         tolerance=0.001).segment(loop_connector[0]))
             loop.center_align(connector).vert_align(connector, bottom=False, opposite=False)
             connector = GroupedPattern(connector, loop)
-            a_port = (connector_dim[0] / 2, connector_dim[1] - 2 * loop_connector[1] - fin_spring_dim[1])
-        else:
-            a_port = (connector_dim[0] / 2, connector_dim[1] - fin_spring_dim[1])
-        self.a_ports.append(a_port)
+        elif straight_connector is not None:
+            straight = Box(straight_connector)
+            connector = GroupedPattern(connector, copy(straight).horz_align(connector).vert_align(connector, bottom=False, opposite=True),
+                                       copy(straight).horz_align(connector, left=False, opposite=False).vert_align(connector, bottom=False, opposite=True))
+        a_port = (connector.center[0], connector.bounds[1] + fin_spring_dim[1] / 2)
+        a_ports.append(a_port)
         if include_fin_dummy:
             patterns.append(Box(fin_spring_dim).center_align(a_port))
         patterns.append(connector)
@@ -966,19 +971,20 @@ class NemsAnchor(GroupedPattern):
             if pos_electrode_dim is not None:
                 pos_electrode = Box((pos_electrode_dim[0], pos_electrode_dim[1])).center_align(top_spring).vert_align(
                     top_spring, opposite=True).translate(dy=pos_electrode_dim[2])
-                self.c_ports.append((pos_electrode.bounds[0], pos_electrode.center[1]))
-                self.c_ports.append((pos_electrode.bounds[1], pos_electrode.center[1]))
+                c_ports.append((pos_electrode.bounds[0], pos_electrode.center[1]))
+                c_ports.append((pos_electrode.bounds[1], pos_electrode.center[1]))
                 patterns.append(pos_electrode)
             if neg_electrode_dim is not None:
                 neg_electrode_left = Box(neg_electrode_dim).horz_align(
                     top_spring, opposite=True).vert_align(top_spring)
                 neg_electrode_right = Box(neg_electrode_dim).horz_align(
                     top_spring, left=False, opposite=True).vert_align(top_spring)
-                self.c_ports.append((neg_electrode_left.bounds[0], neg_electrode_left.center[1]))
-                self.c_ports.append((neg_electrode_right.bounds[1], neg_electrode_left.center[1]))
+                c_ports.append((neg_electrode_left.bounds[0], neg_electrode_left.center[1]))
+                c_ports.append((neg_electrode_right.bounds[1], neg_electrode_left.center[1]))
                 patterns.extend([neg_electrode_left, neg_electrode_right])
 
         super(NemsAnchor, self).__init__(*patterns)
+        self.a_ports, self.c_ports = a_ports, c_ports
 
     @property
     def contact_ports(self) -> np.ndarray:
