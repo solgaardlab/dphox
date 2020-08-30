@@ -944,7 +944,7 @@ class NemsAnchor(GroupedPattern):
         self.a_ports = []
 
         top_spring_dim = fin_spring_dim if not top_spring_dim else top_spring_dim
-        connector = Box(connector_dim).translate(dy=connector_dim[1] / 2)
+        connector = Box(connector_dim).translate()
         if loop_connector is not None:
             loop = Pattern(Path(fin_spring_dim[1]).rotate(np.pi).turn(
                 loop_connector[1], -np.pi, final_width=loop_connector[2], tolerance=0.001).segment(
@@ -952,9 +952,9 @@ class NemsAnchor(GroupedPattern):
                                         tolerance=0.001).segment(loop_connector[0]))
             loop.center_align(connector).vert_align(connector, bottom=False, opposite=False)
             connector = GroupedPattern(connector, loop)
-            a_port = (connector_dim[0] / 2, -loop_connector[1] - loop_connector[2] + fin_spring_dim[1] / 2)
+            a_port = (connector_dim[0] / 2, connector_dim[1] - 2 * loop_connector[1] - fin_spring_dim[1])
         else:
-            a_port = (connector_dim[0] / 2, 0)
+            a_port = (connector_dim[0] / 2, connector_dim[1] - fin_spring_dim[1])
         self.a_ports.append(a_port)
         if include_fin_dummy:
             patterns.append(Box(fin_spring_dim).center_align(a_port))
