@@ -13,23 +13,24 @@ if __name__ == 'main':
     length = 100
     taper_ls = (5, 5)
     taper_params = ((0, 0.66), (0, -0.74))
-    anchor = (5, 0.4, 55, 0.5, 0.3)
     dc_radius = 15
 
     test_interport_w = 25
     mesh_interport_w = 50
     mesh_phaseshift_l = 100
+    clearout_dim = (90, 6.5)
     gap_w = 0.3
     test_bend_dim = test_interport_w / 2 - gap_w / 2 - waveguide_w / 2
 
     # Basic components
 
-    dc = chip.custom_dc(bend_dim=(15, test_bend_dim))[0]
+    dc = chip.custom_dc(bend_dim=(dc_radius, test_bend_dim))[0]
     t_waveguide = chip.waveguide(length, taper_ls=taper_ls, taper_params=taper_params)
     anti_waveguide = chip.waveguide(length, taper_ls=taper_ls, taper_params=taper_params, symmetric=False)
 
+    anchor = chip.nems_anchor()
     ps = chip.nems_ps(waveguide_w=waveguide_w, phaseshift_l=length, wg_taper=taper_params, gap_taper=taper_params,
-                      taper_ls=taper_ls, anchor=anchor)
+                      taper_ls=taper_ls, anchor=anchor, pad_dim=None, clearout_box_dim=clearout_dim)
 
     ps_no_anchor = chip.nems_ps(waveguide_w=waveguide_w, phaseshift_l=length, wg_taper=taper_params,
                                 gap_taper=taper_params, taper_ls=taper_ls)
@@ -70,6 +71,7 @@ if __name__ == 'main':
         self_coupling_extension_dim=(30, 200),
         with_gratings=True, horiz_dist=200
     )
+    bp_array = chip.bond_pad_array((60, 3))
 
     # Test structures
 
@@ -77,7 +79,6 @@ if __name__ == 'main':
         chip.singlemode_ps(chip.nems_ps(gap_w=gap_w), interport_w=test_interport_w, phaseshift_l=mesh_phaseshift_l)
         for gap_w in (0.2, 0.25, 0.3, 0.35, 0.4)]
     testing_tap_line = chip.testing_tap_line(15)
-    bp_array = chip.bond_pad_array((60, 6))
     gridsearch = chip.ps_tester(testing_tap_line, psv3_gap, dc)
 
     # Chip construction

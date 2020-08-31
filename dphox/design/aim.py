@@ -67,7 +67,7 @@ class AIMNazca:
 
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 100,
                 gap_w: float = 0.15, taper_ls: Tuple[float, ...] = (5,),
-                pad_dim: Dim3 = (50, 5, 2), contact_box_dim: Dim2 = (50, 5),
+                pad_dim: Optional[Dim3] = None, contact_box_dim: Dim2 = (50, 5),
                 clearout_box_dim: Dim2 = (65, 3), clearout_etch_stop_grow: float = 0.5,
                 gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100, anchor: Optional[nd.Cell] = None,
                 name: str = 'nems_ps') -> nd.Cell:
