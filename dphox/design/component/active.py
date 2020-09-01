@@ -1,7 +1,7 @@
 from ...typing import *
 from .pattern import Pattern, Path, GroupedPattern
 from .passive import Waveguide, DC, Box
-from .multilayer import Multilayer, multilayer
+from .multilayer import Multilayer
 
 from copy import deepcopy as copy
 
@@ -79,26 +79,6 @@ class LateralNemsPS(GroupedPattern):
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)
         return np.asarray((center + dy, center - dy))
-
-    def multilayer(self, contact_box_dim: Dim2, clearout_box_dim: Dim2,
-                   waveguide_layer: str = 'seam', metal_stack_layers: Tuple[str, ...] = ('m1am', 'm2am'),
-                   via_stack_layers: Tuple[str, ...] = ('cbam', 'v1am'),
-                   clearout_layer: str = 'tram', clearout_etch_stop_layer: str = 'esam',
-                   doping_stack_layer: Optional[str] = None,
-                   clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
-        return multilayer(self,
-                          pads=self.pads, clearouts=(self.center,),
-                          waveguide_layer=waveguide_layer,
-                          metal_stack_layers=metal_stack_layers,
-                          via_stack_layers=via_stack_layers,
-                          clearout_layer=clearout_layer,
-                          clearout_etch_stop_layer=clearout_etch_stop_layer,
-                          contact_box_dim=contact_box_dim,
-                          clearout_box_dim=clearout_box_dim,
-                          doping_stack_layer=doping_stack_layer,
-                          clearout_etch_stop_grow=clearout_etch_stop_grow,
-                          via_shrink=via_shrink,
-                          doping_grow=doping_grow)
 
 
 class LateralNemsTDC(GroupedPattern):
@@ -195,26 +175,6 @@ class LateralNemsTDC(GroupedPattern):
     def attachment_ports(self) -> np.ndarray:
         return np.asarray(self.center)
 
-    def multilayer(self, clearout_box_dim: Dim2, contact_box_dim: Dim2 = None,
-                   waveguide_layer: str = 'seam', metal_stack_layers: Tuple[str, ...] = ('m1am', 'm2am'),
-                   via_stack_layers: Tuple[str, ...] = ('cbam', 'v1am'),
-                   clearout_layer: str = 'tram', clearout_etch_stop_layer: str = 'esam',
-                   doping_stack_layer: Optional[str] = None,
-                   clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
-        return multilayer(self,
-                          pads=self.pads, clearouts=(self.center,),
-                          waveguide_layer=waveguide_layer,
-                          metal_stack_layers=metal_stack_layers,
-                          via_stack_layers=via_stack_layers,
-                          clearout_layer=clearout_layer,
-                          clearout_etch_stop_layer=clearout_etch_stop_layer,
-                          contact_box_dim=contact_box_dim,
-                          clearout_box_dim=clearout_box_dim,
-                          doping_stack_layer=doping_stack_layer,
-                          clearout_etch_stop_grow=clearout_etch_stop_grow,
-                          via_shrink=via_shrink,
-                          doping_grow=doping_grow)
-
 
 class NemsAnchor(GroupedPattern):
     def __init__(self, fin_spring_dim: Dim2, connector_dim: Dim2, top_spring_dim: Dim2 = None,
@@ -244,6 +204,7 @@ class NemsAnchor(GroupedPattern):
 
         top_spring_dim = fin_spring_dim if not top_spring_dim else top_spring_dim
         connector = Box(connector_dim).translate()
+        doped_elems.append(connector)
         if loop_connector is not None and straight_connector is None:
             loop = Pattern(Path(fin_spring_dim[1]).rotate(np.pi).turn(
                 loop_connector[1], -np.pi, final_width=loop_connector[2], tolerance=0.001).segment(
@@ -268,6 +229,7 @@ class NemsAnchor(GroupedPattern):
             top_spring = Box(top_spring_dim).center_align(
                 connector).vert_align(connector, bottom=True, opposite=True)
             patterns.append(top_spring)
+            doped_elems.append(top_spring)
             if pos_electrode_dim is not None:
                 pos_electrode = Box((pos_electrode_dim[0], pos_electrode_dim[1])).center_align(top_spring).vert_align(
                     top_spring, opposite=True).translate(dy=pos_electrode_dim[2])
@@ -285,33 +247,12 @@ class NemsAnchor(GroupedPattern):
                 c_ports.append((neg_electrode_right.bounds[1], neg_electrode_left.center[1]))
                 patterns.extend([neg_electrode_left, neg_electrode_right])
                 pads.extend([neg_electrode_left, neg_electrode_right])
-                doped_elems.append(GroupedPattern(top_spring, neg_electrode_left, neg_electrode_right))
-            else:
-                doped_elems.append(top_spring)
+                doped_elems.append(GroupedPattern(neg_electrode_left, neg_electrode_right))
 
         super(NemsAnchor, self).__init__(*patterns)
         self.translate(-a_port[0], -a_port[1])
         self.pads = [pad.translate(-a_port[0], -a_port[1]) for pad in pads]
-        self.doped_elems = [doped_elem.translate(-a_port[0], -a_port[1]) for doped_elem in doped_elems]
-
-    def multilayer(self, contact_box_dim: Dim2 = None,
-                   waveguide_layer: str = 'seam', metal_stack_layers: Tuple[str, ...] = ('m1am', 'm2am'),
-                   via_stack_layers: Tuple[str, ...] = ('cbam', 'v1am'),
-                   clearout_layer: str = 'tram', clearout_etch_stop_layer: str = 'esam',
-                   doping_stack_layer: Optional[str] = None,
-                   via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
-        return multilayer(self,
-                          pads=self.pads,
-                          doped_elems=self.doped_elems,
-                          waveguide_layer=waveguide_layer,
-                          metal_stack_layers=metal_stack_layers,
-                          via_stack_layers=via_stack_layers,
-                          clearout_layer=clearout_layer,
-                          clearout_etch_stop_layer=clearout_etch_stop_layer,
-                          contact_box_dim=contact_box_dim,
-                          doping_stack_layer=doping_stack_layer,
-                          via_shrink=via_shrink,
-                          doping_grow=doping_grow)
+        self.dope_patterns = [doped_elem.translate(-a_port[0], -a_port[1]) for doped_elem in doped_elems]
 
 
 class MemsMonitorCoupler(Pattern):

@@ -47,23 +47,20 @@ class AIMNazca:
 
     def nems_tdc(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
                  interaction_l: float = 50, dc_gap_w: float = 0.2, beam_gap_w: float = 0.15,
-                 bend_dim: Dim2 = (10, 20), pad_dim: Dim3 = (50, 5, 2), anchor: nd.Cell=None,
-                 middle_fin_dim=None, use_radius: bool = True, contact_box_dim: Dim2 = (50, 10),
+                 bend_dim: Dim2 = (10, 20), pad_dim: Dim3 = (50, 5, 2), anchor: nd.Cell = None,
+                 middle_fin_dim=None, use_radius: bool = True,
                  clearout_box_dim: Dim2 = (65, 3), dc_taper_ls: Tuple[float, ...] = None,
                  dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5,
-                 diff_ps: Optional[nd.Cell] = None,
-                 name: str = 'nems_tdc') -> nd.Cell:
+                 diff_ps: Optional[nd.Cell] = None, name: str = 'nems_tdc') -> nd.Cell:
         c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
                            interaction_l=interaction_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
                            bend_dim=bend_dim, pad_dim=pad_dim,
                            middle_fin_dim=middle_fin_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
                            dc_taper=dc_taper, beam_taper=beam_taper)
-        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=('m1am', 'm2am'),
-                              doping_stack_layer='ppam', via_stack_layers=('cbam', 'v1am'),
-                              clearout_layer='tram', clearout_etch_stop_layer='esam',
-                              contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
-                              clearout_etch_stop_grow=clearout_etch_stop_grow)
-
+        pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v2am', 'm2am'), level=2) for pad in c.pads], [])
+        clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='esam',
+                                  clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
+        device = Multilayer([(c, 'seam')] + pad_to_layer + clearout)
         if anchor is None:
             cell = device.nazca_cell(name)
         else:
@@ -75,22 +72,19 @@ class AIMNazca:
                 nd.Pin('b0').put(ps.pin['b0'])
         return self.tdc_node(diff_ps, cell) if diff_ps is not None else cell
 
-
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 100,
                 gap_w: float = 0.15, taper_ls: Tuple[float, ...] = (5,),
-                pad_dim: Optional[Dim3] = None, contact_box_dim: Dim2 = None,
-                clearout_box_dim: Dim2 = (100, 3), clearout_etch_stop_grow: float = 0.5,
+                pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (100, 3), clearout_etch_stop_grow: float = 0.5,
                 gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100, anchor: Optional[nd.Cell] = None,
                 tap_sep: Optional[Tuple[nd.Cell, float]] = None, name: str = 'nems_ps') -> nd.Cell:
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
                           num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
                           gap_taper=gap_taper, wg_taper=wg_taper,
                           taper_ls=taper_ls)
-        device = c.multilayer(waveguide_layer='seam', metal_stack_layers=('m1am', 'm2am'),
-                              doping_stack_layer='ppam', via_stack_layers=('cbam', 'v1am'),
-                              clearout_layer='tram', clearout_etch_stop_layer='esam',
-                              contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
-                              clearout_etch_stop_grow=clearout_etch_stop_grow)
+        pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v2am', 'm2am'), level=2) for pad in c.pads], [])
+        clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='esam',
+                                  clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
+        device = Multilayer([(c, 'seam')] + pad_to_layer + clearout)
         if anchor is None:
             return device.nazca_cell(name)
         with nd.Cell(name) as cell:
@@ -130,17 +124,20 @@ class AIMNazca:
 
     def nems_anchor(self, fin_spring_dim: Dim2 = (100, 0.15), connector_dim: Dim2 = (51, 0.5),
                     top_spring_dim: Dim2 = (100, 0.15), straight_connector: Optional[Dim2] = (0.25, 1),
-                    loop_connector: Optional[Dim3] = (50, 0.5, 0.15),
-                    pos_electrode_dim: Optional[Dim3] = (90, 4, 2), neg_electrode_dim: Optional[Dim2] = (3, 5),
-                    contact_box_dim: Dim2 = None, name: str = 'nems_anchor'):
+                    loop_connector: Optional[Dim3] = (50, 0.5, 0.15), pos_electrode_dim: Optional[Dim3] = (90, 4, 2),
+                    neg_electrode_dim: Optional[Dim2] = (3, 5), dope_grow: float = 0.25, name: str = 'nems_anchor'):
         c = NemsAnchor(fin_spring_dim=fin_spring_dim, connector_dim=connector_dim,
                        top_spring_dim=top_spring_dim, straight_connector=straight_connector,
                        loop_connector=loop_connector, pos_electrode_dim=pos_electrode_dim,
                        neg_electrode_dim=neg_electrode_dim)
-        device = c.multilayer(contact_box_dim=contact_box_dim, waveguide_layer='seam',
-                              metal_stack_layers=('m1am', 'm2am'),
-                              doping_stack_layer='ppam', via_stack_layers=('cbam', 'v1am'),
-                              clearout_layer='tram', clearout_etch_stop_layer='esam')
+        pads, dopes = [], []
+        if pos_electrode_dim is not None:
+            if neg_electrode_dim is None:
+                raise ValueError('must specify neg_electrode_dim if pos_electrode_dim specified but got None')
+            pads.extend(sum([pad.metal_contact(('cbam', 'm1am', 'v2am', 'm2am')) for pad in c.pads[:1]], []))
+            pads.extend(sum([pad.metal_contact(('cbam', 'm1am', 'v2am', 'm2am'), level=2) for pad in c.pads[1:]], []))
+            dopes.extend(list(zip([p.grow(dope_grow) for p in c.dope_patterns], ('ppam', 'pdam', 'pppam', 'pppam'))))
+        device = Multilayer([(c, 'seam')] + pads + dopes)
         return device.nazca_cell(name)
 
     def double_ps(self, ps: nd.Cell, interport_w: float = 40,
@@ -184,15 +181,16 @@ class AIMNazca:
                   taper_params: Optional[Tuple[Tuple[float, ...], ...]] = None, symmetric: bool = True):
         c = Waveguide(waveguide_w, length, taper_params=taper_params,
                       num_taper_evaluations=100, symmetric=symmetric, taper_ls=taper_ls)
-        device = Multilayer({c: 'seam'})
+        device = Multilayer([(c, 'seam')])
         return device.nazca_cell('waveguide')
 
     def interposer(self, waveguide_w: float, n: int, period: float, radius: float,
                    trombone_radius: Optional[float] = None,
                    final_period: Optional[float] = None, self_coupling_extension_dim: Optional[Dim2] = None,
                    horiz_dist: float = 0, with_gratings: bool = True):
-        device = Multilayer({Interposer(waveguide_w, n, period, radius, trombone_radius, final_period,
-                                        self_coupling_extension_dim, horiz_dist): 'seam'})
+        c = Interposer(waveguide_w, n, period, radius, trombone_radius, final_period,
+                       self_coupling_extension_dim, horiz_dist)
+        device = Multilayer([(c, 'seam')])
         if with_gratings:
             with nd.Cell(f'interposer_with_gratings_{n}_{period}_{final_period}_{radius}') as cell:
                 interposer = device.nazca_cell('interposer').put()
