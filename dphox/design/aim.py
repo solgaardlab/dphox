@@ -12,6 +12,11 @@ import nazca as nd
 from ..typing import Optional
 
 
+# TODO(nate): find a better place for this function
+def get_cubic_taper(change_w):
+    return (0, 0, 3 * change_w, -2 * change_w)
+
+
 class AIMNazca:
     def __init__(self, passive_filepath: str = AIM_PDK_PASSIVE_PATH, waveguides_filepath: str = AIM_PDK_WAVEGUIDE_PATH,
                  active_filepath: str = AIM_PDK_ACTIVE_PATH, stack: Dict = AIM_STACK, pdk_dict: Dict = AIM_PDK,
@@ -75,19 +80,56 @@ class AIMNazca:
                 nd.Pin('b0').put(ps.pin['b0'])
         return self.tdc_node(diff_ps, cell) if diff_ps is not None else cell
 
+<<<<<<< HEAD
+=======
+    # def nems_metal_box(self, top_anchor: nd.Cell, bottom_anchor: nd.Cell):
+    #     self.m2_ic.strt_p2p(top_anchor.pin['c1'], top_anchor.pin['c2']).put()
+    #     self.m2_ic.ubend_p2p(top_anchor.pin['c2'], bottom_anchor.pin['c2']).put()
+    #     self.m2_ic.strt_p2p(bottom_anchor.pin['c2'], bottom_anchor.pin['c1']).put()
+    #     self.m2_ic.ubend_p2p(bottom_anchor.pin['c1'], top_anchor.pin['c1']).put()
+    #     self.m2_ic.strt(bottom_anchor.pin['c2']).put()
+    #     self.m1_ic.bend(4, 180).put(top_anchor.pin['c1'])
+    #     self.m1_ic.strt(interpad_distance_x).put()
+    #     self.m1_ic.bend(4, 180).put()
+    #     self.m1_ic.bend(4, -180).put(bottom_anchor.pin['c1'])
+    #     self.m1_ic.strt(interpad_distance_x).put()
+    #     self.m1_ic.bend(4, -180).put()
+    #     self.m1_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c1'].x, bottom_anchor.pin['c1'].y, 90)
+    #     self.m1_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c2'].x, bottom_anchor.pin['c2'].y, 90)
+
+
+>>>>>>> insig: added taper connectors to defaults so they appear in layout
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 100,
-                gap_w: float = 0.15, taper_ls: Tuple[float, ...] = (5,),
+                gap_w: float = 0.15,
                 pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (90, 13.8), clearout_etch_stop_grow: float = 0.5,
-                gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100, anchor: Optional[nd.Cell] = None,
-                tap_sep: Optional[Tuple[nd.Cell, float]] = None, name: str = 'nems_ps') -> nd.Cell:
+                num_taper_evaluations: int = 100, anchor: Optional[nd.Cell] = None,
+                tap_sep: Optional[Tuple[nd.Cell, float]] = None, name: str = 'nems_ps',
+                taper_ls = (2, 0.15,0.2,0.15, 2),
+                gap_taper = ((0.66 + 2*0.63, ), (0,-1*(.30+ 2*0.63),), (0,), (0,(.30+ 2*0.63),), get_cubic_taper(-0.74 -2*0.63)), 
+                wg_taper = ((0,), (0,), (0,), (0,), get_cubic_taper(-0.08)),
+                boundary_taper = ((0.66 + 2*0.63,), (0,), (0,), (0,), get_cubic_taper(-0.74 -2*0.63)),
+                rib_brim_taper = (get_cubic_taper(2*.66), (0,), (0,), (0,), get_cubic_taper(-0.74*2))) -> nd.Cell:
+        ## Lazy Nate just copying in the the taper paramters so he doesn't forget
+        ### Makes an angled drop connector, changing gap width and smoothing as rib
+        # taper_ls = (2, 0.15,0.2,0.15, 2)
+        # wg_taper = ((0,), (0,), (0,), (0,), get_cubic_taper(-0.08))
+        # gap_taper = ((0.66 + 2*0.63, ), (0,-1*(.30+ 2*0.63),), (0,), (0,(.30+ 2*0.63),), get_cubic_taper(-0.74 -2*0.63))
+        # boundary_taper = ((0.66 + 2*0.63,), (0,), (0,), (0,), get_cubic_taper(-0.74 -2*0.63))
+        # rib_brim_taper = (get_cubic_taper(2*.66), (0,), (0,), (0,), get_cubic_taper(-0.74*2))
+        ### The above should depend on whether an anchor is present
+
+
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
                           num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
                           gap_taper=gap_taper, wg_taper=wg_taper,
-                          taper_ls=taper_ls)
-        pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=2) for pad in c.pads], [])
+                          taper_ls=taper_ls,
+                          boundary_taper=boundary_taper,
+                          rib_brim_taper = rib_brim_taper)
+        pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v2am', 'm2am'), level=2) for pad in c.pads], [])
         clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='esam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
-        device = Multilayer([(c, 'seam')] + pad_to_layer + clearout)
+        ridge_etch =[(brim, 'ream') for brim in c.rib_brim] 
+        device = Multilayer([(c, 'seam')] + pad_to_layer + clearout + ridge_etch)
         if anchor is None:
             return device.nazca_cell(name)
         with nd.Cell(name) as cell:
@@ -144,7 +186,8 @@ class AIMNazca:
         c = NemsAnchor(fin_spring_dim=fin_spring_dim, connector_dim=connector_dim,
                        top_spring_dim=top_spring_dim, straight_connector=straight_connector,
                        loop_connector=loop_connector, pos_electrode_dim=pos_electrode_dim,
-                       neg_electrode_dim=neg_electrode_dim)
+                       neg_electrode_dim=neg_electrode_dim,
+                       include_fin_dummy = True)
         pads, dopes = [], []
         if pos_electrode_dim is not None:
             if neg_electrode_dim is None:
