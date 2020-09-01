@@ -4,6 +4,7 @@ from .pattern import Pattern, Path
 from copy import deepcopy as copy
 from shapely.ops import polygonize
 from shapely.geometry import MultiPolygon
+from .multilayer import Multilayer
 
 try:
     import plotly.graph_objects as go

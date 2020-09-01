@@ -13,14 +13,13 @@ except ImportError:
     pass
 
 from ...typing import *
-from .pattern import Pattern, Path, GroupedPattern
-from .passive import Box
+from .pattern import Pattern, Path
 
 
 class Multilayer:
-    def __init__(self, pattern_to_layer: Dict[Union[Pattern, Path, gy.Polygon, gy.FlexPath, Polygon], Union[int, str]]):
+    def __init__(self, pattern_to_layer: List[Tuple[Union[Pattern, Path, gy.Polygon, gy.FlexPath, Polygon], Union[int, str]]]):
         self.pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
-                                 for comp, layer in pattern_to_layer.items()}
+                                 for comp, layer in pattern_to_layer}
         self.layer_to_pattern = self._layer_to_pattern()
 
     @property
@@ -99,37 +98,42 @@ class Multilayer:
             mesh.visual.vertex_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
             meshes.append(mesh)
         return trimesh.Scene(meshes)
-
-
-def multilayer(waveguide_pattern: Pattern, pads: List[Pattern],
-               waveguide_layer: str, metal_stack_layers: Tuple[str, ...],
-               via_stack_layers: Tuple[str, ...], clearout_layer: str, clearout_etch_stop_layer: str,
-               clearout_box_dim: Dim2 = None, clearouts: Tuple[Union[Dim2, Pattern], ...] = (),
-               doped_elems: List[Pattern] = None, contact_box_dim: Dim2 = None,
-               doping_stack_layer: Optional[str] = None,
-               clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
-    pattern_to_layer = {}
-    if len(pads) > 0:
-        sizes = [pad.size if contact_box_dim is None else contact_box_dim for pad in pads]
-        pattern_to_layer.update(
-            {GroupedPattern(*[Box(size).center_align(pad) for pad, size in zip(pads, sizes)]): layer
-             for layer in metal_stack_layers})
-        pattern_to_layer.update(
-            {GroupedPattern(*[Box(size).center_align(pad).grow(-via_shrink) for pad, size in zip(pads, sizes)]): layer
-             for layer in via_stack_layers})
-    if doping_stack_layer is not None:
-        dope_patterns = pads if doped_elems is None else doped_elems
-        if len(dope_patterns) > 0:
-            pattern_to_layer[GroupedPattern(*dope_patterns).grow(doping_grow)] = doping_stack_layer
-        # pattern_to_layer[GroupedPattern(*[Box(pad.size).center_align(pad).grow(doping_grow)
-        #                                   for pad in pads])] = doping_stack_layer
-
-    pattern_to_layer[waveguide_pattern] = waveguide_layer
-    if clearout_box_dim is not None:
-        for region in clearouts:
-            clearout = Box(clearout_box_dim).center_align(region if isinstance(region, tuple) else region.center)
-            pattern_to_layer[clearout] = clearout_layer
-            if clearout_etch_stop_grow > 0 and clearout_etch_stop_layer is not None:
-                pattern_to_layer[clearout.grow(clearout_etch_stop_grow)] = clearout_etch_stop_layer
-
-    return Multilayer(pattern_to_layer)
+#
+#
+# def multilayer(waveguide_pattern: Pattern, pads: List[Pattern],
+#                waveguide_layer: str, metal_stack_layers: Tuple[str, ...],
+#                via_stack_layers: Tuple[str, ...], clearout_layer: str, clearout_etch_stop_layer: str,
+#                rib_pattern: Optional[Pattern] = None,
+#                clearout_box_dim: Dim2 = None, clearouts: Tuple[Union[Dim2, Pattern], ...] = (),
+#                doped_elems: List[Pattern] = None, contact_box_dim: Dim2 = None,
+#                doping_stack_layer: Optional[str] = None,
+#                clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
+#     pattern_to_layer = {}
+#     if rib_pattern is not None:
+#         pattern_to_layer[GroupedPattern(rib_pattern, waveguide_pattern)] = waveguide_layer
+#         pattern_to_layer[Pattern(waveguide_pattern.pattern - rib_pattern)] = rib_pattern
+#     else:
+#         pattern_to_layer[waveguide_pattern] = waveguide_layer
+#     if len(pads) > 0:
+#         sizes = [pad.size if contact_box_dim is None else contact_box_dim for pad in pads]
+#         pattern_to_layer.update(
+#             {GroupedPattern(*[Box(size).center_align(pad) for pad, size in zip(pads, sizes)]): layer
+#              for layer in metal_stack_layers})
+#         pattern_to_layer.update(
+#             {GroupedPattern(*[Box(size).center_align(pad).grow(-via_shrink) for pad, size in zip(pads, sizes)]): layer
+#              for layer in via_stack_layers})
+#     if doping_stack_layer is not None:
+#         dope_patterns = pads if doped_elems is None else doped_elems
+#         if len(dope_patterns) > 0:
+#             pattern_to_layer[GroupedPattern(*dope_patterns).grow(doping_grow)] = doping_stack_layer
+#         # pattern_to_layer[GroupedPattern(*[Box(pad.size).center_align(pad).grow(doping_grow)
+#         #                                   for pad in pads])] = doping_stack_layer
+#
+#     if clearout_box_dim is not None:
+#         for region in clearouts:
+#             clearout = Box(clearout_box_dim).center_align(region if isinstance(region, tuple) else region.center)
+#             pattern_to_layer[clearout] = clearout_layer
+#             if clearout_etch_stop_grow > 0 and clearout_etch_stop_layer is not None:
+#                 pattern_to_layer[clearout.grow(clearout_etch_stop_grow)] = clearout_etch_stop_layer
+#
+#     return Multilayer(pattern_to_layer)
