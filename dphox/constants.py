@@ -170,8 +170,8 @@ AIM_PDK = {
     },
     'cl_band_photodetector_digital': {
         'a0': (0, 0, 180),
-        'p': (42, 2.6, 0),
-        'n': (42, 0, 0)
+        'p': (16, 15, 0),
+        'n': (16, 5, 0)
     },
     'cl_band_thermo_optic_phase_shifter': {
         'a0': (0, 0, 180),

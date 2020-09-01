@@ -233,8 +233,6 @@ class NemsAnchor(GroupedPattern):
             if pos_electrode_dim is not None:
                 pos_electrode = Box((pos_electrode_dim[0], pos_electrode_dim[1])).center_align(top_spring).vert_align(
                     top_spring, opposite=True).translate(dy=pos_electrode_dim[2])
-                c_ports.append((pos_electrode.bounds[0], pos_electrode.center[1]))
-                c_ports.append((pos_electrode.bounds[1], pos_electrode.center[1]))
                 patterns.append(pos_electrode)
                 pads.append(pos_electrode)
                 doped_elems.append(copy(pos_electrode))
@@ -243,8 +241,6 @@ class NemsAnchor(GroupedPattern):
                     top_spring, opposite=True).vert_align(top_spring)
                 neg_electrode_right = Box(neg_electrode_dim).horz_align(
                     top_spring, left=False, opposite=True).vert_align(top_spring)
-                c_ports.append((neg_electrode_left.bounds[0], neg_electrode_left.center[1]))
-                c_ports.append((neg_electrode_right.bounds[1], neg_electrode_left.center[1]))
                 patterns.extend([neg_electrode_left, neg_electrode_right])
                 pads.extend([neg_electrode_left, neg_electrode_right])
                 doped_elems.append(GroupedPattern(neg_electrode_left, neg_electrode_right))
@@ -253,6 +249,10 @@ class NemsAnchor(GroupedPattern):
         self.translate(-a_port[0], -a_port[1])
         self.pads = [pad.translate(-a_port[0], -a_port[1]) for pad in pads]
         self.dope_patterns = [doped_elem.translate(-a_port[0], -a_port[1]) for doped_elem in doped_elems]
+
+    @property
+    def contact_ports(self) -> np.ndarray:
+        return np.asarray([pad.center for pad in self.pads])
 
 
 class MemsMonitorCoupler(Pattern):
@@ -284,7 +284,6 @@ class MemsMonitorCoupler(Pattern):
 
         super(MemsMonitorCoupler, self).__init__(waveguide, monitor_wg, monitor_left, monitor_right, *pads)
         self.pads = pads[:1]
-
 
 # class NemsMillerNode(GroupedPattern):
 #     def __init__(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
