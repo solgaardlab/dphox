@@ -5,9 +5,10 @@ Created on Thu Apr 23 17:19:16 2020
 @author: Sunil Pai, Nate Abebe, Rebecca Hwang, Yu Miao
 """
 
-from . import *
+from .component import *
 from ..constants import AIM_PDK_WAVEGUIDE_PATH, AIM_PDK_PASSIVE_PATH, AIM_PDK_ACTIVE_PATH, AIM_STACK, AIM_PDK
 import numpy as np
+import nazca as nd
 from ..typing import Optional
 
 
@@ -46,7 +47,7 @@ class AIMNazca:
 
     def nems_tdc(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
                  interaction_l: float = 50, dc_gap_w: float = 0.2, beam_gap_w: float = 0.15,
-                 bend_dim: Dim2 = (10, 20), pad_dim: Dim3 = (50, 5, 2), anchor=None,
+                 bend_dim: Dim2 = (10, 20), pad_dim: Dim3 = (50, 5, 2), anchor: nd.Cell=None,
                  middle_fin_dim=None, use_radius: bool = True, contact_box_dim: Dim2 = (50, 10),
                  clearout_box_dim: Dim2 = (65, 3), dc_taper_ls: Tuple[float, ...] = None,
                  dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5,
@@ -54,7 +55,7 @@ class AIMNazca:
                  name: str = 'nems_tdc') -> nd.Cell:
         c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
                            interaction_l=interaction_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
-                           bend_dim=bend_dim, pad_dim=pad_dim, anchor=anchor,
+                           bend_dim=bend_dim, pad_dim=pad_dim,
                            middle_fin_dim=middle_fin_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
                            dc_taper=dc_taper, beam_taper=beam_taper)
         device = c.multilayer(waveguide_layer='seam', metal_stack_layers=('m1am', 'm2am'),
@@ -62,18 +63,28 @@ class AIMNazca:
                               clearout_layer='tram', clearout_etch_stop_layer='esam',
                               contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
                               clearout_etch_stop_grow=clearout_etch_stop_grow)
-        cell = device.nazca_cell(name)
+
+        if anchor is None:
+            cell = device.nazca_cell(name)
+        else:
+            with nd.Cell(name) as cell:
+                ps = device.nazca_cell('tdc').put()
+                anchor.put(ps.pin['t0'])
+                anchor.put(ps.pin['t1'], flip=True)
+                nd.Pin('a0').put(ps.pin['a0'])
+                nd.Pin('b0').put(ps.pin['b0'])
         return self.tdc_node(diff_ps, cell) if diff_ps is not None else cell
+
 
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 100,
                 gap_w: float = 0.15, taper_ls: Tuple[float, ...] = (5,),
-                pad_dim: Optional[Dim3] = None, contact_box_dim: Dim2 = (50, 5),
-                clearout_box_dim: Dim2 = (65, 3), clearout_etch_stop_grow: float = 0.5,
+                pad_dim: Optional[Dim3] = None, contact_box_dim: Dim2 = None,
+                clearout_box_dim: Dim2 = (100, 3), clearout_etch_stop_grow: float = 0.5,
                 gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100, anchor: Optional[nd.Cell] = None,
-                name: str = 'nems_ps') -> nd.Cell:
+                tap_sep: Optional[Tuple[nd.Cell, float]] = None, name: str = 'nems_ps') -> nd.Cell:
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
                           num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
-                          anchor=anchor, gap_taper=gap_taper, wg_taper=wg_taper,
+                          gap_taper=gap_taper, wg_taper=wg_taper,
                           taper_ls=taper_ls)
         device = c.multilayer(waveguide_layer='seam', metal_stack_layers=('m1am', 'm2am'),
                               doping_stack_layer='ppam', via_stack_layers=('cbam', 'v1am'),
@@ -82,25 +93,54 @@ class AIMNazca:
                               clearout_etch_stop_grow=clearout_etch_stop_grow)
         if anchor is None:
             return device.nazca_cell(name)
-        else:
-            with nd.Cell(name) as cell:
-                ps = device.nazca_cell('ps').put()
-                anchor.put(ps.pin['t0'])
-                anchor.put(ps.pin['t1'], flip=True)
-                nd.Pin('a0').put(ps.pin['a0'])
+        with nd.Cell(name) as cell:
+            ps = device.nazca_cell('ps').put()
+            anchor.put(ps.pin['t0'])
+            anchor.put(ps.pin['t1'], flip=True)
+            nd.Pin('a0').put(ps.pin['a0'])
+            if tap_sep is not None:
+                tap, sep = tap_sep
+                self.waveguide_ic.strt(sep).put(ps.pin['b0'])
+                t = tap.put()
+                nd.Pin('b0').put(t.pin['b0'])
+            else:
                 nd.Pin('b0').put(ps.pin['b0'])
-            return cell
+        return cell
 
-    def nems_anchor(self, fin_spring_dim: Dim2 = (108, 0.15), connector_dim: Dim2 = (51, 0.5),
-                    top_spring_dim: Dim2 = (108, 0.15), straight_connector: Optional[Dim2] = (0.25, 1),
+    def autoroute_turn(self, n: Union[int, List, np.ndarray], m_layer: str,
+                       period: float, final_period: float, pin_prefix: str,
+                       connector_x: float = 0, connector_y: float = 0, turn_radius: float = 0, overlap: float = 1):
+        mt_ic = nd.interconnects.Interconnect(width=2, xs=m_layer)
+        with nd.Cell(f'autoroute_turn_{period}_{final_period}') as autoroute_turn:
+            route_arr = np.ones(n) if isinstance(n, int) else np.asarray(n)
+            route_num = 0
+            for m, route_idx in enumerate(route_arr):
+                if route_idx > 0:
+                    mt_ic.strt(length=overlap).put(-overlap, m * period)
+                    if turn_radius > 0:
+                        mt_ic.bend(radius=turn_radius, angle=90).put()
+                        mt_ic.bend(radius=turn_radius, angle=-90).put()
+                    mt_ic.strt(route_num * final_period + connector_x - turn_radius * 2 + 15).put()
+                    mt_ic.strt(connector_y + 22.5).put(nd.cp.x(), nd.cp.y() + 7.5, -90)
+                    output = mt_ic.strt(m * period + turn_radius * 2).put()
+                    nd.Pin(f'{pin_prefix}{int(route_num)}', pin=output.pin['b0']).put()
+                    route_num += 1
+            nd.put_stub([], length=0)
+        return autoroute_turn
+
+    def nems_anchor(self, fin_spring_dim: Dim2 = (100, 0.15), connector_dim: Dim2 = (51, 0.5),
+                    top_spring_dim: Dim2 = (100, 0.15), straight_connector: Optional[Dim2] = (0.25, 1),
                     loop_connector: Optional[Dim3] = (50, 0.5, 0.15),
-                    pos_electrode_dim: Optional[Dim3] = (104, 1, 2), neg_electrode_dim: Optional[Dim2] = (2, 3.15),
-                    name: str = 'nems_anchor'):
-        device = Multilayer({NemsAnchor(fin_spring_dim=fin_spring_dim, connector_dim=connector_dim,
-                                        top_spring_dim=top_spring_dim, straight_connector=straight_connector,
-                                        loop_connector=loop_connector,
-                                        pos_electrode_dim=pos_electrode_dim,
-                                        neg_electrode_dim=neg_electrode_dim): 'seam'})
+                    pos_electrode_dim: Optional[Dim3] = (90, 4, 2), neg_electrode_dim: Optional[Dim2] = (3, 5),
+                    contact_box_dim: Dim2 = None, name: str = 'nems_anchor'):
+        c = NemsAnchor(fin_spring_dim=fin_spring_dim, connector_dim=connector_dim,
+                       top_spring_dim=top_spring_dim, straight_connector=straight_connector,
+                       loop_connector=loop_connector, pos_electrode_dim=pos_electrode_dim,
+                       neg_electrode_dim=neg_electrode_dim)
+        device = c.multilayer(contact_box_dim=contact_box_dim, waveguide_layer='seam',
+                              metal_stack_layers=('m1am', 'm2am'),
+                              doping_stack_layer='ppam', via_stack_layers=('cbam', 'v1am'),
+                              clearout_layer='tram', clearout_etch_stop_layer='esam')
         return device.nazca_cell(name)
 
     def double_ps(self, ps: nd.Cell, interport_w: float = 40,
@@ -125,11 +165,19 @@ class AIMNazca:
             nd.Pin('b1').put(pu.pin['b0'])
         return cell
 
-    def thermal_ps(self):
+    def thermal_ps(self, tap_sep: Optional[Tuple[nd.Cell, float]] = None):
         with nd.Cell('thermal_double_ps') as cell:
             self.pdk_cells['cl_band_thermo_optic_phase_shifter'].put(0, 0, 0)
             nd.Pin('a0').put(0, 0, -180)
             nd.Pin('b0').put(100, 0, 0)
+            if tap_sep is not None:
+                tap, sep = tap_sep
+                self.waveguide_ic.strt(sep).put(100, 0, 0)
+                t = tap.put()
+                nd.Pin('b0').put(t.pin['b0'])
+            else:
+                nd.Pin('b0').put(100, 0, 0)
+
         return cell
 
     def waveguide(self, length: float, waveguide_w: float = 0.48, taper_ls: Tuple[float, ...] = (0,),
@@ -138,25 +186,6 @@ class AIMNazca:
                       num_taper_evaluations=100, symmetric=symmetric, taper_ls=taper_ls)
         device = Multilayer({c: 'seam'})
         return device.nazca_cell('waveguide')
-
-    # def nems_miller_node(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
-    #                      gap_w: float, bend_radius: float, bend_extension: float, lr_nanofin_w: float,
-    #                      ud_nanofin_w: float, lr_gap_w: float, ud_gap_w: float,
-    #                      contact_box_dim: Dim2, clearout_box_dim: Dim2, clearout_etch_stop_grow: float = 0.5,
-    #                      lr_pad_dim: Optional[Dim2] = None,
-    #                      ud_pad_dim: Optional[Dim2] = None, lr_connector_dim: Optional[Dim2] = None,
-    #                      ud_connector_dim: Optional[Dim2] = None, name: str = 'nems_miller_node') -> nd.Cell:
-    #     c = NemsMillerNode(waveguide_w=waveguide_w, upper_interaction_l=upper_interaction_l, gap_w=gap_w,
-    #                        lower_interaction_l=lower_interaction_l, bend_radius=bend_radius,
-    #                        bend_extension=bend_extension, lr_nanofin_w=lr_nanofin_w, ud_nanofin_w=ud_nanofin_w,
-    #                        lr_gap_w=lr_gap_w, ud_gap_w=ud_gap_w, lr_pad_dim=lr_pad_dim,
-    #                        ud_pad_dim=ud_pad_dim, lr_connector_dim=lr_connector_dim, ud_connector_dim=ud_connector_dim)
-    #     device = c.multilayer(waveguide_layer='seam', metal_stack_layers=('m1am', 'm2am'),
-    #                           doping_stack_layer='ppam', via_stack_layers=('cbam', 'v1am'),
-    #                           clearout_layer='tram', clearout_etch_stop_layer='esam',
-    #                           contact_box_dim=contact_box_dim, clearout_box_dim=clearout_box_dim,
-    #                           clearout_etch_stop_grow=clearout_etch_stop_grow)
-    #     return device.nazca_cell(name)
 
     def interposer(self, waveguide_w: float, n: int, period: float, radius: float,
                    trombone_radius: Optional[float] = None,
@@ -172,6 +201,8 @@ class AIMNazca:
                     self.grating_array(n + 2, period=final_period).put(x, y - final_period)
                 else:
                     self.grating_array(n, period=final_period).put(interposer.pin['b0'])
+                for idx in range(n):
+                    nd.Pin(f'a{idx}').put(interposer.pin[f'a{idx}'])
             return cell
         else:
             return device.nazca_cell(f'interposer_{n}_{period}_{final_period}_{radius}')
@@ -194,17 +225,17 @@ class AIMNazca:
                                 layer='seam', height=pad_dim[0] / 2)
                     y = nd.text(text=f'{j + 1 if labels is None else labels[i]}', align='cc',
                                 layer='seam', height=pad_dim[0] / 2)
-                    x.put(-pitch[0] / 2 + i * pitch[0], -pad_l / 2 + j * pitch[1])
-                    y.put(pitch[0] / 2 + i * pitch[0], - 3 * pad_l / 2 + j * pitch[1])
+                    y.put(-pitch[0] / 2 + i * pitch[0], -pad_l / 2 + j * pitch[1])
+                    x.put(i * pitch[0], - 1.73 * pad_l + j * pitch[1])
         return bond_pad_array
 
     def eutectic_array(self, n_pads: Shape2 = (300, 15), pitch: float = 20, width: float = 12):
-        a = width / (1 + np.sqrt(2))
+        a = width / (1 + np.sqrt(2)) / 2
         pitch = pitch if isinstance(pitch, tuple) else (pitch, pitch)
         with nd.Cell(name=f'bond_pad_array_{n_pads}_{pitch}') as bond_pad_array:
             pad = nd.Polygon([(width / 2, a), (a, width / 2), (-a, width / 2), (-width / 2, a),
-                              (-width / 2, -a), (-a, -width / 2), (a, -width / 2), (-width / 2, a)],
-                             layer=779)  # paam
+                              (-width / 2, -a), (-a, -width / 2), (a, -width / 2), (width / 2, -a)],
+                             layer=(779, 727))  # paam
             for i in range(n_pads[0]):
                 for j in range(n_pads[1]):
                     pad.put(i * pitch[0], j * pitch[1], 270)
@@ -228,12 +259,14 @@ class AIMNazca:
             nd.Pin('b1').put(tap.pin['b1'])
             self.waveguide_ic.bend(radius, angle=-90).put(tap.pin['a1'])
             if mesh_bend:
+                self.waveguide_ic.strt(radius / 4).put()
                 self.waveguide_ic.bend(radius, angle=-90).put()
             pd0 = self.pdk_cells['cl_band_photodetector_digital'].put(flip=True)
             nd.Pin('p0').put(pd0.pin['p'])
             nd.Pin('n0').put(pd0.pin['n'])
             self.waveguide_ic.bend(radius, angle=90).put(tap.pin['b1'])
             if mesh_bend:
+                self.waveguide_ic.strt(radius / 4).put()
                 self.waveguide_ic.bend(radius, angle=90).put()
             pd1 = self.pdk_cells['cl_band_photodetector_digital'].put()
             nd.Pin('p1').put(pd1.pin['p'])
@@ -241,7 +274,7 @@ class AIMNazca:
         return cell
 
     def triangular_mesh(self, n: int, node: nd.Cell, dummy: Optional[nd.Cell] = None,
-                        interport_w: float = 50, end_l: float = 30):
+                        ps: Optional[nd.Cell] = None, interport_w: float = 50):
         num_straight = (n - 1) - np.hstack([np.arange(1, n), np.arange(n - 2, 0, -1)]) - 1
         n_layers = num_straight.size
         curr_x = 0
@@ -250,11 +283,13 @@ class AIMNazca:
                 for idx in range(n):
                     if (n + layer) % 2 == idx % 2 and num_straight[layer] < idx < n - 1:
                         _node = node.put(curr_x, interport_w * idx)
-                        self.waveguide_ic.strt(end_l).put(_node.pin['b0'])
-                        end = self.waveguide_ic.strt(end_l).put(_node.pin['b1'])
+                        end = _node
+                        if layer == n_layers - 1 and ps is not None:
+                            ps.put(_node.pin['b0'])
+                            end = ps.put(_node.pin['b1'])
                     elif idx <= num_straight[layer] or (idx == n - 1 and (n + layer) % 2 == idx % 2):
                         _dummy = dummy.put(curr_x, interport_w * idx)
-                        end = self.waveguide_ic.strt(end_l).put(_dummy.pin['b0'])
+                        end = ps.put(_dummy.pin['b0']) if layer == n_layers - 1 and ps is not None else _dummy
                 curr_x = end.pin['b0'].x
             for idx in range(n):
                 nd.Pin(f'a{idx}').put(0, interport_w * idx, -180)

@@ -108,22 +108,32 @@ AIM_STACK = {
     'cross_sections': {
         'pad_xs': [
             {
-                'layer': 779  # paam
+                'layer': (779, 727)  # paam
             },
             {
-                'layer': 725,  # pad
+                'layer': (725, 727),  # pad
                 'growx': 10,
                 'growy': 10
             }
         ],
         'waveguide_xs': [
             {
-                'layer': 709
+                'layer': (709, 727)
             }
         ],
         'dice_xs': [
             {
-                'layer': 726
+                'layer': (726, 727)
+            }
+        ],
+        'm1_xs': [
+            {
+                'layer': (710, 727)
+            }
+        ],
+        'm2_xs': [
+            {
+                'layer': (725, 727)
             }
         ]
     }
