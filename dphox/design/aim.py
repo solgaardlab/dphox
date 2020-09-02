@@ -76,7 +76,7 @@ class AIMNazca:
 
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 100,
                 gap_w: float = 0.15, taper_ls: Tuple[float, ...] = (5,),
-                pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (100, 3), clearout_etch_stop_grow: float = 0.5,
+                pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (100, 8), clearout_etch_stop_grow: float = 0.5,
                 gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100, anchor: Optional[nd.Cell] = None,
                 tap_sep: Optional[Tuple[nd.Cell, float]] = None, name: str = 'nems_ps') -> nd.Cell:
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
@@ -93,7 +93,8 @@ class AIMNazca:
             ps = device.nazca_cell('ps').put()
             top_anchor = anchor.put(ps.pin['t0'])
             bottom_anchor = anchor.put(ps.pin['t1'], flip=True)
-            interpad_distance = top_anchor.pin['c1'].x - top_anchor.pin['c2'].x
+            interpad_distance_x = top_anchor.pin['c1'].x - top_anchor.pin['c2'].x
+            interpad_distance_y = top_anchor.pin['c2'].y - bottom_anchor.pin['c2'].y
             m2_radius = (top_anchor.pin['c0'].y - bottom_anchor.pin['c0'].y) / 2
             self.m2_ic.strt(phaseshift_l / 2).put(top_anchor.pin['c0'])
             self.m2_ic.bend(m2_radius, -180).put()
@@ -101,12 +102,13 @@ class AIMNazca:
             self.m2_ic.bend(m2_radius, -180).put()
             self.m2_ic.strt(phaseshift_l / 2).put()
             self.m1_ic.bend(4, 180).put(top_anchor.pin['c1'])
-            self.m1_ic.strt(interpad_distance).put()
+            self.m1_ic.strt(interpad_distance_x).put()
             self.m1_ic.bend(4, 180).put()
             self.m1_ic.bend(4, -180).put(bottom_anchor.pin['c1'])
-            self.m1_ic.strt(interpad_distance).put()
+            self.m1_ic.strt(interpad_distance_x).put()
             self.m1_ic.bend(4, -180).put()
-
+            self.m1_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c1'].x, bottom_anchor.pin['c1'].y, 90)
+            self.m1_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c2'].x, bottom_anchor.pin['c2'].y, 90)
             nd.Pin('a0').put(ps.pin['a0'])
             if tap_sep is not None:
                 tap, sep = tap_sep
@@ -136,7 +138,7 @@ class AIMNazca:
             nd.put_stub([], length=0)
         return autoroute_turn
 
-    def nems_anchor(self, fin_spring_dim: Dim2 = (100, 0.15), connector_dim: Dim2 = (51, 0.5),
+    def nems_anchor(self, fin_spring_dim: Dim2 = (100, 0.15), connector_dim: Dim2 = (10, 4),
                     top_spring_dim: Dim2 = (100, 0.15), straight_connector: Optional[Dim2] = (0.25, 1),
                     loop_connector: Optional[Dim3] = (50, 0.5, 0.15), pos_electrode_dim: Optional[Dim3] = (90, 4, 2),
                     neg_electrode_dim: Optional[Dim2] = (3, 5), dope_grow: float = 0.25, name: str = 'nems_anchor'):
@@ -188,7 +190,6 @@ class AIMNazca:
                 nd.Pin('b0').put(t.pin['b0'])
             else:
                 nd.Pin('b0').put(100, 0, 0)
-
         return cell
 
     def waveguide(self, length: float, waveguide_w: float = 0.48, taper_ls: Tuple[float, ...] = (0,),
