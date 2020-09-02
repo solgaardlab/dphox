@@ -59,7 +59,7 @@ class AIMNazca:
                            bend_dim=bend_dim, pad_dim=pad_dim,
                            middle_fin_dim=middle_fin_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
                            dc_taper=dc_taper, beam_taper=beam_taper)
-        pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v2am', 'm2am'), level=2) for pad in c.pads], [])
+        pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=2) for pad in c.pads], [])
         clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='esam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
         device = Multilayer([(c, 'seam')] + pad_to_layer + clearout)
@@ -74,16 +74,31 @@ class AIMNazca:
                 nd.Pin('b0').put(ps.pin['b0'])
         return self.tdc_node(diff_ps, cell) if diff_ps is not None else cell
 
+    # def nems_metal_box(self, top_anchor: nd.Cell, bottom_anchor: nd.Cell):
+    #     self.m2_ic.strt_p2p(top_anchor.pin['c1'], top_anchor.pin['c2']).put()
+    #     self.m2_ic.ubend_p2p(top_anchor.pin['c2'], bottom_anchor.pin['c2']).put()
+    #     self.m2_ic.strt_p2p(bottom_anchor.pin['c2'], bottom_anchor.pin['c1']).put()
+    #     self.m2_ic.ubend_p2p(bottom_anchor.pin['c1'], top_anchor.pin['c1']).put()
+    #     self.m2_ic.strt(bottom_anchor.pin['c2']).put()
+    #     self.m1_ic.bend(4, 180).put(top_anchor.pin['c1'])
+    #     self.m1_ic.strt(interpad_distance_x).put()
+    #     self.m1_ic.bend(4, 180).put()
+    #     self.m1_ic.bend(4, -180).put(bottom_anchor.pin['c1'])
+    #     self.m1_ic.strt(interpad_distance_x).put()
+    #     self.m1_ic.bend(4, -180).put()
+    #     self.m1_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c1'].x, bottom_anchor.pin['c1'].y, 90)
+    #     self.m1_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c2'].x, bottom_anchor.pin['c2'].y, 90)
+
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 100,
                 gap_w: float = 0.15, taper_ls: Tuple[float, ...] = (5,),
-                pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (100, 8), clearout_etch_stop_grow: float = 0.5,
+                pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (90, 13.8), clearout_etch_stop_grow: float = 0.5,
                 gap_taper=None, wg_taper=None, num_taper_evaluations: int = 100, anchor: Optional[nd.Cell] = None,
                 tap_sep: Optional[Tuple[nd.Cell, float]] = None, name: str = 'nems_ps') -> nd.Cell:
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
                           num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
                           gap_taper=gap_taper, wg_taper=wg_taper,
                           taper_ls=taper_ls)
-        pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v2am', 'm2am'), level=2) for pad in c.pads], [])
+        pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=2) for pad in c.pads], [])
         clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='esam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
         device = Multilayer([(c, 'seam')] + pad_to_layer + clearout)
@@ -150,8 +165,8 @@ class AIMNazca:
         if pos_electrode_dim is not None:
             if neg_electrode_dim is None:
                 raise ValueError('must specify neg_electrode_dim if pos_electrode_dim specified but got None')
-            pads.extend(sum([pad.metal_contact(('cbam', 'm1am', 'v2am', 'm2am'), level=2) for pad in c.pads[:1]], []))
-            pads.extend(sum([pad.metal_contact(('cbam', 'm1am', 'v2am', 'm2am'), level=1) for pad in c.pads[1:]], []))
+            pads.extend(sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=2) for pad in c.pads[:1]], []))
+            pads.extend(sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=1) for pad in c.pads[1:]], []))
             dopes.extend(list(zip([p.grow(dope_grow) for p in c.dope_patterns], ('ppam', 'pdam', 'pppam', 'pppam'))))
         device = Multilayer([(c, 'seam')] + pads + dopes)
         return device.nazca_cell(name)
@@ -179,10 +194,19 @@ class AIMNazca:
         return cell
 
     def thermal_ps(self, tap_sep: Optional[Tuple[nd.Cell, float]] = None):
-        with nd.Cell('thermal_double_ps') as cell:
-            self.pdk_cells['cl_band_thermo_optic_phase_shifter'].put(0, 0, 0)
-            nd.Pin('a0').put(0, 0, -180)
+        with nd.Cell('thermal_ps') as cell:
+            ps = self.pdk_cells['cl_band_thermo_optic_phase_shifter']
+            _ps = ps.put(0, 0, 0)
+            nd.Pin('a0').put(0, 0, 180)
             nd.Pin('b0').put(100, 0, 0)
+            nd.Pin('c0').put(_ps.pin['p'])
+            self.m1_ic.bend(4, 90).put(_ps.pin['p'].x, _ps.pin['p'].y, 90)
+            end = self.m1_ic.strt(43.3).put()
+            self.m1_ic.bend_strt_bend_p2p(cell.pin['a0'], radius=4).put()
+            nd.Pin('c1').put(_ps.pin['n'])
+            self.m2_ic.bend(4, 90).put(_ps.pin['n'].x, _ps.pin['n'].y, 90)
+            end = self.m2_ic.strt(48.3).put()
+            self.m2_ic.bend_strt_bend_p2p(cell.pin['a0'], radius=4).put()
             if tap_sep is not None:
                 tap, sep = tap_sep
                 self.waveguide_ic.strt(sep).put(100, 0, 0)
@@ -200,11 +224,11 @@ class AIMNazca:
         return device.nazca_cell('waveguide')
 
     def interposer(self, waveguide_w: float, n: int, period: float, radius: float,
-                   trombone_radius: Optional[float] = None,
+                   trombone_radius: Optional[float] = None, num_trombones: int = 1,
                    final_period: Optional[float] = None, self_coupling_extension_dim: Optional[Dim2] = None,
                    horiz_dist: float = 0, with_gratings: bool = True):
         c = Interposer(waveguide_w, n, period, radius, trombone_radius, final_period,
-                       self_coupling_extension_dim, horiz_dist)
+                       self_coupling_extension_dim, horiz_dist, num_trombones=num_trombones)
         device = Multilayer([(c, 'seam')])
         if with_gratings:
             with nd.Cell(f'interposer_with_gratings_{n}_{period}_{final_period}_{radius}') as cell:
@@ -225,7 +249,7 @@ class AIMNazca:
             self.pad_ic.strt(length=pad_l, width=pad_w).put()
         return bond_pad
 
-    def bond_pad_array(self, n_pads: Shape2 = (72, 3), pitch: Union[float, Dim2] = 100,
+    def bond_pad_array(self, n_pads: Shape2 = (70, 3), pitch: Union[float, Dim2] = 100,
                        pad_dim: Dim2 = (40, 40), labels: Optional[np.ndarray] = None):
         pad_w, pad_l = pad_dim
         pitch = pitch if isinstance(pitch, tuple) else (pitch, pitch)
@@ -242,20 +266,30 @@ class AIMNazca:
                     x.put(i * pitch[0], - 1.73 * pad_l + j * pitch[1])
         return bond_pad_array
 
-    def eutectic_array(self, n_pads: Shape2 = (340, 12), pitch: float = 20, width: float = 12):
-        a = width / (1 + np.sqrt(2)) / 2
+    def eutectic_array(self, n_pads: Shape2 = (344, 12), pitch: float = 20, width: float = 12, strip: bool = True):
+        def oct(w: float):
+            a = w / (1 + np.sqrt(2)) / 2
+            return [(w / 2, a), (a, w / 2), (-a, w / 2), (-w / 2, a),
+                    (-w / 2, -a), (-a, -w / 2), (a, -w / 2), (w / 2, -a)]
         pitch = pitch if isinstance(pitch, tuple) else (pitch, pitch)
         with nd.Cell(name=f'bond_pad_array_{n_pads}_{pitch}') as bond_pad_array:
-            pad = nd.Polygon([(width / 2, a), (a, width / 2), (-a, width / 2), (-width / 2, a),
-                              (-width / 2, -a), (-a, -width / 2), (a, -width / 2), (width / 2, -a)],
-                             layer=(779, 727))  # paam
+            pads = [
+                nd.Polygon(oct(width), layer=AIM_STACK['layers']['m1am']),  # m1am
+                nd.Polygon(oct(width - 1), layer=AIM_STACK['layers']['v1am']),  # v1am
+                nd.Polygon(oct(width), layer=AIM_STACK['layers']['m2am']),  # m2am
+                nd.Polygon(oct(width - 1), layer=AIM_STACK['layers']['vaam']),
+                nd.Polygon(oct(width), layer=AIM_STACK['layers']['paam']),
+            ]
             for i in range(n_pads[0]):
                 for j in range(n_pads[1]):
-                    pad.put(i * pitch[0], j * pitch[1], 270)
+                    for pad in pads:
+                        pad.put(i * pitch[0], j * pitch[1], 270)
                     if j == 0:
-                        nd.Pin(f'o{i}').put(i * pitch[0], j * pitch[1])
+                        nd.Pin(f'o{i}').put(i * pitch[0], j * pitch[1], -90)
                     elif j == n_pads[1] - 1:
-                        nd.Pin(f'i{i}').put(i * pitch[0], j * pitch[1])
+                        nd.Pin(f'i{i}').put(i * pitch[0], j * pitch[1], 90)
+                if strip:
+                    self.m2_ic.strt_p2p(bond_pad_array.pin[f'o{i}'], bond_pad_array.pin[f'i{i}'], width=width).put()
             nd.put_stub()
         return bond_pad_array
 
@@ -270,7 +304,7 @@ class AIMNazca:
 
     def bidirectional_tap(self, radius: float, mesh_bend: bool = False):
         def metal_route(ic, level: int):
-            if level == 0:
+            if level == 2:
                 ic.strt(14).put()
                 ic.bend(4, -90).put()
                 ic.strt(16).put()
@@ -296,19 +330,19 @@ class AIMNazca:
                 self.waveguide_ic.strt(radius / 4).put()
                 self.waveguide_ic.bend(radius, angle=-90).put()
             pd0 = self.pdk_cells['cl_band_photodetector_digital'].put(flip=True)
-            self.m1_ic.bend(4, 90).put(pd0.pin['p'])
-            metal_route(self.m1_ic, level=0)
-            self.m2_ic.bend(4, 90).put(pd0.pin['n'])
-            metal_route(self.m2_ic, level=1)
+            self.m2_ic.bend(4, 90).put(pd0.pin['p'])
+            metal_route(self.m2_ic, level=2)
+            self.m1_ic.bend(4, 90).put(pd0.pin['n'])
+            metal_route(self.m1_ic, level=1)
             self.waveguide_ic.bend(radius, angle=90).put(tap.pin['b1'])
             if mesh_bend:
                 self.waveguide_ic.strt(radius / 4).put()
                 self.waveguide_ic.bend(radius, angle=90).put()
             pd1 = self.pdk_cells['cl_band_photodetector_digital'].put()
-            self.m1_ic.bend(4, -90).put(pd1.pin['p'])
-            metal_route(self.m1_ic, level=0)
-            self.m2_ic.bend(4, -90).put(pd1.pin['n'])
-            metal_route(self.m2_ic, level=1)
+            self.m2_ic.bend(4, -90).put(pd1.pin['p'])
+            metal_route(self.m2_ic, level=2)
+            self.m1_ic.bend(4, -90).put(pd1.pin['n'])
+            metal_route(self.m1_ic, level=1)
 
         return cell
 

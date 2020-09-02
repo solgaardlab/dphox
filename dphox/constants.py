@@ -108,32 +108,35 @@ AIM_STACK = {
     'cross_sections': {
         'pad_xs': [
             {
-                'layer': (779, 727)  # paam
+                'layer': 'paam'  # paam
             },
             {
-                'layer': (725, 727),  # pad
+                'layer': 'vaam'  # via to passivated metal layer
+            },
+            {
+                'layer': 'm2am',  # metal contact
                 'growx': 10,
                 'growy': 10
             }
         ],
         'waveguide_xs': [
             {
-                'layer': (709, 727)
+                'layer': 'seam'
             }
         ],
         'dice_xs': [
             {
-                'layer': (726, 727)
+                'layer': 'diam'
             }
         ],
         'm1_xs': [
             {
-                'layer': (710, 727)
+                'layer': 'm1am'
             }
         ],
         'm2_xs': [
             {
-                'layer': (725, 727)
+                'layer': 'm2am'
             }
         ]
     }
@@ -176,8 +179,8 @@ AIM_PDK = {
     'cl_band_thermo_optic_phase_shifter': {
         'a0': (0, 0, 180),
         'b0': (0, 100, 0),
-        'p': (48.15, 12.5, 90),
-        'n': (53.15, 12.5, 90),
+        'p': (47.3, 12.5, 90),
+        'n': (52.3, 12.5, 90),
     }
 }
 
