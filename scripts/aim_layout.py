@@ -11,7 +11,11 @@ chip = AIMNazca(
 
 
 def get_cubic_taper(change_w):
-    return (0, 0, 3 * change_w, -2 * change_w)
+    return 0, 0, 3 * change_w, -2 * change_w
+
+
+def get_bend_dim_from_interport_w(interport_w, gap_w, waveguide_w=0.48):
+    return interport_w / 2 - gap_w / 2 - waveguide_w / 2
 
 
 def is_adiabatic(taper_params, init_width: float = 0.48, wavelength: float = 1.55, neff: float = 2.75,
@@ -23,25 +27,32 @@ def is_adiabatic(taper_params, init_width: float = 0.48, wavelength: float = 1.5
     max_pt = np.argmax(theta)
     return theta[max_pt], wavelength / (2 * width[max_pt] * neff)
 
-waveguide_w = .48
+
 dc_radius = 25
 sep = 30
 
 # testing params
 test_interport_w = 25
 test_gap_w = 0.3
-test_bend_dim = test_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
+test_bend_dim = get_bend_dim_from_interport_w(test_interport_w, test_gap_w)
+test_tdc_interport_w = 50
+test_tdc_interaction_l = 100
+test_tdc_bend_dim = get_bend_dim_from_interport_w(test_tdc_interport_w, test_gap_w)
 
 mesh_interport_w = 50
 mesh_phaseshift_l = 100
+detector_loopback_params = (5, 20)
 
 # Basic components
 
 dc = chip.custom_dc(bend_dim=(dc_radius, test_bend_dim))[0]
 mesh_dc = chip.pdk_dc(radius=dc_radius, interport_w=mesh_interport_w)
 tap = chip.bidirectional_tap(10, mesh_bend=True)
-anchor = chip.nems_anchor()
-ps = chip.nems_ps(anchor=anchor, tap_sep=(tap, sep))
+ps_anchor = chip.nems_anchor()
+tdc_anchor = chip.nems_anchor(connector_dim=(test_tdc_interaction_l, 5),
+                              pos_electrode_dim=None, neg_electrode_dim=None)
+tdc = chip.nems_tdc(anchor=tdc_anchor)
+ps = chip.nems_ps(anchor=ps_anchor, tap_sep=(tap, sep))
 ps_no_anchor = chip.nems_ps()
 
 # Mesh generation
@@ -63,22 +74,23 @@ interposer = chip.interposer(
 )
 bp_array = chip.bond_pad_array()
 eu_array = chip.eutectic_array()
-autoroute_simple_1 = chip.autoroute_turn(7, level=1, turn_radius=8, connector_x=0, connector_y=20)
-autoroute_simple_2 = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=0, connector_y=20)
+autoroute_simple_1 = chip.autoroute_turn(7, level=1, turn_radius=8, connector_x=0, connector_y=12)
+autoroute_simple_2 = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=8, connector_y=4)
 
 # Test structures
 
 psv3_gap = [
-    chip.singlemode_ps(chip.nems_ps(gap_w=gap_w, anchor=anchor), interport_w=test_interport_w,
+    chip.singlemode_ps(chip.nems_ps(gap_w=gap_w, anchor=ps_anchor), interport_w=test_interport_w,
                        phaseshift_l=mesh_phaseshift_l)
     for gap_w in (0.2, 0.25, 0.3, 0.35, 0.4)]
+
 testing_tap_line = chip.testing_tap_line(15)
 with nd.Cell('gridsearch') as gridsearch:
     line = testing_tap_line.put()
     for i, ps in enumerate(psv3_gap):  # all structures for a tap line should be specified here
         chip.mzi_node(ps, dc, include_input_ps=False,
-                      detector=chip.pdk_cells['cl_band_photodetector_digital'],
-                      detector_loopback_params=(5, 15)).put(line.pin[f'a{i}'])
+                      detector=chip.pdk_cells['cl_band_photodetector_digital']).put(line.pin[f'a{i}'])
+    tdc.put(line.pin[f'a{i + 2}'])
 
 # Chip construction
 
@@ -100,13 +112,13 @@ with nd.Cell('aim') as aim:
     pin_num = 0
     for layer in range(15):
         a1_nems_left = autoroute_simple_1.put(layer * 450, 550, flop=True)
-        a2_nems_left = autoroute_simple_2.put(layer * 450, 550, flop=True)
+        a2_nems_left = autoroute_simple_2.put(layer * 450, 542, flop=True)
         a1_nems_right = autoroute_simple_1.put(layer * 450 + 178, 550)
-        a2_nems_right = autoroute_simple_2.put(layer * 450 + 178, 550)
+        a2_nems_right = autoroute_simple_2.put(layer * 450 + 178, 542)
         a1_thermal_left = autoroute_simple_1.put(layer * 450, 1200, flop=True, flip=True)
-        a2_thermal_left = autoroute_simple_2.put(layer * 450, 1200, flop=True, flip=True)
+        a2_thermal_left = autoroute_simple_2.put(layer * 450, 1208, flop=True, flip=True)
         a1_thermal_right = autoroute_simple_1.put(layer * 450 + 178, 1200, flip=True)
-        a2_thermal_right = autoroute_simple_2.put(layer * 450 + 178, 1200, flip=True)
+        a2_thermal_right = autoroute_simple_2.put(layer * 450 + 178, 1208, flip=True)
 
         for pin_nems, pin_thermal in zip(reversed([a2_nems_left.pin[f'p{n}'] for n in range(7)]),
                                          reversed([a2_thermal_left.pin[f'p{n}'] for n in range(7)])):
@@ -144,4 +156,4 @@ with nd.Cell('aim') as aim:
     for n in range(9):
         gridsearch.put(8000 + n * 400, 200)
 
-nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission.design', topcells=[aim])
+nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim])

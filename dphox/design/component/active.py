@@ -127,9 +127,10 @@ class LateralNemsTDC(GroupedPattern):
         nanofin_y = nanofin_w / 2 + dc_gap_w / 2 + waveguide_w + beam_gap_w
         nanofin = Box((interaction_l, nanofin_w)).center_align(dc)
 
-        if not interaction_l >= 2 * np.sum(dc_taper_ls):
-            raise ValueError(
-                f'Require interaction_l > 2 * np.sum(dc_taper_ls) but got {interaction_l} < {2 * np.sum(dc_taper_ls)}')
+        if dc_taper_ls is not None:
+            if not interaction_l >= 2 * np.sum(dc_taper_ls):
+                raise ValueError(
+                    f'Require interaction_l > 2 * np.sum(dc_taper_ls) but got {interaction_l} < {2 * np.sum(dc_taper_ls)}')
 
         if beam_taper is None:
             nanofins = [copy(nanofin).translate(dx=0, dy=-nanofin_y), copy(nanofin).translate(dx=0, dy=nanofin_y)]
@@ -173,7 +174,9 @@ class LateralNemsTDC(GroupedPattern):
 
     @property
     def attachment_ports(self) -> np.ndarray:
-        return np.asarray(self.center)
+        dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w + self.dc_gap_w / 2 + self.beam_gap_w))
+        center = np.asarray(self.center)
+        return np.asarray((center + dy, center - dy))
 
 
 class NemsAnchor(GroupedPattern):

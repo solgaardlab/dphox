@@ -106,12 +106,25 @@ AIM_STACK = {
         'mlam': (780, 727)
     },
     'cross_sections': {
-        'pad_xs': [
+        'v1_xs': [
             {
-                'layer': 'paam'  # paam
+                'layer': 'm2am'
             },
             {
-                'layer': 'vaam'  # via to passivated metal layer
+                'layer': 'v1am',
+                'growx': -1,
+                'growy': -1
+            },
+            {
+                'layer': 'm1am'
+            },
+        ],
+        'pad_xs': [
+            {
+                'layer': 'mlam'  # paam
+            },
+            {
+                'layer': 'vaam'  # via to aluminum layer
             },
             {
                 'layer': 'm2am',  # metal contact
@@ -137,6 +150,11 @@ AIM_STACK = {
         'm2_xs': [
             {
                 'layer': 'm2am'
+            }
+        ],
+        'ml_xs': [
+            {
+                'layer': 'mlam'
             }
         ]
     }
