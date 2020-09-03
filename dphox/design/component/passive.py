@@ -1,5 +1,5 @@
 from ...typing import *
-from .pattern import Pattern, Path
+from .pattern import Pattern, Path, get_cubic_taper
 
 from copy import deepcopy as copy
 from shapely.ops import polygonize

@@ -283,3 +283,7 @@ class GroupedPattern(Pattern):
         output_ports = [c.output_ports for c in self.patterns if c.output_ports.size > 0]
         return np.vstack(output_ports) if len(output_ports) > 0 else np.asarray([])
 
+# TODO(nate): find a better place for this function
+def get_cubic_taper(change_w):
+    return (0, 0, 3 * change_w, -2 * change_w)
+

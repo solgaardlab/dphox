@@ -12,10 +12,6 @@ import nazca as nd
 from ..typing import Optional
 
 
-# TODO(nate): find a better place for this function
-def get_cubic_taper(change_w):
-    return (0, 0, 3 * change_w, -2 * change_w)
-
 
 class AIMNazca:
     def __init__(self, passive_filepath: str = AIM_PDK_PASSIVE_PATH, waveguides_filepath: str = AIM_PDK_WAVEGUIDE_PATH,
@@ -80,25 +76,6 @@ class AIMNazca:
                 nd.Pin('b0').put(ps.pin['b0'])
         return self.tdc_node(diff_ps, cell) if diff_ps is not None else cell
 
-<<<<<<< HEAD
-=======
-    # def nems_metal_box(self, top_anchor: nd.Cell, bottom_anchor: nd.Cell):
-    #     self.m2_ic.strt_p2p(top_anchor.pin['c1'], top_anchor.pin['c2']).put()
-    #     self.m2_ic.ubend_p2p(top_anchor.pin['c2'], bottom_anchor.pin['c2']).put()
-    #     self.m2_ic.strt_p2p(bottom_anchor.pin['c2'], bottom_anchor.pin['c1']).put()
-    #     self.m2_ic.ubend_p2p(bottom_anchor.pin['c1'], top_anchor.pin['c1']).put()
-    #     self.m2_ic.strt(bottom_anchor.pin['c2']).put()
-    #     self.m1_ic.bend(4, 180).put(top_anchor.pin['c1'])
-    #     self.m1_ic.strt(interpad_distance_x).put()
-    #     self.m1_ic.bend(4, 180).put()
-    #     self.m1_ic.bend(4, -180).put(bottom_anchor.pin['c1'])
-    #     self.m1_ic.strt(interpad_distance_x).put()
-    #     self.m1_ic.bend(4, -180).put()
-    #     self.m1_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c1'].x, bottom_anchor.pin['c1'].y, 90)
-    #     self.m1_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c2'].x, bottom_anchor.pin['c2'].y, 90)
-
-
->>>>>>> insig: added taper connectors to defaults so they appear in layout
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 100,
                 gap_w: float = 0.15,
                 pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (90, 13.8), clearout_etch_stop_grow: float = 0.5,
@@ -109,14 +86,13 @@ class AIMNazca:
                 wg_taper = ((0,), (0,), (0,), (0,), get_cubic_taper(-0.08)),
                 boundary_taper = ((0.66 + 2*0.63,), (0,), (0,), (0,), get_cubic_taper(-0.74 -2*0.63)),
                 rib_brim_taper = (get_cubic_taper(2*.66), (0,), (0,), (0,), get_cubic_taper(-0.74*2))) -> nd.Cell:
-        ## Lazy Nate just copying in the the taper paramters so he doesn't forget
-        ### Makes an angled drop connector, changing gap width and smoothing as rib
+        # TODO(nate):The tapers should depend on whether an anchor is present
         # taper_ls = (2, 0.15,0.2,0.15, 2)
         # wg_taper = ((0,), (0,), (0,), (0,), get_cubic_taper(-0.08))
         # gap_taper = ((0.66 + 2*0.63, ), (0,-1*(.30+ 2*0.63),), (0,), (0,(.30+ 2*0.63),), get_cubic_taper(-0.74 -2*0.63))
         # boundary_taper = ((0.66 + 2*0.63,), (0,), (0,), (0,), get_cubic_taper(-0.74 -2*0.63))
         # rib_brim_taper = (get_cubic_taper(2*.66), (0,), (0,), (0,), get_cubic_taper(-0.74*2))
-        ### The above should depend on whether an anchor is present
+
 
 
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
