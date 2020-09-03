@@ -98,3 +98,17 @@ class Multilayer:
             mesh.visual.vertex_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
             meshes.append(mesh)
         return trimesh.Scene(meshes)
+
+# TODO(Nate): change  above to_tirmesh_scene and create a function for the zrange enumeration
+    def to_trimesh_dict(self, layer_to_zrange: Dict[str, Tuple[float, float]],
+                   layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad'):
+        meshes = {}
+        for layer, zrange in layer_to_zrange.items():
+            zmin, zmax = zrange
+            layer_meshes = [
+                trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
+                for poly in self.layer_to_pattern[layer]]
+            mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
+            mesh.visual.vertex_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
+            meshes[layer] =(mesh)
+        return meshes
