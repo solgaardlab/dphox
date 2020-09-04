@@ -303,7 +303,7 @@ class Interposer(Pattern):
 
 
 class Waveguide(Pattern):
-    def __init__(self, waveguide_w: float, length: float, taper_ls: Tuple[float, ...] = None,
+    def __init__(self, waveguide_w: float, length: float, taper_ls: Tuple[float, ...] = 0,
                  taper_params: Tuple[Tuple[float, ...]] = None,
                  slot_dim: Optional[Dim2] = None, slot_taper_ls: Tuple[float, ...] = 0,
                  slot_taper_params: Tuple[Tuple[float, ...]] = None,
