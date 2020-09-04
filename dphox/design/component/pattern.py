@@ -283,7 +283,21 @@ class GroupedPattern(Pattern):
         output_ports = [c.output_ports for c in self.patterns if c.output_ports.size > 0]
         return np.vstack(output_ports) if len(output_ports) > 0 else np.asarray([])
 
-
-# TODO(nate): find a better place for this function
+# TODO(nate): find a better place for these functions
 def get_cubic_taper(change_w):
-    return 0, 0, 3 * change_w, -2 * change_w
+    return (0, 0, 3 * change_w, -2 * change_w)
+
+def is_adiabatic(taper_params, init_width: float = 0.48, wavelength: float = 1.55, neff: float = 2.75,
+                 num_points: int = 100, taper_l: float = 5):
+    taper_params = np.asarray(taper_params)
+    u = np.linspace(0, 1 + 1 / num_points, num_points)[:, np.newaxis]
+    width = init_width + np.sum(taper_params * u ** np.arange(taper_params.size, dtype=float), axis=1)
+    theta = np.arctan(np.diff(width) / taper_l * num_points)
+    max_pt = np.argmax(theta)
+    return theta[max_pt], wavelength / (2 * width[max_pt] * neff)
+
+def get_linear_adiabatic(min_width: float = 0.48, max_width: float = 1,  wavelength: float = 1.55, neff_max: float = 2.75,
+                 num_points: int = 100, min_to_max: bool = True, aggressive: bool = False):
+    taper_params =(0, max_width - min_width) if min_to_max else (0, min_width - max_width)
+    taper_l =  1.1*abs(max_width - min_width) / np.arctan(wavelength / (2 * max_width * neff_max)) if aggressive else 2* abs(max_width - min_width) / np.arctan(wavelength / (2 * max_width * neff_max))
+    return taper_l, taper_params
