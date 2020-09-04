@@ -370,3 +370,13 @@ class Waveguide(Pattern):
     @property
     def output_ports(self) -> np.ndarray:
         return self.input_ports + np.asarray((self.size[0], 0))
+
+
+class AlignmentMark(Pattern):
+	def __init__(self, waveguide_w: float, length: float, shift: Dim2 = (0, 0), layer: int = 0):
+		self.length = length
+		self.waveguide_w = waveguide_w
+		p = Path(waveguide_w, (0,0)).segment(length, "+y", layer=layer)
+		q = Path(waveguide_w, (-length/2, length/2)).segment(length, "+x", layer=layer)
+		super(AlignmentMark, self).__init__(p,q, shift=shift)
+

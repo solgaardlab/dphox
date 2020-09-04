@@ -43,6 +43,7 @@ tap = chip.bidirectional_tap(10, mesh_bend=True)
 anchor = chip.nems_anchor()
 ps = chip.nems_ps(anchor=anchor, tap_sep=(tap, sep))
 ps_no_anchor = chip.nems_ps()
+alignment_mark = chip.alignment_mark(100, 48)
 
 # Mesh generation
 
@@ -91,6 +92,8 @@ with nd.Cell('aim') as aim:
     mzi_node_thermal.put(input_interposer.pin['a6'])
     mzi_node_nems.put(input_interposer.pin['a7'], flip=True)
     num_ports = 344
+    alignment_mark.put(-500,1700)
+    alignment_mark.put(-500+8520, 1700)
 
     # routing code
     bp_array_nems = bp_array.put(-180, -40)
