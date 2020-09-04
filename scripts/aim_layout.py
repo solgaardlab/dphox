@@ -12,6 +12,8 @@ chip = AIMNazca(
 
 ##### Nate: New device/active class #####
 gnd_wg = chip.gnd_wg()
+
+
 ########################################
 
 
@@ -172,27 +174,29 @@ Pull-in phase shifter or PSV1
 
 pull_in_gap = [
     chip.singlemode_ps_ext_gnd(chip.nems_ps(anchor=pull_in_anchor, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
-                                    name=f'ps_gap_{gap_w}'), gnd_length, 
-                       interport_w=test_interport_w,
-                       phaseshift_l=pull_in_phaseshift_l + 2*gnd_length, name=f'pull_in_gap_{gap_w}')
+                                            name=f'ps_gap_{gap_w}'), gnd_length,
+                               interport_w=test_interport_w,
+                               phaseshift_l=pull_in_phaseshift_l + 2 * gnd_length, name=f'pull_in_gap_{gap_w}')
     for gap_w in (0.1, 0.15, 0.2)]
 
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length. To increase pull-in, phase shift length is made shorter.
 pull_in_taper = [
     chip.singlemode_ps_ext_gnd(chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict(pull_in_phaseshift_l,
-                                                                          taper_change, taper_length),
-                                    name=f'ps_taper_{taper_change}_{taper_length}'), gnd_length,
-                       interport_w=test_interport_w,
-                       phaseshift_l=pull_in_phaseshift_l + 2*gnd_length , name=f'pull_in_taper_{taper_change}_{taper_length}')
+                                                                                  taper_change, taper_length),
+                                            name=f'ps_taper_{taper_change}_{taper_length}'), gnd_length,
+                               interport_w=test_interport_w,
+                               phaseshift_l=pull_in_phaseshift_l + 2 * gnd_length,
+                               name=f'pull_in_taper_{taper_change}_{taper_length}')
     for taper_change in (-0.1, -0.15) for taper_length in (10, 20)]
 
 # Motivation: attempt pull-in phase shifter idea with modifying fin width / phase shift per unit length
 pull_in_fin = [
-    chip.singlemode_ps_ext_gnd(chip.nems_ps(anchor=pull_in_anchor, nanofin_w=nanofin_w, **pull_in_dict(pull_in_phaseshift_l),
-                                    name=f'ps_fin_{nanofin_w}'), gnd_length,
-                       interport_w=test_interport_w,
-                       phaseshift_l=pull_in_phaseshift_l + 2*gnd_length, name=f'pull_in_fin_{nanofin_w}')
+    chip.singlemode_ps_ext_gnd(
+        chip.nems_ps(anchor=pull_in_anchor, nanofin_w=nanofin_w, **pull_in_dict(pull_in_phaseshift_l),
+                     name=f'ps_fin_{nanofin_w}'), gnd_length,
+        interport_w=test_interport_w,
+        phaseshift_l=pull_in_phaseshift_l + 2 * gnd_length, name=f'pull_in_fin_{nanofin_w}')
     for nanofin_w in (0.15, 0.2)]
 
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
@@ -236,15 +240,26 @@ tdc_columns = [
 
 gridsearches = []
 
-for col, tdc_column in enumerate(ps_columns):
+for col, ps_columns in enumerate(ps_columns):
     with nd.Cell(f'gridsearch_{col}') as gridsearch:
         line = testing_tap_line.put()
-        for i, ps in enumerate(tdc_column):
+        for i, ps in enumerate(ps_columns):
             # all structures for a tap line should be specified here
-            chip.mzi_node(ps, dc, include_input_ps=False,
-                          detector=chip.pdk_cells['cl_band_photodetector_digital'],
-                          name=f'test_mzi_{ps.name}'
-                          ).put(line.pin[f'a{2 * i + 1}'])
+            node = chip.mzi_node(ps, dc, include_input_ps=False,
+                                 detector=chip.pdk_cells['cl_band_photodetector_digital'],
+                                 name=f'test_mzi_{ps.name}'
+                                 ).put(line.pin[f'a{2 * i + 1}'])
+            # annoying routing hard-coding... TODO(sunil): make this better
+            chip.v1_ic.strt(4).put(node.pin['p1'])
+            chip.m1_ic.bend(8, 90).put(node.pin['p1'])
+            chip.m1_ic.strt(27).put()
+            chip.v1_ic.strt(4).put(node.pin['n2'])
+            chip.m1_ic.bend(4, -90).put(node.pin['n2'])
+            chip.m1_ic.strt(19).put()
+            chip.m2_ic.bend(4, 90).put(node.pin['n1'])
+            chip.m2_ic.strt(15).put()
+            chip.m2_ic.bend(8, -90).put(node.pin['p2'])
+            chip.m2_ic.strt(33).put()
     gridsearches.append(gridsearch)
 
 for col, tdc_column in enumerate(tdc_columns):
@@ -253,6 +268,18 @@ for col, tdc_column in enumerate(tdc_columns):
         for i, tdc in enumerate(tdc_column):
             # all structures for a tap line should be specified here
             tdc.put(line.pin[f'a{2 * i + 1}'])
+            # d1 = chip.pdk_cells['cl_band_photodetector_digital'].put(tdc.pin['b0'])
+            # d2 = chip.pdk_cells['cl_band_photodetector_digital'].put(tdc.pin['b1'], flip=True)
+            # chip.v1_ic.strt(4).put(d1.pin['p'])
+            # chip.m1_ic.bend(8, 90).put(d1.pin['p'])
+            # chip.m1_ic.strt(27).put()
+            # chip.v1_ic.strt(4).put(d2.pin['n'])
+            # chip.m1_ic.bend(4, -90).put(d2.pin['n'])
+            # chip.m1_ic.strt(19).put()
+            # chip.m2_ic.bend(4, 90).put(d1.pin['n'])
+            # chip.m2_ic.strt(15).put()
+            # chip.m2_ic.bend(8, -90).put(d2.pin['p'])
+            # chip.m2_ic.strt(33).put()
     gridsearches.append(gridsearch)
 
 # Chip construction
@@ -267,8 +294,8 @@ with nd.Cell('aim') as aim:
     mesh_dc.put(output_interposer.pin['a6'])
     mzi_node_nems_detector.put(input_interposer.pin['a7'], flip=True)
     num_ports = 344
-    alignment_mark.put(-500,1700)
-    alignment_mark.put(-500+8520, 1700)
+    alignment_mark.put(-500, 0)
+    alignment_mark.put(-500 + 8520, 0)
 
     # routing code
     bp_array_nems = bp_array.put(-180, -40)
@@ -335,7 +362,7 @@ with nd.Cell('aim') as aim:
         chip.m1_ic.bend(20, -90).put(bp_array_left.pin[f'u{1},{i}'])
         chip.m1_ic.strt(3100 - 100).put()
         chip.m1_ic.bend(28, -90).put(bp_array_right.pin[f'd{1},{i}'])
-        chip.m1_ic.bend(28, -90).put(bp_array_right.pin[f'd{1},{i}'])
+        chip.v1_ic.bend(28, -90).put(bp_array_right.pin[f'd{1},{i}'])
         chip.m1_ic.strt(3100 - 6).put()
         chip.m2_ic.bend(22, -90).put(bp_array_right.pin[f'd{0},{i}'])
         chip.m2_ic.strt(3100 - 100).put()

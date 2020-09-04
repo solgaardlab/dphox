@@ -81,7 +81,7 @@ AMF_STACK = {
 
 AIM_STACK = {
     'layers': {
-        'ream': (707, 727),  # ream, ridge etch
+        'ream': (702, 727),  # ream, ridge etch
         'seam': (709, 727),  # seam, silicon etch
         'fnam': (733, 727),  # fnam, nitride waveguide
         'snam': (735, 727),  # snam, nitride waveguide

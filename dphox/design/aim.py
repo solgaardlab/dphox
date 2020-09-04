@@ -102,7 +102,7 @@ class AIMNazca:
                           taper_ls=taper_ls,
                           boundary_taper=boundary_taper,
                           rib_brim_taper=rib_brim_taper)
-        pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v2am', 'm2am'), level=2) for pad in c.pads], [])
+        pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=2) for pad in c.pads], [])
         clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='fnam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
@@ -138,15 +138,15 @@ class AIMNazca:
                 nd.Pin('b0').put(ps.pin['b0'])
         return cell
 
-    def gnd_wg(self, waveguide_w: float =0.48, length: float = 20 , gnd_contact_dim: Optional[Dim2] = (5,5),
-                 rib_brim_w: float = 1.5, gnd_connector_dim: Optional[Dim2] = (1,4), shift: Optional[Dim2] = (0,0), flip: bool = False,
-                 name = 'gnd_wg') -> nd.Cell:
-        c = GndWaveguide(waveguide_w = waveguide_w, length = length, gnd_contact_dim = gnd_contact_dim,
-                 rib_brim_w = rib_brim_w, gnd_connector_dim = gnd_connector_dim, shift = shift, flip = flip )
-        pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v2am', 'm2am'), level=2) for pad in c.pads], [])
+    def gnd_wg(self, waveguide_w: float = 0.48, length: float = 20, gnd_contact_dim: Optional[Dim2] = (5, 5),
+               rib_brim_w: float = 1.5, gnd_connector_dim: Optional[Dim2] = (1, 4), shift: Optional[Dim2] = (0, 0),
+               flip: bool = False,
+               name='gnd_wg') -> nd.Cell:
+        c = GndWaveguide(waveguide_w=waveguide_w, length=length, gnd_contact_dim=gnd_contact_dim,
+                         rib_brim_w=rib_brim_w, gnd_connector_dim=gnd_connector_dim, shift=shift, flip=flip)
+        pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=2) for pad in c.pads], [])
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
         device = Multilayer([(c, 'seam')] + pad_to_layer + ridge_etch)
-        
         return device.nazca_cell(name)
 
     def autoroute_turn(self, n: Union[int, List, np.ndarray], level: int = 1,
@@ -214,18 +214,18 @@ class AIMNazca:
         return cell
 
     def singlemode_ps_ext_gnd(self, ps: nd.Cell, gnd_wg_l: float, interport_w: float, phaseshift_l: float,
-                      top: bool = True, name: str = 'nems_singlemode_ps_ext_gnd'):
+                              top: bool = True, name: str = 'nems_singlemode_ps_ext_gnd'):
         # TODO(Nate): Figure out if gnds should be on both arms base on testing
         with nd.Cell(name) as cell:
-            gnd_ll = self.gnd_wg(length=gnd_wg_l, flip = False).put()
-            pl = ps.put() if top else self.waveguide_ic.strt(phaseshift_l - 2* gnd_wg_l).put()
-            gnd_lr = self.gnd_wg(length=gnd_wg_l, flip = False).put()
+            gnd_ll = self.gnd_wg(length=gnd_wg_l, flip=False).put()
+            pl = ps.put() if top else self.waveguide_ic.strt(phaseshift_l - 2 * gnd_wg_l).put()
+            gnd_lr = self.gnd_wg(length=gnd_wg_l, flip=False).put()
             nd.Pin('a0').put(gnd_ll.pin['a0'])
             nd.Pin('b0').put(gnd_lr.pin['b0'])
 
-            gnd_ul = self.gnd_wg(length=gnd_wg_l, flip = True).put(0, interport_w)
-            pu = self.waveguide_ic.strt(phaseshift_l - 2* gnd_wg_l).put() if top else ps.put()
-            gnd_ur = self.gnd_wg(length=gnd_wg_l, flip = True).put()
+            gnd_ul = self.gnd_wg(length=gnd_wg_l, flip=True).put(0, interport_w)
+            pu = self.waveguide_ic.strt(phaseshift_l - 2 * gnd_wg_l).put() if top else ps.put()
+            gnd_ur = self.gnd_wg(length=gnd_wg_l, flip=True).put()
             nd.Pin('a1').put(gnd_ul.pin['a0'])
             nd.Pin('b1').put(gnd_ur.pin['b0'])
         return cell
@@ -260,12 +260,12 @@ class AIMNazca:
                       num_taper_evaluations=100, symmetric=symmetric, taper_ls=taper_ls)
         device = Multilayer([(c, 'seam')])
         return device.nazca_cell('waveguide')
-    
+
     def alignment_mark(self, length: float, waveguide_w: float = 0.48):
         c = AlignmentMark(length, waveguide_w)
         device = Multilayer([(c, 'm1am')])
         return device.nazca_cell('alignment_mark')
-    
+
     def interposer(self, waveguide_w: float, n: int, period: float, radius: float,
                    trombone_radius: Optional[float] = None, num_trombones: int = 1,
                    final_period: Optional[float] = None, self_coupling_extension_dim: Optional[Dim2] = None,
@@ -453,13 +453,22 @@ class AIMNazca:
                 if detector_loopback_params is not None:
                     self.waveguide_ic.bend(detector_loopback_params[0], 180).put(node.pin['b1'])
                     self.waveguide_ic.strt(detector_loopback_params[1]).put()
-                    detector.put()
+                    d = detector.put()
+                    nd.Pin('p1').put(d.pin['p'])
+                    nd.Pin('n1').put(d.pin['n'])
                     self.waveguide_ic.bend(detector_loopback_params[0], -180).put(node.pin['b0'])
                     self.waveguide_ic.strt(detector_loopback_params[1]).put()
-                    detector.put()
+                    d = detector.put()
+                    nd.Pin('p2').put(d.pin['p'])
+                    nd.Pin('n2').put(d.pin['n'])
                 else:
-                    detector.put(node.pin['b1'], flip=True)
-                    detector.put(node.pin['b0'])
+                    d = detector.put(node.pin['b1'], flip=True)
+                    nd.Pin('p1').put(d.pin['p'])
+                    nd.Pin('n1').put(d.pin['n'])
+                    d = detector.put(node.pin['b0'])
+                    nd.Pin('p2').put(d.pin['p'])
+                    nd.Pin('n2').put(d.pin['n'])
+            nd.put_stub()
         return node
 
     def tdc_node(self, diff_ps: nd.Cell, tdc: nd.Cell, tap: Optional[nd.Cell] = None,
@@ -583,16 +592,6 @@ class AIMNazca:
             else:
                 nd.Pin('b0').put(_dc_dummy.pin['b0'])
         return dummy
-
-    def ps_tester(self, testing_tap_line: nd.Cell, ps_list: List[nd.Cell], dc: nd.Cell,
-                  detector_loopback_params: Tuple[float, float] = (5, 10), name: str = 'ps_tester'):
-        with nd.Cell(name) as ps_tester:
-            line = testing_tap_line.put()
-            for i, ps in enumerate(ps_list):
-                self.mzi_node(ps, dc, include_input_ps=False,
-                              detector=self.pdk_cells['cl_band_photodetector_digital'],
-                              detector_loopback_params=detector_loopback_params).put(line.pin[f'a{i}'])
-        return ps_tester
 
 
 def _mzi_angle(waveguide_w: float, gap_w: float, interport_w: float, radius: float):
