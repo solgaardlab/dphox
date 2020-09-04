@@ -43,7 +43,7 @@ class LateralNemsPS(GroupedPattern):
         self.gap_taper = gap_taper
         self.wg_taper = wg_taper
         self.boundary_taper = boundary_taper
-        self.rib_brim_taper = rib_brim_taper 
+        self.rib_brim_taper = rib_brim_taper
 
         if not phaseshift_l >= 2 * np.sum(taper_ls):
             raise ValueError(
@@ -53,17 +53,17 @@ class LateralNemsPS(GroupedPattern):
 
         box_w = nanofin_w * 2 + gap_w * 2 + waveguide_w
         wg = Waveguide(waveguide_w, taper_ls=taper_ls, taper_params=wg_taper, length=phaseshift_l,
-                    num_taper_evaluations=num_taper_evaluations)
+                       num_taper_evaluations=num_taper_evaluations)
         boundary = Waveguide(box_w, taper_params=boundary_taper, taper_ls=taper_ls, length=phaseshift_l,
-                            num_taper_evaluations=num_taper_evaluations).pattern
+                             num_taper_evaluations=num_taper_evaluations).pattern
         gap_path = Waveguide(waveguide_w + gap_w * 2, taper_params=gap_taper,
-                            taper_ls=taper_ls, length=phaseshift_l,
-                            num_taper_evaluations=num_taper_evaluations).pattern
+                             taper_ls=taper_ls, length=phaseshift_l,
+                             num_taper_evaluations=num_taper_evaluations).pattern
         nanofins = [Pattern(poly) for poly in (boundary - gap_path)]
 
         if rib_brim_taper is not None:
             rib_brim = Waveguide(waveguide_w, taper_ls=taper_ls, taper_params=rib_brim_taper, length=phaseshift_l,
-                        num_taper_evaluations=num_taper_evaluations)
+                                 num_taper_evaluations=num_taper_evaluations)
             rib_brim = [Pattern(poly) for poly in (rib_brim.pattern - wg.pattern)]
         else:
             rib_brim = []
@@ -73,7 +73,8 @@ class LateralNemsPS(GroupedPattern):
             pad = Box(pad_dim[:2]).center_align(wg)
             pad_y = nanofin_w + pad_dim[2] + pad_dim[1] / 2
             pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
-        super(LateralNemsPS, self).__init__(*([wg] + nanofins + pads + anchors + rib_brim), shift=shift, call_union=False)
+        super(LateralNemsPS, self).__init__(*([wg] + nanofins + pads + anchors + rib_brim), shift=shift,
+                                            call_union=False)
         self.waveguide, self.anchors, self.pads, self.nanofins, self.rib_brim = wg, anchors, pads, nanofins, rib_brim
 
     @property
@@ -235,43 +236,43 @@ class NemsAnchor(GroupedPattern):
                                                                  opposite=False).vert_align(connector,
                                                                                             bottom=False,
                                                                                             opposite=True),
-            # adding more straight connectors for mirror symmetric mechanics
+                                       # adding more straight connectors for mirror symmetric mechanics
                                        copy(straight).horz_align(connector, left=False,
-                                                                opposite=False).vert_align(
-                                                                                        copy(connector).translate(connector.size[0],connector.size[1]),),
+                                                                 opposite=False).vert_align(
+                                           copy(connector).translate(connector.size[0], connector.size[1]), ),
                                        copy(straight).horz_align(connector).vert_align(
-                                                                                        copy(connector).translate(connector.size[0],connector.size[1]),))
-                                                                                        # bottom=False,
-                                                                                        # opposite=True))
+                                           copy(connector).translate(connector.size[0], connector.size[1]), ))
+            # bottom=False,
+            # opposite=True))
             # adding more straight connectors for mirror symmetric mechanics
 
         a_port = (connector.center[0], connector.bounds[1])
         a_mirror_port = (connector.center[0], connector.bounds[3])
         if include_fin_dummy:
             # patterns.append(Box(fin_spring_dim).center_align(a_port)) # this dummy is at the real fin location
-            patterns.append(Box(fin_spring_dim).center_align(a_mirror_port)) # this is the mirror image dummy for mechanics
+            patterns.append(
+                Box(fin_spring_dim).center_align(a_mirror_port))  # this is the mirror image dummy for mechanics
         patterns.append(connector)
         if top_spring_dim is not None:
-            top_spring = Box(top_spring_dim).center_align(
-                connector).vert_align(connector, bottom=True, opposite=True)
             top_spring = Box(top_spring_dim).center_align(
                 shuttle).vert_align(shuttle, bottom=True, opposite=True)
             bottom_spring = Box(top_spring_dim).center_align(
                 shuttle).vert_align(shuttle, bottom=False, opposite=True)
-            
-            patterns.extend([top_spring,bottom_spring])
-            doped_elems.extend([top_spring,bottom_spring])
-
             if pos_electrode_dim is not None:
                 pos_electrode = Box((pos_electrode_dim[0], pos_electrode_dim[1])).center_align(top_spring).vert_align(
                     top_spring, opposite=True).translate(dy=pos_electrode_dim[2])
                 patterns.append(pos_electrode)
                 pads.append(pos_electrode)
                 doped_elems.append(copy(pos_electrode))
+                patterns.extend([top_spring, bottom_spring])
+                doped_elems.extend([top_spring, bottom_spring])
+            else:
+                pads.append(connector)
             if neg_electrode_dim is not None:
-                neg_electrode_left = Box(neg_electrode_dim).horz_align( #moving alignment to account for bottom spring
+                # moving alignment to account for bottom spring
+                neg_electrode_left = Box(neg_electrode_dim).horz_align(
                     bottom_spring, opposite=True).vert_align(bottom_spring)
-                neg_electrode_right = Box(neg_electrode_dim).horz_align( #moving alignment to account for bottom spring
+                neg_electrode_right = Box(neg_electrode_dim).horz_align(
                     bottom_spring, left=False, opposite=True).vert_align(bottom_spring)
                 patterns.extend([neg_electrode_left, neg_electrode_right])
                 pads.extend([neg_electrode_left, neg_electrode_right])
