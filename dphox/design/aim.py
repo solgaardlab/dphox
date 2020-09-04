@@ -140,11 +140,13 @@ class AIMNazca:
 
     def gnd_wg(self, waveguide_w: float = 0.48, length: float = 20, gnd_contact_dim: Optional[Dim2] = (5, 5),
                rib_brim_w: float = 1.5, gnd_connector_dim: Optional[Dim2] = (1, 4), shift: Optional[Dim2] = (0, 0),
-               flip: bool = False,
+               flip: bool = False, dope_grow: float = 0.25,
                name='gnd_wg') -> nd.Cell:
         c = GndWaveguide(waveguide_w=waveguide_w, length=length, gnd_contact_dim=gnd_contact_dim,
                          rib_brim_w=rib_brim_w, gnd_connector_dim=gnd_connector_dim, shift=shift, flip=flip)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=2) for pad in c.pads], [])
+        dopes=[]
+        dopes.extend(list(zip([p.grow(dope_grow) for p in c.pads], ('pppam',))))
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
         device = Multilayer([(c, 'seam')] + pad_to_layer + ridge_etch)
         return device.nazca_cell(name)
@@ -183,7 +185,7 @@ class AIMNazca:
                 raise ValueError('must specify neg_electrode_dim if pos_electrode_dim specified but got None')
             pads.extend(sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=2) for pad in c.pads[:1]], []))
             pads.extend(sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=1) for pad in c.pads[1:]], []))
-            dopes.extend(list(zip([p.grow(dope_grow) for p in c.dope_patterns], ('ppam', 'pdam', 'pppam', 'pppam'))))
+            dopes.extend(list(zip([p.grow(dope_grow) for p in c.dope_patterns], ('pdam', 'pppam', 'pdam', 'pdam', 'pppam'))))
         else:
             pads.extend(
                 sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=2) for pad in c.dope_patterns[:1]], []))
