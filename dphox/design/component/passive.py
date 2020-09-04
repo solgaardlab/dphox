@@ -306,7 +306,7 @@ class Waveguide(Pattern):
                  slot_dim: Optional[Dim2] = None, slot_taper_ls: Tuple[float, ...] = 0,
                  slot_taper_params: Tuple[Tuple[float, ...]] = None,
                  num_taper_evaluations: int = 100, shift: Dim2 = (0, 0),
-                 symmetric: bool = True):
+                 symmetric: bool = True, rotate_angle = None):
 
         """Waveguide class
         Args:
@@ -331,6 +331,7 @@ class Waveguide(Pattern):
         self.pads = []
 
         p = Path(waveguide_w)
+
         if taper_params is not None:
             for taper_l, taper_param in zip(taper_ls, taper_params):
                 if taper_l > 0:
@@ -350,6 +351,9 @@ class Waveguide(Pattern):
             if not length >= np.sum(taper_ls):
                 raise ValueError(f'Require interaction_l >= np.sum(taper_ls) but got {length} < {np.sum(taper_ls)}')
             p.segment(length - np.sum(taper_ls))
+
+        if rotate_angle is not None:
+            p.rotate(rotate_angle)
 
         if slot_taper_params:
             center_x = length / 2

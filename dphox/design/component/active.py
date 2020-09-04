@@ -1,5 +1,5 @@
 from ...typing import *
-from .pattern import Pattern, Path, GroupedPattern
+from .pattern import Pattern, Path, GroupedPattern, get_linear_adiabatic, get_cubic_taper
 from .passive import Waveguide, DC, Box
 from .multilayer import Multilayer
 
@@ -162,18 +162,48 @@ class LateralNemsTDC(GroupedPattern):
             nanofins = [Pattern(poly) for poly in (boundary - gap_path)]
             ######### NATE: trying to taper center of TDC ###################
 
+        
+        # TODO(Nate): make the brim connector to ground standard for 220nm, rework the taper helpers
+        # TODO(Nate): remove hard coded connector length
         if pad_dim is not None:
-            pad = Box(pad_dim[:2]).center_align(dc)
-            pad_y = nanofin_w / 2 + pad_dim[2] + pad_dim[1] / 2 + nanofin_y
-            pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
+            brim_l, brim_taper = get_linear_adiabatic(min_width = waveguide_w, max_width = 1, aggressive= True)
+            brim_taper = get_cubic_taper(brim_taper[1])
+            gnd_contact_dim = (2,0.5)
 
+
+            if not bend_dim[1] > 2*bend_dim[0] + 2*brim_l:
+                raise ValueError( f'Not enough room in s-bend to ground waveguide segment of  length {bend_dim[1] - 2*bend_dim[0]} need at least {2*brim_l}')
+
+            if not (pad_dim[0] + (waveguide_w/2 + brim_taper[2]/2 + gnd_contact_dim[0])) < bend_dim[0]:
+                 raise ValueError( f'Not enough room in s-bend to ground waveguide with bend_dim[0] of {bend_dim[0]} need at least {(pad_dim[0] + (waveguide_w/2 + brim_taper[2]/2 + gnd_contact_dim[0]))}')
+            
+            rib_brim, gnd_connections, pads = [], [], []
+            dx_brim = bend_dim[0]
+            dy_brim = bend_dim[1]/2
+            min_x, min_y, max_x, max_y = dc.pattern.bounds
+            flip=-1
+            flip_y = True
+            for x in (min_x + dx_brim, max_x- dx_brim):
+                flip = -1*flip
+                for y in ( min_y + dy_brim, max_y - dy_brim,):
+                    flip_y = flip_y ^ True
+                    rib_brim.append(Waveguide(waveguide_w, taper_ls=[brim_l], taper_params=[brim_taper], length=2*brim_l, rotate_angle= np.pi/2).translate(dx=x, dy=y-brim_l).pattern)
+                    gnd_connections.append(Box(gnd_contact_dim[:2]).translate(dx=x + waveguide_w/2, dy=y-gnd_contact_dim[1]/2)) if flip == 1 else gnd_connections.append(
+                                            Box(gnd_contact_dim[:2]).translate(dx=x - waveguide_w/2 - gnd_contact_dim[0], dy=y-gnd_contact_dim[1]/2))
+                    pads.append(Box(pad_dim[:2]).vert_align(rib_brim[-1], bottom= flip_y).horz_align(gnd_connections[-1], left=True, opposite= True)) if flip == 1 else pads.append(
+                                            Box(pad_dim[:2]).vert_align(rib_brim[-1], bottom= flip_y).horz_align(gnd_connections[-1], left=False, opposite= True))
+ 
+            rib_brim = [Pattern(poly) for brim in rib_brim for poly in (brim - dc.pattern)] 
+            gnd_connections = [gnd_contact for gnd_contact in gnd_connections] 
+
+            
         if middle_fin_pad_dim is not None:
             pad = Box(middle_fin_pad_dim).center_align(dc)
             pad_x = middle_fin_pad_dim[0] / 2 + middle_fin_dim[0] / 2
             pads += [copy(pad).translate(dx=pad_x), copy(pad).translate(dx=pad_x)]
 
-        super(LateralNemsTDC, self).__init__(*([dc] + nanofins + connectors + pads), shift=shift, call_union=False)
-        self.dc, self.connectors, self.pads, self.nanofins = dc, connectors, pads, nanofins
+        super(LateralNemsTDC, self).__init__(*([dc] + nanofins + connectors + pads + gnd_connections + rib_brim), shift=shift, call_union=False)
+        self.dc, self.connectors, self.pads, self.nanofins, self.gnd_connections, self.rib_brim = dc, connectors, pads, nanofins, gnd_connections, rib_brim
 
     @property
     def input_ports(self) -> np.ndarray:
@@ -242,9 +272,6 @@ class NemsAnchor(GroupedPattern):
                                            copy(connector).translate(connector.size[0], connector.size[1]), ),
                                        copy(straight).horz_align(connector).vert_align(
                                            copy(connector).translate(connector.size[0], connector.size[1]), ))
-            # bottom=False,
-            # opposite=True))
-            # adding more straight connectors for mirror symmetric mechanics
 
         a_port = (connector.center[0], connector.bounds[1])
         a_mirror_port = (connector.center[0], connector.bounds[3])

@@ -50,11 +50,12 @@ class AIMNazca:
 
     def nems_tdc(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
                  interaction_l: float = 100, dc_gap_w: float = 0.2, beam_gap_w: float = 0.15,
-                 bend_dim: Dim2 = (10, 24.66), pad_dim: Dim3 = None, anchor: nd.Cell = None,
+                 bend_dim: Dim2 = (10, 24.66), pad_dim: Dim3 = (5,5,30), anchor: nd.Cell = None,
                  middle_fin_dim=None, use_radius: bool = True,
                  clearout_box_dim: Dim2 = (100, 2.5), dc_taper_ls: Tuple[float, ...] = None,
                  dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5,
                  diff_ps: Optional[nd.Cell] = None, name: str = 'nems_tdc') -> nd.Cell:
+        # TODO(Nate): Use pad_dim which is a dead param to define ground connector
         c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
                            interaction_l=interaction_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
                            bend_dim=bend_dim, pad_dim=pad_dim,
@@ -63,7 +64,8 @@ class AIMNazca:
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=2) for pad in c.pads], [])
         clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='fnam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
-        device = Multilayer([(c, 'seam')] + pad_to_layer + clearout)
+        ridge_etch =[(brim, 'ream') for brim in c.rib_brim] 
+        device = Multilayer([(c, 'seam')] + pad_to_layer + clearout + ridge_etch)
         if anchor is None:
             cell = device.nazca_cell(name)
         else:
