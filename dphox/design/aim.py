@@ -233,6 +233,14 @@ class AIMNazca:
         device = Multilayer([(c, 'seam')])
         return device.nazca_cell('waveguide')
 
+    
+    #fix the layer selection 
+    def alignment_mark(self, length: float, waveguide_w: float = 0.48):
+        c = AlignmentMark(waveguide_w, length)
+        device = Multilayer([(c, 'm1am')])
+        return device.nazca_cell('alignment_mark')
+
+
     def interposer(self, waveguide_w: float, n: int, period: float, radius: float,
                    trombone_radius: Optional[float] = None, num_trombones: int = 1,
                    final_period: Optional[float] = None, self_coupling_extension_dim: Optional[Dim2] = None,
@@ -307,7 +315,11 @@ class AIMNazca:
         return bond_pad_array
 
     def custom_dc(self, waveguide_w: float = 0.48, bend_dim: Dim2 = (20, 50.78 / 2), gap_w: float = 0.3,
+<<<<<<< HEAD
                   interaction_l: float = 40, end_bend_dim: Optional[Dim3] = None,
+=======
+                  interaction_l: float = 33.6, end_l: float = 0, end_bend_dim: Optional[Dim3] = None,
+>>>>>>> pick changed naming, still need to do layers
                   use_radius: bool = True) -> Tuple[nd.Cell, nd.Cell]:
         dc = DC(bend_dim, waveguide_w, gap_w, interaction_l, (0,), None, end_bend_dim, use_radius)
         return dc.nazca_cell('dc', layer='seam'), dc.upper_path.nazca_cell('bendy_dc_dummy', layer='seam')
