@@ -316,10 +316,14 @@ class AIMNazca:
 
     def custom_dc(self, waveguide_w: float = 0.48, bend_dim: Dim2 = (20, 50.78 / 2), gap_w: float = 0.3,
 <<<<<<< HEAD
+<<<<<<< HEAD
                   interaction_l: float = 40, end_bend_dim: Optional[Dim3] = None,
 =======
                   interaction_l: float = 33.6, end_l: float = 0, end_bend_dim: Optional[Dim3] = None,
 >>>>>>> pick changed naming, still need to do layers
+=======
+                  interaction_l: float = 33.6, end_l: float = 0, end_bend_dim: Optional[Dim3] = None,
+>>>>>>> c925788d76c4f0d9b49fa9d2354e0ed73cc4f1df
                   use_radius: bool = True) -> Tuple[nd.Cell, nd.Cell]:
         dc = DC(bend_dim, waveguide_w, gap_w, interaction_l, (0,), None, end_bend_dim, use_radius)
         return dc.nazca_cell('dc', layer='seam'), dc.upper_path.nazca_cell('bendy_dc_dummy', layer='seam')
