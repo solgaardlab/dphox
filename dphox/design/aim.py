@@ -254,21 +254,17 @@ class AIMNazca:
         else:
             return device.nazca_cell(f'interposer_{n}_{period}_{final_period}_{radius}')
 
-    def bond_pad(self, pad_w: float = 40, pad_l: float = 40):
-        with nd.Cell(name='bond_pad') as bond_pad:
-            self.pad_ic.strt(length=pad_l, width=pad_w).put()
-        return bond_pad
-
     def bond_pad_array(self, n_pads: Shape2 = (70, 3), pitch: Union[float, Dim2] = 100,
                        pad_dim: Dim2 = (40, 40), labels: Optional[np.ndarray] = None,
                        use_labels: bool = True):
         pad_w, pad_l = pad_dim
         pitch = pitch if isinstance(pitch, tuple) else (pitch, pitch)
         with nd.Cell(name=f'bond_pad_array_{n_pads}_{pitch}') as bond_pad_array:
-            pad = self.bond_pad(pad_w=pad_w, pad_l=pad_l)
             for i in range(n_pads[0]):
                 for j in range(n_pads[1]):
-                    pad.put(i * pitch[0], j * pitch[1], 270)
+                    pad = self.pad_ic.strt(length=pad_l, width=pad_w).put(i * pitch[0], j * pitch[1], 270)
+                    nd.Pin(f'u{i},{j}').put(pad.pin['a0'])
+                    nd.Pin(f'd{i},{j}').put(pad.pin['b0'])
                     if use_labels:
                         x = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='cc',
                                     layer='seam', height=pad_dim[0] / 2)
@@ -276,6 +272,7 @@ class AIMNazca:
                                     layer='seam', height=pad_dim[0] / 2)
                         y.put(-pitch[0] / 2 + i * pitch[0], -pad_l / 2 + j * pitch[1])
                         x.put(i * pitch[0], - 1.73 * pad_l + j * pitch[1])
+            nd.put_stub()
         return bond_pad_array
 
     def eutectic_array(self, n_pads: Shape2 = (344, 12), pitch: float = 20, width: float = 12, strip: bool = True):

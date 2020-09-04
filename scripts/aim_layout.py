@@ -316,16 +316,20 @@ with nd.Cell('aim') as aim:
     gridsearches[2].put(9000, 150)
     gridsearches[3].put(9300, 150)
     chip.dice_box((100, 2000)).put(7600, -127)
-    bp_array_testing.put(7800, 200)
-    bp_array_testing.put(12000 + input_interposer.bbox[0] - 200, 200)
+    bp_array_left = bp_array_testing.put(7800, 200)
+    bp_array_right = bp_array_testing.put(12000 + input_interposer.bbox[0] - 200, 200)
     pp_array.put(8250, 700)
 
-    for i in range(16):
-        for j in range(5):
-            if j == 2:
-                chip.m2_ic.strt(3240).put(7700, 215 + i * 100 + j * 6)
-            else:
-                chip.m2_ic.strt(3240).put(7700, 215 + i * 100 + j * 6)
+    for i in range(17):
+        chip.m2_ic.bend(26, -90).put(bp_array_left.pin[f'u{0},{i}'])
+        chip.m2_ic.strt(3100 - 6).put()
+        chip.m1_ic.bend(20, -90).put(bp_array_left.pin[f'u{1},{i}'])
+        chip.m1_ic.strt(3100 - 100).put()
+        chip.m1_ic.bend(28, -90).put(bp_array_right.pin[f'd{1},{i}'])
+        chip.m1_ic.bend(28, -90).put(bp_array_right.pin[f'd{1},{i}'])
+        chip.m1_ic.strt(3100 - 6).put()
+        chip.m2_ic.bend(22, -90).put(bp_array_right.pin[f'd{0},{i}'])
+        chip.m2_ic.strt(3100 - 100).put()
 
     # Boundary indicators (REMOVE IN FINAL LAYOUT)
     chip.dice_box((12000, 100)).put(input_interposer.bbox[0] - 50, -227)
