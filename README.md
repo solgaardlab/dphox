@@ -62,6 +62,7 @@ You will need to resolve any conflicts that arise manually during this rebase pr
 
 Now you will force-push this rebased branch using:
 ```
+git push --set-upstream origin feature/feature-branch-name
 git push -f
 ```
 
