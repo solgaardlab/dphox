@@ -183,7 +183,7 @@ class AIMNazca:
                 raise ValueError('must specify neg_electrode_dim if pos_electrode_dim specified but got None')
             pads.extend(sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=2) for pad in c.pads[:1]], []))
             pads.extend(sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=1) for pad in c.pads[1:]], []))
-            dopes.extend(list(zip([p.grow(dope_grow) for p in c.dope_patterns], ('ppam', 'pdam', 'pppam', 'pppam'))))
+            dopes.extend(list(zip([p.grow(dope_grow) for p in c.dope_patterns], ('pdam', 'pppam', 'pdam', 'pdam'))))
         else:
             pads.extend(
                 sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=2) for pad in c.dope_patterns[:1]], []))
