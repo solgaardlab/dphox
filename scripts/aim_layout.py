@@ -35,6 +35,7 @@ test_gap_w = 0.3
 test_bend_dim = get_bend_dim_from_interport_w(test_interport_w, test_gap_w)
 test_tdc_interport_w = 50
 test_tdc_interaction_l = 100
+pull_in_phaseshift_l = 50
 test_tdc_bend_dim = get_bend_dim_from_interport_w(test_tdc_interport_w, test_gap_w)
 
 mesh_interport_w = 50
@@ -47,7 +48,7 @@ dc = chip.custom_dc(bend_dim=(dc_radius, test_bend_dim))[0]
 mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
 tap = chip.bidirectional_tap(10, mesh_bend=True)
 pull_apart_anchor = chip.nems_anchor()
-pull_in_anchor = chip.nems_anchor(connector_dim=(90, 5),
+pull_in_anchor = chip.nems_anchor(connector_dim=(40, 5),
                                   pos_electrode_dim=None, neg_electrode_dim=None)
 tdc_anchor = chip.nems_anchor(connector_dim=(test_tdc_interaction_l, 5),
                               pos_electrode_dim=None, neg_electrode_dim=None)
@@ -84,12 +85,13 @@ eu_array = chip.eutectic_array()
 autoroute_simple_1 = chip.autoroute_turn(7, level=1, turn_radius=8, connector_x=0, connector_y=12)
 autoroute_simple_2 = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=8, connector_y=4)
 
+
 # Test structures
 
 # Shortcut to keep same params as default while only changing tapers
 
 
-def pull_apart_taper_dict(taper_change, taper_length):
+def pull_apart_taper_dict(taper_change: float, taper_length: float):
     return dict(
         taper_ls=(2, 0.15, 0.2, 0.15, 2, taper_length),
         gap_taper=(
@@ -105,25 +107,27 @@ def pull_apart_taper_dict(taper_change, taper_length):
     )
 
 
-def pull_in_taper_dict(taper_change=None, taper_length=None):
-    # TODO: modify this to taper the pull-in fin adiabatically
+def pull_in_dict(phaseshift_l: float = 100, taper_change: float = None, taper_length: float = None):
+    # TODO: modify this to taper the pull-in fin adiabatically using rib_brim_taper
     if taper_change is None or taper_length is None:
         return dict(
-            taper_ls=(0,), gap_taper=None,
-            wg_taper=None, boundary_taper=None, rib_brim_taper=None
+            phaseshift_l=phaseshift_l, clearout_box_dim=(phaseshift_l - 10, 3),
+            taper_ls=(0,), gap_taper=None, wg_taper=None, boundary_taper=None, rib_brim_taper=None
         )
     else:
         return dict(
+            phaseshift_l=phaseshift_l, clearout_box_dim=(phaseshift_l - 10, 3),
             taper_ls=(taper_length,), gap_taper=(get_cubic_taper(taper_change),),
             wg_taper=(get_cubic_taper(taper_change),), boundary_taper=((0,),), rib_brim_taper=None
         )
 
 
-def taper_dict_tdc(taper_change, taper_length):
+def taper_dict_tdc(taper_change: float, taper_length: float):
     return dict(
         dc_taper_ls=(taper_length,), dc_taper=(get_cubic_taper(taper_change),),
         beam_taper=(get_cubic_taper(taper_change),)
     )
+
 
 '''
 Pull-apart phase shifter or PSV3
@@ -159,29 +163,29 @@ Pull-in phase shifter or PSV1
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length
 pull_in_gap = [
-    chip.singlemode_ps(chip.nems_ps(anchor=pull_in_anchor, gap_w=gap_w, **pull_in_taper_dict(),
+    chip.singlemode_ps(chip.nems_ps(anchor=pull_in_anchor, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
                                     name=f'ps_gap_{gap_w}'),
                        interport_w=test_interport_w,
-                       phaseshift_l=mesh_phaseshift_l, name=f'pull_in_gap_{gap_w}')
+                       phaseshift_l=pull_in_phaseshift_l, name=f'pull_in_gap_{gap_w}')
     for gap_w in (0.1, 0.15, 0.2)]
 
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
-# and phase shift length
+# and phase shift length. To increase pull-in, phase shift length is made shorter.
 pull_in_taper = [
-    chip.singlemode_ps(chip.nems_ps(anchor=pull_in_anchor, **pull_in_taper_dict(taper_change, taper_length),
+    chip.singlemode_ps(chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict(pull_in_phaseshift_l,
+                                                                          taper_change, taper_length),
                                     name=f'ps_taper_{taper_change}_{taper_length}'),
                        interport_w=test_interport_w,
-                       phaseshift_l=mesh_phaseshift_l, name=f'pull_in_taper_{taper_change}_{taper_length}')
-    for taper_change in (-0.1, -0.15) for taper_length in (20, 40)]
+                       phaseshift_l=pull_in_phaseshift_l, name=f'pull_in_taper_{taper_change}_{taper_length}')
+    for taper_change in (-0.1, -0.15) for taper_length in (10, 20)]
 
 # Motivation: attempt pull-in phase shifter idea with modifying fin width / phase shift per unit length
 pull_in_fin = [
-    chip.singlemode_ps(chip.nems_ps(anchor=pull_in_anchor, nanofin_w=nanofin_w, **pull_in_taper_dict(),
+    chip.singlemode_ps(chip.nems_ps(anchor=pull_in_anchor, nanofin_w=nanofin_w, **pull_in_dict(pull_in_phaseshift_l),
                                     name=f'ps_fin_{nanofin_w}'),
                        interport_w=test_interport_w,
-                       phaseshift_l=mesh_phaseshift_l, name=f'pull_in_fin_{nanofin_w}')
+                       phaseshift_l=pull_in_phaseshift_l, name=f'pull_in_fin_{nanofin_w}')
     for nanofin_w in (0.15, 0.2)]
-
 
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length
@@ -209,8 +213,8 @@ pull_in_taper_tdc = [
 # Motivation: attempt pull-in phase shifter idea with modifying fin width / phase shift per unit length
 pull_in_fin_tdc = [chip.nems_tdc(anchor=tdc_anchor, nanofin_w=nanofin_w) for nanofin_w in (0.1, 0.2)]
 
-
 testing_tap_line = chip.testing_tap_line(17)
+testing_tap_line_tdc = chip.testing_tap_line(17, inter_wg_dist=200)
 
 ps_columns = [
     pull_apart_gap + pull_apart_taper + pull_apart_fin,
@@ -224,7 +228,6 @@ tdc_columns = [
 
 gridsearches = []
 
-
 for col, tdc_column in enumerate(ps_columns):
     with nd.Cell(f'gridsearch_{col}') as gridsearch:
         line = testing_tap_line.put()
@@ -236,10 +239,9 @@ for col, tdc_column in enumerate(ps_columns):
                           ).put(line.pin[f'a{2 * i + 1}'])
     gridsearches.append(gridsearch)
 
-
 for col, tdc_column in enumerate(tdc_columns):
     with nd.Cell(f'gridsearch_{col + len(ps_columns)}') as gridsearch:
-        line = testing_tap_line.put()
+        line = testing_tap_line_tdc.put()
         for i, tdc in enumerate(tdc_column):
             # all structures for a tap line should be specified here
             tdc.put(line.pin[f'a{2 * i + 1}'])
@@ -308,8 +310,10 @@ with nd.Cell('aim') as aim:
                                               width=8).put()
             pin_num += 1
         pin_num += 1
-    for n, gridsearch in enumerate(gridsearches):
-        gridsearch.put(8300 + n * 400, 150)
+    gridsearches[0].put(8300, 150)
+    gridsearches[1].put(8700, 150)
+    gridsearches[2].put(9000, 150)
+    gridsearches[3].put(9300, 150)
     chip.dice_box((100, 2000)).put(7600, -127)
     bp_array_testing.put(7800, 200)
     bp_array_testing.put(12000 + input_interposer.bbox[0] - 200, 200)
@@ -317,6 +321,5 @@ with nd.Cell('aim') as aim:
     # Boundary indicators (REMOVE IN FINAL LAYOUT)
     chip.dice_box((12000, 100)).put(input_interposer.bbox[0] - 50, -227)
     chip.dice_box((12000, 100)).put(input_interposer.bbox[0] - 50, 2100 - 227)
-
 
 nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim])
