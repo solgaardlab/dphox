@@ -53,7 +53,7 @@ class AIMNazca:
                  bend_dim: Dim2 = (10, 24.66), pad_dim: Dim3 = (5, 5, 30), anchor: nd.Cell = None,
                  middle_fin_dim=None, use_radius: bool = True,
                  clearout_box_dim: Dim2 = (100, 2.5), dc_taper_ls: Tuple[float, ...] = None,
-                 dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5,
+                 dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5, dope_grow: float = 0.25,
                  diff_ps: Optional[nd.Cell] = None, name: str = 'nems_tdc') -> nd.Cell:
         # TODO(Nate): Use pad_dim which is a dead param to define ground connector
         c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
@@ -65,7 +65,8 @@ class AIMNazca:
         clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='fnam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
-        device = Multilayer([(c, 'seam')] + pad_to_layer + clearout + ridge_etch)
+        dopes =(list(zip([p.grow(dope_grow) for p in c.dope_patterns], ('pppam',))))
+        device = Multilayer([(c, 'seam')] + pad_to_layer + clearout + ridge_etch + dopes)
         if anchor is None:
             cell = device.nazca_cell(name)
         else:
@@ -148,7 +149,7 @@ class AIMNazca:
         dopes=[]
         dopes.extend(list(zip([p.grow(dope_grow) for p in c.pads], ('pppam',))))
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
-        device = Multilayer([(c, 'seam')] + pad_to_layer + ridge_etch)
+        device = Multilayer([(c, 'seam')] + pad_to_layer + ridge_etch + dopes)
         return device.nazca_cell(name)
 
     def autoroute_turn(self, n: Union[int, List, np.ndarray], level: int = 1,
