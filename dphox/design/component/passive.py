@@ -1,5 +1,5 @@
 from ...typing import *
-from .pattern import Pattern, Path, get_cubic_taper
+from .pattern import Pattern, Path, get_cubic_taper, GroupedPattern
 
 from copy import deepcopy as copy
 from shapely.ops import polygonize
@@ -21,7 +21,7 @@ class Box(Pattern):
 class DC(Pattern):
     def __init__(self, bend_dim: Dim2, waveguide_w: float, gap_w: float, interaction_l: float,
                  coupler_boundary_taper_ls: Tuple[float, ...] = (0,),
-                 coupler_boundary_taper: Optional[Tuple[Tuple[float, ...]]] = None, end_l: float = 0,
+                 coupler_boundary_taper: Optional[Tuple[Tuple[float, ...]]] = None,
                  end_bend_dim: Optional[Dim3] = None, use_radius: bool = False, shift: Dim2 = (0, 0)):
         """Directional coupler
 
@@ -37,7 +37,6 @@ class DC(Pattern):
             use_radius: use radius to define bends
             shift:
         """
-        self.end_l = end_l
         self.bend_dim = bend_dim
         self.waveguide_w = waveguide_w
         self.interaction_l = interaction_l
@@ -51,9 +50,9 @@ class DC(Pattern):
         if end_bend_dim:
             interport_distance += 2 * end_bend_dim[1]
 
-        lower_path = Path(waveguide_w).dc(bend_dim, interaction_l, end_l, end_bend_dim=end_bend_dim,
+        lower_path = Path(waveguide_w).dc(bend_dim, interaction_l, end_l=0, end_bend_dim=end_bend_dim,
                                           use_radius=use_radius)
-        upper_path = Path(waveguide_w).dc(bend_dim, interaction_l, end_l, end_bend_dim=end_bend_dim,
+        upper_path = Path(waveguide_w).dc(bend_dim, interaction_l, end_l=0, end_bend_dim=end_bend_dim,
                                           inverted=True, use_radius=use_radius)
         upper_path.translate(dx=0, dy=interport_distance)
 
@@ -62,11 +61,14 @@ class DC(Pattern):
             outer_boundary = Waveguide(waveguide_w=2 * waveguide_w + gap_w, length=interaction_l,
                                        taper_params=coupler_boundary_taper,
                                        taper_ls=coupler_boundary_taper_ls).center_align(current_dc)
-            dc_interaction = Box((interaction_l, 2 * waveguide_w + gap_w)).center_align(current_dc.center)
-            paths_intersection = outer_boundary.pattern.intersection(current_dc.pattern)
-            paths_diff = outer_boundary.pattern.union(current_dc.pattern).difference(dc_interaction.pattern)
-            paths_full = paths_diff.union(paths_intersection)
-            paths = list(polygonize(paths_full))
+            center_wg = Box((interaction_l, waveguide_w)).center_align(current_dc.center)
+            dc_interaction = GroupedPattern(copy(center_wg).translate(dy=-gap_w / 2 - waveguide_w / 2),
+                                            copy(center_wg).translate(dy=gap_w / 2 + waveguide_w / 2))
+            cuts = dc_interaction.pattern - outer_boundary.pattern
+            # hacky way to make sure polygons are completely separated
+            dc_without_interaction = current_dc.pattern - Box((dc_interaction.size[0],
+                                                               dc_interaction.size[1] * 2)).center_align(current_dc).pattern
+            paths = [dc_without_interaction, dc_interaction.pattern - cuts]
         else:
             paths = lower_path, upper_path
         super(DC, self).__init__(*paths, shift=shift)
