@@ -50,7 +50,7 @@ class AIMNazca:
 
     def nems_tdc(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
                  interaction_l: float = 100, dc_gap_w: float = 0.2, beam_gap_w: float = 0.15,
-                 bend_dim: Dim2 = (10, 24.66), pad_dim: Dim3 = (5,5,30), anchor: nd.Cell = None,
+                 bend_dim: Dim2 = (10, 24.66), pad_dim: Dim3 = (5, 5, 30), anchor: nd.Cell = None,
                  middle_fin_dim=None, use_radius: bool = True,
                  clearout_box_dim: Dim2 = (100, 2.5), dc_taper_ls: Tuple[float, ...] = None,
                  dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5,
@@ -64,7 +64,7 @@ class AIMNazca:
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am'), level=2) for pad in c.pads], [])
         clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='fnam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
-        ridge_etch =[(brim, 'ream') for brim in c.rib_brim] 
+        ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
         device = Multilayer([(c, 'seam')] + pad_to_layer + clearout + ridge_etch)
         if anchor is None:
             cell = device.nazca_cell(name)
@@ -305,9 +305,9 @@ class AIMNazca:
         return bond_pad_array
 
     def custom_dc(self, waveguide_w: float = 0.48, bend_dim: Dim2 = (20, 50.78 / 2), gap_w: float = 0.3,
-                  interaction_l: float = 40, end_l: float = 0, end_bend_dim: Optional[Dim3] = None,
+                  interaction_l: float = 40, end_bend_dim: Optional[Dim3] = None,
                   use_radius: bool = True) -> Tuple[nd.Cell, nd.Cell]:
-        dc = DC(bend_dim, waveguide_w, gap_w, interaction_l, (0,), None, end_l, end_bend_dim, use_radius)
+        dc = DC(bend_dim, waveguide_w, gap_w, interaction_l, (0,), None, end_bend_dim, use_radius)
         return dc.nazca_cell('dc', layer='seam'), dc.upper_path.nazca_cell('bendy_dc_dummy', layer='seam')
 
     def pdk_dc(self, radius: float, interport_w: float) -> nd.Cell:

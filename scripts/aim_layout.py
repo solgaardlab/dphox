@@ -1,6 +1,7 @@
 import nazca as nd
 import numpy as np
 from dphox.design.aim import AIMNazca
+from dphox.design.component import get_cubic_taper
 from datetime import date
 
 chip = AIMNazca(
@@ -8,10 +9,6 @@ chip = AIMNazca(
     waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
 )
-
-
-def get_cubic_taper(change_w):
-    return 0, 0, 3 * change_w, -2 * change_w
 
 
 def get_bend_dim_from_interport_w(interport_w, gap_w, waveguide_w=0.48):
@@ -54,7 +51,7 @@ pull_in_anchor = chip.nems_anchor(connector_dim=(90, 5),
                                   pos_electrode_dim=None, neg_electrode_dim=None)
 tdc_anchor = chip.nems_anchor(connector_dim=(test_tdc_interaction_l, 5),
                               pos_electrode_dim=None, neg_electrode_dim=None)
-tdc = chip.nems_tdc(anchor=pull_in_anchor)
+tdc = chip.nems_tdc(anchor=tdc_anchor)
 ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap, sep))
 ps_no_anchor = chip.nems_ps()
 
@@ -64,6 +61,12 @@ thermal_ps = chip.thermal_ps((tap, sep))
 dc_dummy = chip.waveguide(mesh_dc.pin['b0'].x - mesh_dc.pin['a0'].x)
 mzi_node_nems = chip.mzi_node(chip.double_ps(ps, mesh_interport_w, name='nems_double_ps'), mesh_dc)
 mzi_node_thermal = chip.mzi_node(chip.double_ps(thermal_ps, mesh_interport_w, name='thermal_double_ps'), mesh_dc)
+mzi_node_nems_detector = chip.mzi_node(chip.double_ps(ps, mesh_interport_w,
+                                                      name='nems_double_ps'), mesh_dc,
+                                       detector=chip.pdk_cells['cl_band_photodetector_digital'])
+mzi_node_thermal_detector = chip.mzi_node(chip.double_ps(thermal_ps, mesh_interport_w,
+                                                         name='thermal_double_ps'), mesh_dc,
+                                          detector=chip.pdk_cells['cl_band_photodetector_digital'])
 mzi_dummy_nems = chip.mzi_dummy(ps, dc_dummy)
 mzi_dummy_thermal = chip.mzi_dummy(thermal_ps, dc_dummy)
 nems_mesh = chip.triangular_mesh(5, mzi_node_nems, mzi_dummy_nems, ps, mesh_interport_w)
@@ -112,8 +115,15 @@ def pull_in_taper_dict(taper_change=None, taper_length=None):
     else:
         return dict(
             taper_ls=(taper_length,), gap_taper=(get_cubic_taper(taper_change),),
-            wg_taper=(get_cubic_taper(taper_change),), boundary_taper=(0,), rib_brim_taper=None
+            wg_taper=(get_cubic_taper(taper_change),), boundary_taper=((0,),), rib_brim_taper=None
         )
+
+
+def taper_dict_tdc(taper_change, taper_length):
+    return dict(
+        dc_taper_ls=(taper_length,), dc_taper=(get_cubic_taper(taper_change),),
+        beam_taper=(get_cubic_taper(taper_change),)
+    )
 
 '''
 Pull-apart phase shifter or PSV3
@@ -134,7 +144,7 @@ pull_apart_taper = [
                        phaseshift_l=mesh_phaseshift_l, name=f'pull_apart_taper_{taper_change}_{taper_length}')
     for taper_change in (-0.1, -0.15) for taper_length in (20, 30, 40)]
 
-# Motivation: modify fin width to change stiffness
+# Motivation: modify fin width to change stiffness / phase shift per unit length
 pull_apart_fin = [
     chip.singlemode_ps(chip.nems_ps(anchor=pull_apart_anchor,
                                     nanofin_w=nanofin_w, name=f'ps_fin_{nanofin_w}'),
@@ -164,7 +174,7 @@ pull_in_taper = [
                        phaseshift_l=mesh_phaseshift_l, name=f'pull_in_taper_{taper_change}_{taper_length}')
     for taper_change in (-0.1, -0.15) for taper_length in (20, 40)]
 
-# Motivation: attempt pull-in phase shifter idea with modifying fin width
+# Motivation: attempt pull-in phase shifter idea with modifying fin width / phase shift per unit length
 pull_in_fin = [
     chip.singlemode_ps(chip.nems_ps(anchor=pull_in_anchor, nanofin_w=nanofin_w, **pull_in_taper_dict(),
                                     name=f'ps_fin_{nanofin_w}'),
@@ -172,29 +182,67 @@ pull_in_fin = [
                        phaseshift_l=mesh_phaseshift_l, name=f'pull_in_fin_{nanofin_w}')
     for nanofin_w in (0.15, 0.2)]
 
+
+# Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
+# and phase shift length
+pull_apart_gap_tdc = [chip.nems_tdc(anchor=pull_apart_anchor, dc_gap_w=gap_w) for gap_w in (0.1, 0.15, 0.2)]
+
+# Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
+# and phase shift length
+pull_apart_taper_tdc = [
+    chip.nems_tdc(anchor=pull_apart_anchor, **taper_dict_tdc(taper_change, taper_length))
+    for taper_change in (-0.2, -0.3) for taper_length in (20, 40)]
+
+# Motivation: attempt pull-in phase shifter idea with modifying fin width / phase shift per unit length
+pull_apart_fin_tdc = [chip.nems_tdc(anchor=pull_apart_anchor, nanofin_w=nanofin_w) for nanofin_w in (0.15, 0.2)]
+
+# Motivation: attempt pull-in TDC with varying gap to adjust pull-in voltage (for better or worse...)
+# and phase shift length
+pull_in_gap_tdc = [chip.nems_tdc(anchor=tdc_anchor, dc_gap_w=gap_w) for gap_w in (0.1, 0.15, 0.2)]
+
+# Motivation: attempt pull-in TDC with tapering to reduce the beat length of the TDC
+pull_in_taper_tdc = [
+    chip.nems_tdc(anchor=tdc_anchor, **taper_dict_tdc(taper_change, taper_length))
+    for taper_change in (-0.2, -0.3) for taper_length in (20, 40)
+]
+
+# Motivation: attempt pull-in phase shifter idea with modifying fin width / phase shift per unit length
+pull_in_fin_tdc = [chip.nems_tdc(anchor=tdc_anchor, nanofin_w=nanofin_w) for nanofin_w in (0.1, 0.2)]
+
+
 testing_tap_line = chip.testing_tap_line(17)
 
 ps_columns = [
     pull_apart_gap + pull_apart_taper + pull_apart_fin,
-    pull_in_gap + pull_in_taper + pull_in_fin,
-    pull_apart_gap + pull_apart_taper + pull_apart_fin,  # the rest are dummies
-    pull_in_gap + pull_in_taper + pull_in_fin,
-    pull_apart_gap + pull_apart_taper + pull_apart_fin,
-    pull_in_gap + pull_in_taper + pull_in_fin,
-    pull_apart_gap + pull_apart_taper + pull_apart_fin,
+    pull_in_gap + pull_in_taper + pull_in_fin
+]
+
+tdc_columns = [
+    pull_apart_gap_tdc + pull_apart_taper_tdc + pull_apart_fin_tdc,
+    pull_in_gap_tdc + pull_in_taper_tdc + pull_in_fin_tdc
 ]
 
 gridsearches = []
 
-for col, ps_column in enumerate(ps_columns):
+
+for col, tdc_column in enumerate(ps_columns):
     with nd.Cell(f'gridsearch_{col}') as gridsearch:
         line = testing_tap_line.put()
-        for i, ps in enumerate(ps_column):
+        for i, ps in enumerate(tdc_column):
             # all structures for a tap line should be specified here
             chip.mzi_node(ps, dc, include_input_ps=False,
                           detector=chip.pdk_cells['cl_band_photodetector_digital'],
                           name=f'test_mzi_{ps.name}'
                           ).put(line.pin[f'a{2 * i + 1}'])
+    gridsearches.append(gridsearch)
+
+
+for col, tdc_column in enumerate(tdc_columns):
+    with nd.Cell(f'gridsearch_{col + len(ps_columns)}') as gridsearch:
+        line = testing_tap_line.put()
+        for i, tdc in enumerate(tdc_column):
+            # all structures for a tap line should be specified here
+            tdc.put(line.pin[f'a{2 * i + 1}'])
     gridsearches.append(gridsearch)
 
 # Chip construction
@@ -205,8 +253,9 @@ with nd.Cell('aim') as aim:
     thermal = thermal_mesh.put(0, 1000)
     input_interposer = interposer.put(thermal.pin['a4'])
     output_interposer = interposer.put(thermal.pin['b4'], flip=True)
-    mzi_node_thermal.put(input_interposer.pin['a6'])
-    mzi_node_nems.put(input_interposer.pin['a7'], flip=True)
+    mzi_node_thermal_detector.put(input_interposer.pin['a6'])
+    mesh_dc.put(output_interposer.pin['a6'])
+    mzi_node_nems_detector.put(input_interposer.pin['a7'], flip=True)
     num_ports = 344
 
     # routing code
