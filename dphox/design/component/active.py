@@ -202,7 +202,7 @@ class LateralNemsTDC(GroupedPattern):
 
             rib_brim = [Pattern(poly) for brim in rib_brim for poly in (brim - dc.pattern)]
             gnd_connections = [gnd_contact for gnd_contact in gnd_connections]
-            patterns += gnd_connections + rib_brim
+            patterns += gnd_connections + rib_brim + pads
 
         if middle_fin_pad_dim is not None:
             pad = Box(middle_fin_pad_dim).center_align(dc)
@@ -323,6 +323,42 @@ class NemsAnchor(GroupedPattern):
     def contact_ports(self) -> np.ndarray:
         return np.asarray([pad.center for pad in self.pads])
 
+class GndWaveguide(Pattern):
+    def __init__(self, waveguide_w: float, length: float, gnd_contact_dim: Optional[Dim2],
+                 rib_brim_w: float, gnd_connector_dim: Optional[Dim2], shift: Optional[Dim2] = (0,0) ):
+        self.waveguide_w = waveguide_w
+        self.rib_brim_w = rib_brim_w
+        self.length = length
+        self.gnd_contact_dim =gnd_contact_dim
+        self.gnd_connector_dim = gnd_connector_dim
+
+        wg, rib_brim, gnd_connection, pad = [], [], [], []
+
+        brim_l, brim_taper = get_linear_adiabatic(min_width=waveguide_w, max_width=rib_brim_w, aggressive=True)
+        brim_taper = get_cubic_taper(brim_taper[1])
+
+        wg = Waveguide(waveguide_w = waveguide_w, length = length)
+        rib_brim = Waveguide(waveguide_w = waveguide_w, length = 2*brim_l, taper_ls= (brim_l,),
+                                taper_params= (brim_taper,)).center_align(wg)
+        # rib_brim = Waveguide(waveguide_w, taper_ls=(brim_l,), taper_params=(brim_taper,),
+        #                                       length=2 * brim_l)
+        gnd_connection = Box(gnd_connector_dim).center_align(wg).vert_align(wg, bottom = True, opposite = True)
+        pad = Box(gnd_contact_dim).center_align(gnd_connection).vert_align( gnd_connection, bottom = True, opposite = True)
+        rib_brim = [Pattern(poly) for poly in (rib_brim.pattern - wg.pattern)]
+        patterns = rib_brim + [wg, gnd_connection, pad] 
+        patterns = [ patt.pattern for patt in patterns]
+
+        super(GndWaveguide, self).__init__(*patterns, shift=shift) # call_union=False) #unsure if this is necessary yet
+        self.wg, self.rib_brim, self.pads = [wg], rib_brim, [pad] 
+    
+    @property
+    def input_ports(self) -> np.ndarray:
+        return np.asarray((0, 0)) + self.shift
+
+    @property
+    def output_ports(self) -> np.ndarray:
+        return self.input_ports + np.asarray((self.length, 0))
+        
 
 class MemsMonitorCoupler(Pattern):
     def __init__(self, waveguide_w: float, interaction_l: float, gap_w: float,

@@ -10,6 +10,10 @@ chip = AIMNazca(
     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
 )
 
+##### Nate: New device/active class #####
+gnd_wg = chip.gnd_wg()
+########################################
+
 
 def get_bend_dim_from_interport_w(interport_w, gap_w, waveguide_w=0.48):
     return interport_w / 2 - gap_w / 2 - waveguide_w / 2
