@@ -55,6 +55,7 @@ tdc_anchor = chip.nems_anchor(connector_dim=(test_tdc_interaction_l, 5),
 tdc = chip.nems_tdc(anchor=tdc_anchor)
 ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap, sep))
 ps_no_anchor = chip.nems_ps()
+alignment_mark = chip.alignment_mark(100, 48)
 
 # Mesh generation
 
@@ -260,6 +261,8 @@ with nd.Cell('aim') as aim:
     mesh_dc.put(output_interposer.pin['a6'])
     mzi_node_nems_detector.put(input_interposer.pin['a7'], flip=True)
     num_ports = 344
+    alignment_mark.put(-500,1700)
+    alignment_mark.put(-500+8520, 1700)
 
     # routing code
     bp_array_nems = bp_array.put(-180, -40)
