@@ -10,6 +10,10 @@ chip = AIMNazca(
     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
 )
 
+##### Nate: New device/active class #####
+gnd_wg = chip.gnd_wg()
+########################################
+
 
 def get_bend_dim_from_interport_w(interport_w, gap_w, waveguide_w=0.48):
     return interport_w / 2 - gap_w / 2 - waveguide_w / 2
@@ -28,6 +32,7 @@ def is_adiabatic(taper_params, init_width: float = 0.48, wavelength: float = 1.5
 dc_radius = 15
 pdk_dc_radius = 25
 sep = 30
+gnd_length = 15
 
 # testing params
 test_interport_w = 50
@@ -164,29 +169,30 @@ Pull-in phase shifter or PSV1
 
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length
+
 pull_in_gap = [
-    chip.singlemode_ps(chip.nems_ps(anchor=pull_in_anchor, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
-                                    name=f'ps_gap_{gap_w}'),
+    chip.singlemode_ps_ext_gnd(chip.nems_ps(anchor=pull_in_anchor, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
+                                    name=f'ps_gap_{gap_w}'), gnd_length, 
                        interport_w=test_interport_w,
-                       phaseshift_l=pull_in_phaseshift_l, name=f'pull_in_gap_{gap_w}')
+                       phaseshift_l=pull_in_phaseshift_l + 2*gnd_length, name=f'pull_in_gap_{gap_w}')
     for gap_w in (0.1, 0.15, 0.2)]
 
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length. To increase pull-in, phase shift length is made shorter.
 pull_in_taper = [
-    chip.singlemode_ps(chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict(pull_in_phaseshift_l,
+    chip.singlemode_ps_ext_gnd(chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict(pull_in_phaseshift_l,
                                                                           taper_change, taper_length),
-                                    name=f'ps_taper_{taper_change}_{taper_length}'),
+                                    name=f'ps_taper_{taper_change}_{taper_length}'), gnd_length,
                        interport_w=test_interport_w,
-                       phaseshift_l=pull_in_phaseshift_l, name=f'pull_in_taper_{taper_change}_{taper_length}')
+                       phaseshift_l=pull_in_phaseshift_l + 2*gnd_length , name=f'pull_in_taper_{taper_change}_{taper_length}')
     for taper_change in (-0.1, -0.15) for taper_length in (10, 20)]
 
 # Motivation: attempt pull-in phase shifter idea with modifying fin width / phase shift per unit length
 pull_in_fin = [
-    chip.singlemode_ps(chip.nems_ps(anchor=pull_in_anchor, nanofin_w=nanofin_w, **pull_in_dict(pull_in_phaseshift_l),
-                                    name=f'ps_fin_{nanofin_w}'),
+    chip.singlemode_ps_ext_gnd(chip.nems_ps(anchor=pull_in_anchor, nanofin_w=nanofin_w, **pull_in_dict(pull_in_phaseshift_l),
+                                    name=f'ps_fin_{nanofin_w}'), gnd_length,
                        interport_w=test_interport_w,
-                       phaseshift_l=pull_in_phaseshift_l, name=f'pull_in_fin_{nanofin_w}')
+                       phaseshift_l=pull_in_phaseshift_l + 2*gnd_length, name=f'pull_in_fin_{nanofin_w}')
     for nanofin_w in (0.15, 0.2)]
 
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
