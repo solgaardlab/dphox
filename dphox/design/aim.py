@@ -158,7 +158,7 @@ class AIMNazca:
         return autoroute_turn
 
     def nems_anchor(self, fin_spring_dim: Dim2 = (100, 0.15), connector_dim: Dim2 = (50, 2),
-                    top_spring_dim: Dim2 = (100, 0.15), straight_connector: Optional[Dim2] = (0.25, 1),
+                    top_spring_dim: Dim2 = None, straight_connector: Optional[Dim2] = (0.25, 1),
                     loop_connector: Optional[Dim3] = (50, 0.5, 0.15), pos_electrode_dim: Optional[Dim3] = (90, 4, 2),
                     neg_electrode_dim: Optional[Dim2] = (3, 5), dope_grow: float = 0.25, name: str = 'nems_anchor'):
         c = NemsAnchor(fin_spring_dim=fin_spring_dim, connector_dim=connector_dim,
@@ -260,7 +260,8 @@ class AIMNazca:
         return bond_pad
 
     def bond_pad_array(self, n_pads: Shape2 = (70, 3), pitch: Union[float, Dim2] = 100,
-                       pad_dim: Dim2 = (40, 40), labels: Optional[np.ndarray] = None):
+                       pad_dim: Dim2 = (40, 40), labels: Optional[np.ndarray] = None,
+                       use_labels: bool = True):
         pad_w, pad_l = pad_dim
         pitch = pitch if isinstance(pitch, tuple) else (pitch, pitch)
         with nd.Cell(name=f'bond_pad_array_{n_pads}_{pitch}') as bond_pad_array:
@@ -268,12 +269,13 @@ class AIMNazca:
             for i in range(n_pads[0]):
                 for j in range(n_pads[1]):
                     pad.put(i * pitch[0], j * pitch[1], 270)
-                    x = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='cc',
-                                layer='seam', height=pad_dim[0] / 2)
-                    y = nd.text(text=f'{j + 1 if labels is None else labels[i]}', align='cc',
-                                layer='seam', height=pad_dim[0] / 2)
-                    y.put(-pitch[0] / 2 + i * pitch[0], -pad_l / 2 + j * pitch[1])
-                    x.put(i * pitch[0], - 1.73 * pad_l + j * pitch[1])
+                    if use_labels:
+                        x = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='cc',
+                                    layer='seam', height=pad_dim[0] / 2)
+                        y = nd.text(text=f'{j + 1 if labels is None else labels[i]}', align='cc',
+                                    layer='seam', height=pad_dim[0] / 2)
+                        y.put(-pitch[0] / 2 + i * pitch[0], -pad_l / 2 + j * pitch[1])
+                        x.put(i * pitch[0], - 1.73 * pad_l + j * pitch[1])
         return bond_pad_array
 
     def eutectic_array(self, n_pads: Shape2 = (344, 12), pitch: float = 20, width: float = 12, strip: bool = True):

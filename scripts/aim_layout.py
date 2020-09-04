@@ -48,7 +48,7 @@ dc = chip.custom_dc(bend_dim=(dc_radius, test_bend_dim))[0]
 mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
 tap = chip.bidirectional_tap(10, mesh_bend=True)
 pull_apart_anchor = chip.nems_anchor()
-pull_in_anchor = chip.nems_anchor(connector_dim=(40, 5),
+pull_in_anchor = chip.nems_anchor(connector_dim=(40, 5), fin_spring_dim=(50, 0.15),
                                   pos_electrode_dim=None, neg_electrode_dim=None)
 tdc_anchor = chip.nems_anchor(connector_dim=(test_tdc_interaction_l, 5),
                               pos_electrode_dim=None, neg_electrode_dim=None)
@@ -79,6 +79,7 @@ interposer = chip.interposer(
     self_coupling_extension_dim=(30, 200),
     with_gratings=True, horiz_dist=200, num_trombones=2
 )
+pp_array = chip.bond_pad_array((1, 3), pitch=550, pad_dim=(60, 500), use_labels=False)
 bp_array = chip.bond_pad_array()
 bp_array_testing = chip.bond_pad_array((2, 17))
 eu_array = chip.eutectic_array()
@@ -317,6 +318,14 @@ with nd.Cell('aim') as aim:
     chip.dice_box((100, 2000)).put(7600, -127)
     bp_array_testing.put(7800, 200)
     bp_array_testing.put(12000 + input_interposer.bbox[0] - 200, 200)
+    pp_array.put(8250, 700)
+
+    for i in range(16):
+        for j in range(5):
+            if j == 2:
+                chip.m2_ic.strt(3240).put(7700, 215 + i * 100 + j * 6)
+            else:
+                chip.m2_ic.strt(3240).put(7700, 215 + i * 100 + j * 6)
 
     # Boundary indicators (REMOVE IN FINAL LAYOUT)
     chip.dice_box((12000, 100)).put(input_interposer.bbox[0] - 50, -227)

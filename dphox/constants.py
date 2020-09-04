@@ -121,15 +121,12 @@ AIM_STACK = {
         ],
         'pad_xs': [
             {
-                'layer': 'mlam'  # paam
+                'layer': 'mlam'  # aluminum pads
             },
             {
-                'layer': 'vaam'  # via to aluminum layer
-            },
-            {
-                'layer': 'm2am',  # metal contact
-                'growx': 10,
-                'growy': 10
+                'layer': 'vaam',  # via to aluminum layer
+                'growx': -2,
+                'growy': -2
             }
         ],
         'waveguide_xs': [
