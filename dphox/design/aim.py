@@ -139,11 +139,10 @@ class AIMNazca:
         return cell
 
     def gnd_wg(self, waveguide_w: float =0.48, length: float = 20 , gnd_contact_dim: Optional[Dim2] = (5,5),
-                 rib_brim_w: float = 1.5, gnd_connector_dim: Optional[Dim2] = (1,3), shift: Optional[Dim2] = (0,0),
+                 rib_brim_w: float = 1.5, gnd_connector_dim: Optional[Dim2] = (1,4), shift: Optional[Dim2] = (0,0), flip: bool = False,
                  name = 'gnd_wg') -> nd.Cell:
-
         c = GndWaveguide(waveguide_w = waveguide_w, length = length, gnd_contact_dim = gnd_contact_dim,
-                 rib_brim_w = rib_brim_w, gnd_connector_dim = gnd_connector_dim, shift = shift )
+                 rib_brim_w = rib_brim_w, gnd_connector_dim = gnd_connector_dim, shift = shift, flip = flip )
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v2am', 'm2am'), level=2) for pad in c.pads], [])
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
         device = Multilayer([(c, 'seam')] + pad_to_layer + ridge_etch)
@@ -212,6 +211,23 @@ class AIMNazca:
             pu = self.waveguide_ic.strt(phaseshift_l).put(0, interport_w) if top else ps.put(0, interport_w)
             nd.Pin('a1').put(pu.pin['a0'])
             nd.Pin('b1').put(pu.pin['b0'])
+        return cell
+
+    def singlemode_ps_ext_gnd(self, ps: nd.Cell, gnd_wg_l: float, interport_w: float, phaseshift_l: float,
+                      top: bool = True, name: str = 'nems_singlemode_ps_ext_gnd'):
+        # TODO(Nate): Figure out if gnds should be on both arms base on testing
+        with nd.Cell(name) as cell:
+            gnd_ll = self.gnd_wg(length=gnd_wg_l, flip = False).put()
+            pl = ps.put() if top else self.waveguide_ic.strt(phaseshift_l - 2* gnd_wg_l).put()
+            gnd_lr = self.gnd_wg(length=gnd_wg_l, flip = False).put()
+            nd.Pin('a0').put(gnd_ll.pin['a0'])
+            nd.Pin('b0').put(gnd_lr.pin['b0'])
+
+            gnd_ul = self.gnd_wg(length=gnd_wg_l, flip = True).put(0, interport_w)
+            pu = self.waveguide_ic.strt(phaseshift_l - 2* gnd_wg_l).put() if top else ps.put()
+            gnd_ur = self.gnd_wg(length=gnd_wg_l, flip = True).put()
+            nd.Pin('a1').put(gnd_ul.pin['a0'])
+            nd.Pin('b1').put(gnd_ur.pin['b0'])
         return cell
 
     def thermal_ps(self, tap_sep: Optional[Tuple[nd.Cell, float]] = None):

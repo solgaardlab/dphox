@@ -325,7 +325,7 @@ class NemsAnchor(GroupedPattern):
 
 class GndWaveguide(Pattern):
     def __init__(self, waveguide_w: float, length: float, gnd_contact_dim: Optional[Dim2],
-                 rib_brim_w: float, gnd_connector_dim: Optional[Dim2], shift: Optional[Dim2] = (0,0) ):
+                 rib_brim_w: float, gnd_connector_dim: Optional[Dim2], shift: Optional[Dim2] = (0,0), flip = False ):
         self.waveguide_w = waveguide_w
         self.rib_brim_w = rib_brim_w
         self.length = length
@@ -340,15 +340,14 @@ class GndWaveguide(Pattern):
         wg = Waveguide(waveguide_w = waveguide_w, length = length)
         rib_brim = Waveguide(waveguide_w = waveguide_w, length = 2*brim_l, taper_ls= (brim_l,),
                                 taper_params= (brim_taper,)).center_align(wg)
-        # rib_brim = Waveguide(waveguide_w, taper_ls=(brim_l,), taper_params=(brim_taper,),
-        #                                       length=2 * brim_l)
-        gnd_connection = Box(gnd_connector_dim).center_align(wg).vert_align(wg, bottom = True, opposite = True)
-        pad = Box(gnd_contact_dim).center_align(gnd_connection).vert_align( gnd_connection, bottom = True, opposite = True)
+        flip = flip ^ True
+        gnd_connection = Box(gnd_connector_dim).center_align(wg).vert_align(wg, bottom = flip, opposite = True )
+        pad = Box(gnd_contact_dim).center_align(gnd_connection).vert_align( gnd_connection, bottom = flip, opposite = True )
         rib_brim = [Pattern(poly) for poly in (rib_brim.pattern - wg.pattern)]
         patterns = rib_brim + [wg, gnd_connection, pad] 
         patterns = [ patt.pattern for patt in patterns]
 
-        super(GndWaveguide, self).__init__(*patterns, shift=shift) # call_union=False) #unsure if this is necessary yet
+        super(GndWaveguide, self).__init__(*patterns, shift=shift) # call_union=False) #unsure if this is necessary?
         self.wg, self.rib_brim, self.pads = [wg], rib_brim, [pad] 
     
     @property
