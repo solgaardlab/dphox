@@ -204,6 +204,8 @@ class LateralNemsTDC(GroupedPattern):
             gnd_connections = [gnd_contact for gnd_contact in gnd_connections]
             patterns += gnd_connections + rib_brim + pads
 
+            doped_elems = [GroupedPattern(*pads)]
+
         if middle_fin_pad_dim is not None:
             pad = Box(middle_fin_pad_dim).center_align(dc)
             pad_x = middle_fin_pad_dim[0] / 2 + middle_fin_dim[0] / 2
@@ -212,7 +214,7 @@ class LateralNemsTDC(GroupedPattern):
         super(LateralNemsTDC, self).__init__(*patterns, shift=shift, call_union=False)
         self.dc, self.connectors, self.pads, self.nanofins = dc, connectors, pads, nanofins
         if pad_dim is not None:
-            self.gnd_connections, self.rib_brim = gnd_connections, rib_brim
+            self.gnd_connections, self.rib_brim, self.dope_patterns = gnd_connections, rib_brim, doped_elems
 
     @property
     def input_ports(self) -> np.ndarray:
