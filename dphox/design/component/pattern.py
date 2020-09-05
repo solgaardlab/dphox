@@ -248,10 +248,13 @@ class Pattern:
             nd.put_stub()
         return cell
 
-    def metal_contact(self, metal_stack: Tuple[str, ...], level: int = 1, via_shrink: float = 1):
+    def metal_contact(self, metal_layers: Tuple[str, ...], via_sizes: Tuple[float, ...] = (0.4, 0.4)):
         patterns = []
-        for i, metal_layer in enumerate(metal_stack[:level * 2]):
-            pattern = copy(self).grow(-via_shrink) if i % 2 == 0 else copy(self)
+        for i, metal_layer in enumerate(metal_layers):
+            if i % 2 == 0:
+                pattern = Pattern(Path(via_sizes[i // 2]).segment(via_sizes[i // 2])).center_align(self)
+            else:
+                pattern = copy(self)
             patterns.append((pattern.center_align(self), metal_layer))
         return [(pattern, metal_layer) for pattern, metal_layer in patterns]
 
