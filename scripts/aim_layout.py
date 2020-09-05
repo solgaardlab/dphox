@@ -70,16 +70,16 @@ thermal_ps = chip.thermal_ps((tap, sep))
 dc_dummy = chip.waveguide(mesh_dc.pin['b0'].x - mesh_dc.pin['a0'].x)
 mzi_node_nems = chip.mzi_node(chip.double_ps(ps, mesh_interport_w, name='nems_double_ps'), mesh_dc)
 mzi_node_thermal = chip.mzi_node(chip.double_ps(thermal_ps, mesh_interport_w, name='thermal_double_ps'), mesh_dc)
-mzi_node_nems_detector = chip.mzi_node(chip.double_ps(ps, mesh_interport_w,
-                                                      name='nems_double_ps'), mesh_dc,
+mzi_node_nems_detector = chip.mzi_node(chip.double_ps(ps, mesh_interport_w, name='nems_double_ps'), mesh_dc,
                                        detector=chip.pdk_cells['cl_band_photodetector_digital'])
-mzi_node_thermal_detector = chip.mzi_node(chip.double_ps(thermal_ps, mesh_interport_w,
-                                                         name='thermal_double_ps'), mesh_dc,
-                                          detector=chip.pdk_cells['cl_band_photodetector_digital'])
+mzi_node_thermal_detector = chip.mzi_node(chip.double_ps(thermal_ps, mesh_interport_w, name='thermal_double_ps'),
+                                          mesh_dc, detector=chip.pdk_cells['cl_band_photodetector_digital'])
 mzi_dummy_nems = chip.mzi_dummy(ps, dc_dummy)
 mzi_dummy_thermal = chip.mzi_dummy(thermal_ps, dc_dummy)
 nems_mesh = chip.triangular_mesh(5, mzi_node_nems, mzi_dummy_nems, ps, mesh_interport_w)
 thermal_mesh = chip.triangular_mesh(5, mzi_node_thermal, mzi_dummy_thermal, thermal_ps, mesh_interport_w)
+
+grating_array = chip.grating_array(18, period=127)
 
 interposer = chip.interposer(
     n=14, waveguide_w=0.48, period=50,
@@ -87,8 +87,8 @@ interposer = chip.interposer(
     self_coupling_extension_dim=(30, 200),
     with_gratings=True, horiz_dist=200, num_trombones=2
 )
-pp_array = chip.bond_pad_array((1, 3), pitch=550, pad_dim=(60, 500), use_labels=False)
-bp_array = chip.bond_pad_array()
+# pp_array = chip.bond_pad_array((1, 3), pitch=600, pad_dim=(60, 520), use_labels=False, use_ml_only=True)
+bp_array = chip.bond_pad_array(stagger_x_frac=0.25)
 bp_array_testing = chip.bond_pad_array((2, 17))
 eu_array = chip.eutectic_array()
 autoroute_simple_1 = chip.autoroute_turn(7, level=1, turn_radius=8, connector_x=0, connector_y=12)
@@ -225,8 +225,8 @@ pull_in_taper_tdc = [
 # Motivation: attempt pull-in phase shifter idea with modifying fin width / phase shift per unit length
 pull_in_fin_tdc = [chip.nems_tdc(anchor=tdc_anchor, nanofin_w=nanofin_w) for nanofin_w in (0.1, 0.2)]
 
-testing_tap_line = chip.testing_tap_line(17)
-testing_tap_line_tdc = chip.testing_tap_line(17, inter_wg_dist=200)
+testing_tap_line = chip.tap_line(17)
+testing_tap_line_tdc = chip.tap_line(17, inter_wg_dist=200)
 
 ps_columns = [
     pull_apart_gap + pull_apart_taper + pull_apart_fin,
@@ -240,6 +240,20 @@ tdc_columns = [
 
 gridsearches = []
 
+
+def route_detector(p1, n2, n1, p2):
+    chip.v1_ic.strt(0.5).put(p1)
+    chip.m1_ic.bend(8, 90).put(p1)
+    chip.m1_ic.strt(27).put()
+    chip.v1_ic.strt(0.5).put(n2)
+    chip.m1_ic.bend(4, -90).put(n2)
+    chip.m1_ic.strt(19).put()
+    chip.m2_ic.bend(4, 90).put(n1)
+    chip.m2_ic.strt(15).put()
+    chip.m2_ic.bend(8, -90).put(p2)
+    chip.m2_ic.strt(33).put()
+
+
 for col, ps_columns in enumerate(ps_columns):
     with nd.Cell(f'gridsearch_{col}') as gridsearch:
         line = testing_tap_line.put()
@@ -250,16 +264,9 @@ for col, ps_columns in enumerate(ps_columns):
                                  name=f'test_mzi_{ps.name}'
                                  ).put(line.pin[f'a{2 * i + 1}'])
             # annoying routing hard-coding... TODO(sunil): make this better
-            chip.v1_ic.strt(4).put(node.pin['p1'])
-            chip.m1_ic.bend(8, 90).put(node.pin['p1'])
-            chip.m1_ic.strt(27).put()
-            chip.v1_ic.strt(4).put(node.pin['n2'])
-            chip.m1_ic.bend(4, -90).put(node.pin['n2'])
-            chip.m1_ic.strt(19).put()
-            chip.m2_ic.bend(4, 90).put(node.pin['n1'])
-            chip.m2_ic.strt(15).put()
-            chip.m2_ic.bend(8, -90).put(node.pin['p2'])
-            chip.m2_ic.strt(33).put()
+            route_detector(node.pin['p1'], node.pin['n2'], node.pin['n1'], node.pin['p2'])
+        nd.Pin('in').put(line.pin['in'])
+        nd.Pin('out').put(line.pin['out'])
     gridsearches.append(gridsearch)
 
 for col, tdc_column in enumerate(tdc_columns):
@@ -267,19 +274,13 @@ for col, tdc_column in enumerate(tdc_columns):
         line = testing_tap_line_tdc.put()
         for i, tdc in enumerate(tdc_column):
             # all structures for a tap line should be specified here
-            tdc.put(line.pin[f'a{2 * i + 1}'])
-            # d1 = chip.pdk_cells['cl_band_photodetector_digital'].put(tdc.pin['b0'])
-            # d2 = chip.pdk_cells['cl_band_photodetector_digital'].put(tdc.pin['b1'], flip=True)
-            # chip.v1_ic.strt(4).put(d1.pin['p'])
-            # chip.m1_ic.bend(8, 90).put(d1.pin['p'])
-            # chip.m1_ic.strt(27).put()
-            # chip.v1_ic.strt(4).put(d2.pin['n'])
-            # chip.m1_ic.bend(4, -90).put(d2.pin['n'])
-            # chip.m1_ic.strt(19).put()
-            # chip.m2_ic.bend(4, 90).put(d1.pin['n'])
-            # chip.m2_ic.strt(15).put()
-            # chip.m2_ic.bend(8, -90).put(d2.pin['p'])
-            # chip.m2_ic.strt(33).put()
+            _tdc = tdc.put(line.pin[f'a{2 * i + 1}'])
+            detector = chip.pdk_cells['cl_band_photodetector_digital']
+            d1 = detector.put(_tdc.pin['b0'])
+            d2 = detector.put(_tdc.pin['b1'], flip=True)
+            route_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
+        nd.Pin('in').put(line.pin['in'])
+        nd.Pin('out').put(line.pin['out'])
     gridsearches.append(gridsearch)
 
 # Chip construction
@@ -291,11 +292,11 @@ with nd.Cell('aim') as aim:
     input_interposer = interposer.put(thermal.pin['a4'])
     output_interposer = interposer.put(thermal.pin['b4'], flip=True)
     mzi_node_thermal_detector.put(input_interposer.pin['a6'])
-    mesh_dc.put(output_interposer.pin['a6'])
+    mdc = mesh_dc.put(output_interposer.pin['a6'])
     mzi_node_nems_detector.put(input_interposer.pin['a7'], flip=True)
     num_ports = 344
     alignment_mark.put(-500, 0)
-    alignment_mark.put(-500 + 8520, 0)
+    alignment_mark.put(-500 + 8400, 0)
 
     # routing code
     bp_array_nems = bp_array.put(-180, -40)
@@ -347,14 +348,22 @@ with nd.Cell('aim') as aim:
                                               width=8).put()
             pin_num += 1
         pin_num += 1
-    gridsearches[0].put(8300, 150)
-    gridsearches[1].put(8700, 150)
-    gridsearches[2].put(9000, 150)
-    gridsearches[3].put(9300, 150)
+
+    # place gridsearch down
+
+    locs = [8300, 8700, 9000, 9300, 9700, 10100, 10400, 10700]
+    gridsearches = gridsearches + gridsearches  # TODO: change this once all 8 columns are added
+    ga = grating_array.put(8300, 100, -90)
+    for i, item in enumerate(zip(locs, gridsearches)):
+        loc, gridsearch = item
+        gs = gridsearch.put(loc, 175)
+        chip.waveguide_ic.bend_strt_bend_p2p(ga.pin[f'a{2 * i + 1}'], gs.pin['out'], radius=10).put()
+        chip.waveguide_ic.bend_strt_bend_p2p(ga.pin[f'a{2 * i + 2}'], gs.pin['in'], radius=10).put()
+
     chip.dice_box((100, 2000)).put(7600, -127)
-    bp_array_left = bp_array_testing.put(7800, 200)
-    bp_array_right = bp_array_testing.put(12000 + input_interposer.bbox[0] - 200, 200)
-    pp_array.put(8250, 700)
+    bp_array_left = bp_array_testing.put(7800, 225)
+    bp_array_right = bp_array_testing.put(12000 + input_interposer.bbox[0] - 200, 225)
+    # pp_array.put(8250, 750)
 
     for i in range(17):
         chip.m2_ic.bend(26, -90).put(bp_array_left.pin[f'u{0},{i}'])
@@ -362,13 +371,15 @@ with nd.Cell('aim') as aim:
         chip.m1_ic.bend(20, -90).put(bp_array_left.pin[f'u{1},{i}'])
         chip.m1_ic.strt(3100 - 100).put()
         chip.m1_ic.bend(28, -90).put(bp_array_right.pin[f'd{1},{i}'])
-        chip.v1_ic.bend(28, -90).put(bp_array_right.pin[f'd{1},{i}'])
         chip.m1_ic.strt(3100 - 6).put()
         chip.m2_ic.bend(22, -90).put(bp_array_right.pin[f'd{0},{i}'])
         chip.m2_ic.strt(3100 - 100).put()
+        chip.v1_ic.strt(0.5).put(bp_array_right.pin[f'd{1},{i}'])
+        chip.v1_ic.strt(0.5).put(bp_array_left.pin[f'u{1},{i}'])
 
     # Boundary indicators (REMOVE IN FINAL LAYOUT)
     chip.dice_box((12000, 100)).put(input_interposer.bbox[0] - 50, -227)
     chip.dice_box((12000, 100)).put(input_interposer.bbox[0] - 50, 2100 - 227)
+
 
 nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim])

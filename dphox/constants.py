@@ -112,14 +112,17 @@ AIM_STACK = {
             },
             {
                 'layer': 'v1am',
-                'growx': -1,
-                'growy': -1
+                'growx': -0.05,
+                'growy': -0.05
             },
             {
                 'layer': 'm1am'
             },
         ],
         'pad_xs': [
+            {
+                'layer': 'm2am'
+            },
             {
                 'layer': 'mlam'  # aluminum pads
             },
@@ -152,6 +155,16 @@ AIM_STACK = {
         'ml_xs': [
             {
                 'layer': 'mlam'
+            }
+        ],
+        'va_xs': [
+            {
+                'layer': 'mlam'
+            },
+            {
+                'layer': 'vaam',
+                'growx': -0.2,
+                'growy': -0.2
             }
         ]
     }
