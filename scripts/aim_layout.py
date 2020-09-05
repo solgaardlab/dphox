@@ -5,10 +5,10 @@ from dphox.design.component import get_cubic_taper
 from datetime import date
 
 chip = AIMNazca(
-    passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
-    waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
-    active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
-)
+        passive_filepath='/Users/rebeccahwang/research/aimfunrun/APSUNY_v35a_passive.gds',
+        waveguides_filepath='/Users/rebeccahwang/research/aimfunrun/APSUNY_v35_waveguides.gds',
+        active_filepath='/Users/rebeccahwang/research/aimfunrun/APSUNY_v35a_active.gds',
+    )
 
 ##### Nate: New device/active class #####
 gnd_wg = chip.gnd_wg()
@@ -59,8 +59,10 @@ pull_in_anchor = chip.nems_anchor(connector_dim=(40, 5), fin_spring_dim=(50, 0.1
                                   pos_electrode_dim=None, neg_electrode_dim=None)
 tdc_anchor = chip.nems_anchor(connector_dim=(test_tdc_interaction_l, 5),
                               pos_electrode_dim=None, neg_electrode_dim=None)
+
 tdc = chip.nems_tdc(anchor=tdc_anchor)
 ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap, sep))
+
 ps_no_anchor = chip.nems_ps()
 alignment_mark = chip.alignment_mark(100, 48)
 
@@ -292,7 +294,19 @@ with nd.Cell('aim') as aim:
     input_interposer = interposer.put(thermal.pin['a4'])
     output_interposer = interposer.put(thermal.pin['b4'], flip=True)
     mzi_node_thermal_detector.put(input_interposer.pin['a6'])
-    mdc = mesh_dc.put(output_interposer.pin['a6'])
+    ##### Rebecca putting in dummy test structures in between the 2 meshes #####
+    #mdc = mesh_dc.put(output_interposer.pin['a6'])
+    top_test_structure = tdc.put(output_interposer.pin['a5'])
+    bottom_test_structure = tdc.put(output_interposer.pin['a7'])
+    detector = chip.pdk_cells['cl_band_photodetector_digital']
+    t_d1 = detector.put(top_test_structure.pin['b0'])
+    t_d2 = detector.put(top_test_structure.pin['b1'], flip=True)
+    b_d1 = detector.put(bottom_test_structure.pin['b0'])
+    b_d2 = detector.put(bottom_test_structure.pin['b1'], flip=True)
+    #c = detector.put(b.pin['b0'])
+    
+    
+    ##### end Rebecca's section ######
     mzi_node_nems_detector.put(input_interposer.pin['a7'], flip=True)
     num_ports = 344
     alignment_mark.put(-500, 0)
