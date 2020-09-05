@@ -322,7 +322,7 @@ with nd.Cell('aim') as aim:
                             (304, 306), (314, 316),
                             (327, 329), (337, 339)]
 
-    eu_bp_m1_idx = np.hstack([np.arange(r[0] - 1, r[1]) for r in eu_bp_port_ranges_m1])
+    eu_bp_m1_idx = np.hstack([np.arange(r[0], r[1]) for r in eu_bp_port_ranges_m1])
     counter = 0
     for i in range(70):
         for j in range(2):
@@ -331,12 +331,16 @@ with nd.Cell('aim') as aim:
                 if j == 1:
                     chip.m1_ic.strt_p2p(bp_array_nems.pin[f'u{i},{j}'],
                                         eu_array_nems.pin[f'o{idx}'], ).put()
+                    chip.m1_ic.strt_p2p(bp_array_thermal.pin[f'u{i},{j}'],
+                                        eu_array_thermal.pin[f'o{idx}'], ).put()
                 else:
                     chip.m2_ic.strt_p2p(bp_array_nems.pin[f'u{i},{j}'],
                                         eu_array_nems.pin[f'o{idx}']).put()
+                    chip.m2_ic.strt_p2p(bp_array_thermal.pin[f'u{i},{j}'],
+                                        eu_array_thermal.pin[f'o{idx}'], ).put()
             counter += 1
 
-    # TODO: fill out these ranges
+    # TODO: incomplete... fill out these ranges and do routing
     eu_bp_port_blocks_m2 = [(7, 10), (11, 14), (30, 33), (34, 37)]
 
     pin_num = 0

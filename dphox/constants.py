@@ -155,9 +155,6 @@ AIM_STACK = {
         'ml_xs': [
             {
                 'layer': 'mlam'
-            },
-            {
-                'layer': 'm2am'
             }
         ],
         'va_xs': [
