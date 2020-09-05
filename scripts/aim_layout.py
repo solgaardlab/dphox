@@ -304,6 +304,41 @@ with nd.Cell('aim') as aim:
     bp_array_thermal = bp_array.put(-180, 1778, flip=True)
     eu_array_thermal = eu_array.put(-180, 1538, flip=True)
 
+    # all ranges are [inclusive, exclusive) as is convention in python range() method
+    # add more in case test structures are added in between the meshes
+    eu_bp_port_ranges_m1 = [(5, 7), (15, 17),
+                            (28, 30), (38, 40),
+                            (50, 53), (61, 64),
+                            (73, 76), (84, 87),
+                            (96, 100), (107, 111),
+                            (118, 122), (130, 134),
+                            (139, 144), (153, 158),
+                            (162, 167), (176, 181),
+                            (185, 190), (199, 204),
+                            (210, 214), (222, 226),
+                            (232, 237), (245, 249),
+                            (257, 260), (268, 271),
+                            (280, 283), (291, 294),
+                            (304, 306), (314, 316),
+                            (327, 329), (337, 339)]
+
+    eu_bp_m1_idx = np.hstack([np.arange(r[0] - 1, r[1]) for r in eu_bp_port_ranges_m1])
+    counter = 0
+    for i in range(70):
+        for j in range(2):
+            if counter < len(eu_bp_m1_idx):
+                idx = eu_bp_m1_idx[counter]
+                if j == 1:
+                    chip.m1_ic.strt_p2p(bp_array_nems.pin[f'u{i},{j}'],
+                                        eu_array_nems.pin[f'o{idx}'], ).put()
+                else:
+                    chip.m2_ic.strt_p2p(bp_array_nems.pin[f'u{i},{j}'],
+                                        eu_array_nems.pin[f'o{idx}']).put()
+            counter += 1
+
+    # TODO: fill out these ranges
+    eu_bp_port_blocks_m2 = [(7, 10), (11, 14), (30, 33), (34, 37)]
+
     pin_num = 0
     for layer in range(15):
         a1_nems_left = autoroute_simple_1.put(layer * 450, 550, flop=True)
