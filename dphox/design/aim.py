@@ -48,7 +48,7 @@ class AIMNazca:
         self.m2_ic = nd.interconnects.Interconnect(width=4, xs='m2_xs')
         self.ml_ic = nd.interconnects.Interconnect(width=100, xs='ml_xs')
         self.v1_ic = nd.interconnects.Interconnect(width=0.5, xs='v1_xs')
-        self.va_ic = nd.interconnects.Interconnect(width=4, xs='va_xs')
+        self.va_ic = nd.interconnects.Interconnect(width=5.1, xs='va_xs')
 
     def nems_tdc(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
                  interaction_l: float = 100, dc_gap_w: float = 0.2, beam_gap_w: float = 0.15,
@@ -64,7 +64,7 @@ class AIMNazca:
                            middle_fin_dim=middle_fin_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
                            dc_taper=dc_taper, beam_taper=beam_taper)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
-        clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='fnam',
+        clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='snam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
         dopes = (list(zip([p.grow(dope_grow) for p in c.dope_patterns], ('pppam',))))
@@ -109,7 +109,7 @@ class AIMNazca:
                           boundary_taper=boundary_taper,
                           rib_brim_taper=rib_brim_taper)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
-        clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='fnam',
+        clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='snam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
         device = Multilayer([(c, 'seam')] + pad_to_layer + clearout + ridge_etch)
@@ -248,7 +248,7 @@ class AIMNazca:
             nd.Pin('a0').put(0, 0, 180)
             nd.Pin('b0').put(100, 0, 0)
             nd.Pin('c0').put(_ps.pin['p'])
-            self.v1_ic.strt(3).put(_ps.pin['p'].x, _ps.pin['p'].y, 90)
+            self.v1_ic.strt(0.5).put(_ps.pin['p'].x, _ps.pin['p'].y, 90)
             self.m1_ic.bend(8, 90, width=8).put(_ps.pin['p'].x - 3, _ps.pin['p'].y, 90)
             end = self.m1_ic.strt(36.3, width=8).put()
             self.m1_ic.bend_strt_bend_p2p(cell.pin['a0'], radius=4, width=8).put()
@@ -309,7 +309,10 @@ class AIMNazca:
                     x_loc = i * pitch[0] + stagger_x_frac * j * pitch[0]
                     pad = self.ml_ic.strt(length=pad_l, width=pad_w).put(x_loc, j * pitch[1], 270)
                     if not use_ml_only:
-                        self.va_ic.strt(4).put(x_loc, j * pitch[1], 270)
+                        self.m2_ic.strt(-6, width=8).put()
+                        self.va_ic.strt(5.1).put(nd.cp.x(), nd.cp.y(), 90)
+                        self.m2_ic.strt(6, width=8).put(x_loc, j * pitch[1], 270)
+                        self.va_ic.strt(5.1).put()
                     nd.Pin(f'u{i},{j}').put(pad.pin['a0'])
                     nd.Pin(f'd{i},{j}').put(pad.pin['b0'])
                     if use_labels:
@@ -513,7 +516,7 @@ class AIMNazca:
         return node
 
     def grating_array(self, n: int, period: float, turn_radius: float = 0,
-                      connector_x: float = 0, connector_y: float = 0):
+                      connector_x: float = 0, connector_y: float = 0, link_end_gratings_radius: float = 0):
         with nd.Cell(name=f'grating_array_{n}_{period}') as gratings:
             for idx in range(n):
                 start = self.waveguide_ic.strt(length=connector_x).put(0, period * idx)
@@ -522,6 +525,15 @@ class AIMNazca:
                 self.waveguide_ic.strt(length=connector_y).put()
                 self.pdk_cells['cl_band_vertical_coupler_si'].put(nd.cp.x(), nd.cp.y(), -90)
                 nd.Pin(f'a{idx}').put(start.pin['a0'])
+            if link_end_gratings_radius > 0:
+                r = link_end_gratings_radius
+                self.waveguide_ic.bend(radius=r, angle=-180).put(gratings.pin['a0'])
+                self.waveguide_ic.strt(length=205).put()
+                self.waveguide_ic.bend(radius=r, angle=90).put()
+                self.waveguide_ic.strt(length=period * (n - 1) - 6 * r).put()
+                self.waveguide_ic.bend(radius=r, angle=90).put()
+                self.waveguide_ic.strt(length=205).put()
+                self.waveguide_ic.bend(radius=r, angle=-180).put()
             nd.put_stub()
         return gratings
 

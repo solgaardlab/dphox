@@ -1,8 +1,11 @@
+import itertools
+
 import nazca as nd
 import numpy as np
 from dphox.design.aim import AIMNazca
 from dphox.design.component import get_cubic_taper
 from datetime import date
+from tqdm import tqdm
 
 chip = AIMNazca(
     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
@@ -79,7 +82,7 @@ mzi_dummy_thermal = chip.mzi_dummy(thermal_ps, dc_dummy)
 nems_mesh = chip.triangular_mesh(5, mzi_node_nems, mzi_dummy_nems, ps, mesh_interport_w)
 thermal_mesh = chip.triangular_mesh(5, mzi_node_thermal, mzi_dummy_thermal, thermal_ps, mesh_interport_w)
 
-grating_array = chip.grating_array(18, period=127)
+grating_array = chip.grating_array(18, period=127, link_end_gratings_radius=10)
 
 interposer = chip.interposer(
     n=14, waveguide_w=0.48, period=50,
@@ -88,7 +91,7 @@ interposer = chip.interposer(
     with_gratings=True, horiz_dist=200, num_trombones=2
 )
 # pp_array = chip.bond_pad_array((1, 3), pitch=600, pad_dim=(60, 520), use_labels=False, use_ml_only=True)
-bp_array = chip.bond_pad_array(stagger_x_frac=0.25)
+bp_array = chip.bond_pad_array(stagger_x_frac=0.4)
 bp_array_testing = chip.bond_pad_array((2, 17))
 eu_array = chip.eutectic_array()
 autoroute_simple_1 = chip.autoroute_turn(7, level=1, turn_radius=8, connector_x=0, connector_y=12)
@@ -306,8 +309,8 @@ with nd.Cell('aim') as aim:
 
     # all ranges are [inclusive, exclusive) as is convention in python range() method
     # add more in case test structures are added in between the meshes
-    eu_bp_port_ranges_m1 = [(5, 7), (15, 17),
-                            (28, 30), (38, 40),
+    eu_bp_port_ranges_m1 = [(0, 2), (5, 7), (15, 17), (20, 25),
+                            (28, 30), (38, 40), (43, 48),
                             (50, 53), (61, 64),
                             (73, 76), (84, 87),
                             (96, 100), (107, 111),
@@ -323,22 +326,56 @@ with nd.Cell('aim') as aim:
                             (327, 329), (337, 339)]
 
     eu_bp_m1_idx = np.hstack([np.arange(r[0], r[1]) for r in eu_bp_port_ranges_m1])
-    counter = 0
-    for i in range(70):
-        for j in range(2):
-            if counter < len(eu_bp_m1_idx):
-                idx = eu_bp_m1_idx[counter]
-                if j == 1:
-                    chip.m1_ic.strt_p2p(bp_array_nems.pin[f'u{i},{j}'],
-                                        eu_array_nems.pin[f'o{idx}'], ).put()
-                    chip.m1_ic.strt_p2p(bp_array_thermal.pin[f'u{i},{j}'],
-                                        eu_array_thermal.pin[f'o{idx}'], ).put()
-                else:
-                    chip.m2_ic.strt_p2p(bp_array_nems.pin[f'u{i},{j}'],
-                                        eu_array_nems.pin[f'o{idx}']).put()
-                    chip.m2_ic.strt_p2p(bp_array_thermal.pin[f'u{i},{j}'],
-                                        eu_array_thermal.pin[f'o{idx}'], ).put()
-            counter += 1
+    # counter = 0
+    # pin_col_idx = list(np.arange(70))
+    # # delete every kth index from pin_col_idx
+    # # (will require some manual adjustment in klayout later to not overlap vias)
+    # k = 7
+    # del pin_col_idx[k-1::k]
+    #
+    # for i in pin_col_idx:
+    #     for j in reversed(range(2)):
+    #         if counter < len(eu_bp_m1_idx):
+    #             idx = eu_bp_m1_idx[counter]
+    #             if j == 1:
+    #                 chip.m2_ic.bend_strt_bend_p2p(bp_array_nems.pin[f'u{i},{j}'],
+    #                                     eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
+    #                 chip.m2_ic.bend_strt_bend_p2p(bp_array_thermal.pin[f'u{i},{j}'],
+    #                                     eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
+    #             else:
+    #                 chip.m1_ic.bend_strt_bend_p2p(bp_array_nems.pin[f'u{i},{j}'],
+    #                                     eu_array_nems.pin[f'o{idx}'], radius=16, width=8).put()
+    #                 chip.m1_ic.bend_strt_bend_p2p(bp_array_thermal.pin[f'u{i},{j}'],
+    #                                     eu_array_thermal.pin[f'o{idx}'], radius=16, width=8).put()
+    #                 chip.v1_ic.strt(0.5).put(bp_array_thermal.pin[f'u{i},{j}'])
+    #                 chip.v1_ic.strt(0.5).put(bp_array_nems.pin[f'u{i},{j}'])
+    #         counter += 1
+
+    used_connections = set()
+    for idx in tqdm(eu_bp_m1_idx):
+        pin_x = eu_array_nems.pin[f'o{idx}'].x
+        closest = (0, 0)
+        closest_dist = np.inf
+        for i, j in itertools.product(range(70), range(3)):
+            dist = np.abs(bp_array_nems.pin[f'u{i},{j}'].x - pin_x)
+            if dist < closest_dist and (i, j) not in used_connections:
+                closest = (i, j)
+                closest_dist = dist
+        used_connections.add(closest)
+        i, j = closest
+        if j == 2:
+            chip.m2_ic.bend_strt_bend_p2p(bp_array_nems.pin[f'u{i},{j}'],
+                                          eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
+            chip.m2_ic.bend_strt_bend_p2p(bp_array_thermal.pin[f'u{i},{j}'],
+                                          eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
+        else:
+            chip.m1_ic.strt(100 * (2 - j), width=8).put(bp_array_nems.pin[f'u{i},{j}'])
+            chip.m1_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=16, width=8).put()
+            chip.m1_ic.strt(100 * (2 - j), width=8).put(bp_array_thermal.pin[f'u{i},{j}'])
+            chip.m1_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=16, width=8).put()
+            chip.v1_ic.strt(0.5).put(bp_array_thermal.pin[f'u{i},{j}'])
+            chip.v1_ic.strt(0.5).put(bp_array_nems.pin[f'u{i},{j}'])
+
 
     # TODO: incomplete... fill out these ranges and do routing
     eu_bp_port_blocks_m2 = [(7, 10), (11, 14), (30, 33), (34, 37)]
@@ -390,10 +427,10 @@ with nd.Cell('aim') as aim:
 
     # place gridsearch down
 
-    locs = [8300, 8700, 9000, 9300, 9700, 10100, 10400, 10700]
+    gridsearch_locs = [8300, 8700, 9000, 9300, 9700, 10100, 10400, 10700]
     gridsearches = gridsearches + gridsearches  # TODO: change this once all 8 columns are added
     ga = grating_array.put(8300, 100, -90)
-    for i, item in enumerate(zip(locs, gridsearches)):
+    for i, item in enumerate(zip(gridsearch_locs, gridsearches)):
         loc, gridsearch = item
         gs = gridsearch.put(loc, 175)
         chip.waveguide_ic.bend_strt_bend_p2p(ga.pin[f'a{2 * i + 1}'], gs.pin['out'], radius=10).put()
