@@ -363,19 +363,10 @@ with nd.Cell('aim') as aim:
                 closest_dist = dist
         used_connections.add(closest)
         i, j = closest
-        if j == 2:
-            chip.m2_ic.bend_strt_bend_p2p(bp_array_nems.pin[f'u{i},{j}'],
-                                          eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
-            chip.m2_ic.bend_strt_bend_p2p(bp_array_thermal.pin[f'u{i},{j}'],
-                                          eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
-        else:
-            chip.m1_ic.strt(100 * (2 - j), width=8).put(bp_array_nems.pin[f'u{i},{j}'])
-            chip.m1_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=16, width=8).put()
-            chip.m1_ic.strt(100 * (2 - j), width=8).put(bp_array_thermal.pin[f'u{i},{j}'])
-            chip.m1_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=16, width=8).put()
-            chip.v1_ic.strt(0.5).put(bp_array_thermal.pin[f'u{i},{j}'])
-            chip.v1_ic.strt(0.5).put(bp_array_nems.pin[f'u{i},{j}'])
-
+        chip.m2_ic.strt(100 * (2 - j), width=8).put(bp_array_nems.pin[f'u{i},{j}'])
+        chip.m2_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
+        chip.m2_ic.strt(100 * (2 - j), width=8).put(bp_array_thermal.pin[f'u{i},{j}'])
+        chip.m2_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
 
     # TODO: incomplete... fill out these ranges and do routing
     eu_bp_port_blocks_m2 = [(7, 10), (11, 14), (30, 33), (34, 37)]

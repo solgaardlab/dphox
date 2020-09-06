@@ -342,8 +342,8 @@ class AIMNazca:
             ]
             for i in range(n_pads[0]):
                 for j in range(n_pads[1]):
-                    for pad in pads:
-                        pad.put(i * pitch[0], j * pitch[1], 270)
+                    for k, pad in enumerate(pads):
+                        pad.put(i * pitch[0], j * pitch[1] + 4 * (k == 1) - 2 * (k == 3), 270)
                     if j == 0:
                         nd.Pin(f'o{i}').put(i * pitch[0], j * pitch[1], -90)
                     elif j == n_pads[1] - 1:
