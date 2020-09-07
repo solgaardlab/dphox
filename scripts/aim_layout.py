@@ -94,9 +94,16 @@ interposer = chip.interposer(
 bp_array = chip.bond_pad_array(stagger_x_frac=0.4)
 bp_array_testing = chip.bond_pad_array((2, 17))
 eu_array = chip.eutectic_array()
-autoroute_simple_1 = chip.autoroute_turn(7, level=1, turn_radius=8, connector_x=0, connector_y=12)
-autoroute_simple_2 = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=8, connector_y=4)
-
+autoroute_4 = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=0, connector_y=20,
+                                  final_period=18.5, width=4)
+autoroute_4_extended = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=9, connector_y=28,
+                                           final_period=18.5, width=4)
+autoroute_4_nems_gnd = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=8, connector_y=16,
+                                           final_period=18.5, width=4)
+autoroute_8 = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=0, connector_y=0,
+                                  final_period=18.5, width=8)
+autoroute_8_extended = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=9, connector_y=10,
+                                           final_period=18.5, width=8)
 
 # Test structures
 
@@ -286,6 +293,9 @@ for col, tdc_column in enumerate(tdc_columns):
         nd.Pin('out').put(line.pin['out'])
     gridsearches.append(gridsearch)
 
+chiplet_divider = chip.dice_box((100, 2000))
+
+
 # Chip construction
 
 # TODO(sunil): remove hardcoding! tsk tsk...
@@ -326,30 +336,6 @@ with nd.Cell('aim') as aim:
                             (327, 329), (337, 339)]
 
     eu_bp_m1_idx = np.hstack([np.arange(r[0], r[1]) for r in eu_bp_port_ranges_m1])
-    # counter = 0
-    # pin_col_idx = list(np.arange(70))
-    # # delete every kth index from pin_col_idx
-    # # (will require some manual adjustment in klayout later to not overlap vias)
-    # k = 7
-    # del pin_col_idx[k-1::k]
-    #
-    # for i in pin_col_idx:
-    #     for j in reversed(range(2)):
-    #         if counter < len(eu_bp_m1_idx):
-    #             idx = eu_bp_m1_idx[counter]
-    #             if j == 1:
-    #                 chip.m2_ic.bend_strt_bend_p2p(bp_array_nems.pin[f'u{i},{j}'],
-    #                                     eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
-    #                 chip.m2_ic.bend_strt_bend_p2p(bp_array_thermal.pin[f'u{i},{j}'],
-    #                                     eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
-    #             else:
-    #                 chip.m1_ic.bend_strt_bend_p2p(bp_array_nems.pin[f'u{i},{j}'],
-    #                                     eu_array_nems.pin[f'o{idx}'], radius=16, width=8).put()
-    #                 chip.m1_ic.bend_strt_bend_p2p(bp_array_thermal.pin[f'u{i},{j}'],
-    #                                     eu_array_thermal.pin[f'o{idx}'], radius=16, width=8).put()
-    #                 chip.v1_ic.strt(0.5).put(bp_array_thermal.pin[f'u{i},{j}'])
-    #                 chip.v1_ic.strt(0.5).put(bp_array_nems.pin[f'u{i},{j}'])
-    #         counter += 1
 
     used_connections = set()
     for idx in tqdm(eu_bp_m1_idx):
@@ -373,14 +359,14 @@ with nd.Cell('aim') as aim:
 
     pin_num = 0
     for layer in range(15):
-        a1_nems_left = autoroute_simple_1.put(layer * 450, 550, flop=True)
-        a2_nems_left = autoroute_simple_2.put(layer * 450, 542, flop=True)
-        a1_nems_right = autoroute_simple_1.put(layer * 450 + 178, 550)
-        a2_nems_right = autoroute_simple_2.put(layer * 450 + 178, 542)
-        a1_thermal_left = autoroute_simple_1.put(layer * 450, 1200, flop=True, flip=True)
-        a2_thermal_left = autoroute_simple_2.put(layer * 450, 1208, flop=True, flip=True)
-        a1_thermal_right = autoroute_simple_1.put(layer * 450 + 178, 1200, flip=True)
-        a2_thermal_right = autoroute_simple_2.put(layer * 450 + 178, 1208, flip=True)
+        a1_nems_left = autoroute_4_nems_gnd.put(layer * 450 + 8, 536, flop=True)
+        a2_nems_left = autoroute_4_extended.put(layer * 450, 550, flop=True)
+        a1_nems_right = autoroute_4.put(layer * 450 + 178, 542)
+        a2_nems_right = autoroute_4_extended.put(layer * 450 + 178, 550)
+        a1_thermal_left = autoroute_8.put(layer * 450, 1228, flop=True, flip=True)
+        a2_thermal_left = autoroute_8_extended.put(layer * 450, 1218, flop=True, flip=True)
+        a1_thermal_right = autoroute_4.put(layer * 450 + 178, 1208, flip=True)
+        a2_thermal_right = autoroute_4_extended.put(layer * 450 + 178, 1200, flip=True)
 
         for pin_nems, pin_thermal in zip(reversed([a2_nems_left.pin[f'p{n}'] for n in range(7)]),
                                          reversed([a2_thermal_left.pin[f'p{n}'] for n in range(7)])):
@@ -394,8 +380,10 @@ with nd.Cell('aim') as aim:
             pin_nems, pin_thermal = pins
             if pin_num < num_ports:
                 chip.m1_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
+                chip.v1_via.put(pin_nems)
                 chip.m1_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8,
                                               width=8).put()
+                chip.v1_via.put(pin_thermal)
             pin_num += 1 if i % 2 else 0
         pin_num += 1
         for i, pins in enumerate(zip([a1_nems_right.pin[f'p{n}'] for n in range(7)],
@@ -403,8 +391,10 @@ with nd.Cell('aim') as aim:
             pin_nems, pin_thermal = pins
             if pin_num < num_ports:
                 chip.m1_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
+                chip.v1_via.put(pin_nems)
                 chip.m1_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8,
                                               width=8).put()
+                chip.v1_via.put(pin_thermal)
             pin_num += 1 if i % 2 else 0
         pin_num += 1
         for pin_nems, pin_thermal in zip([a2_nems_right.pin[f'p{n}'] for n in range(7)],
@@ -427,7 +417,7 @@ with nd.Cell('aim') as aim:
         chip.waveguide_ic.bend_strt_bend_p2p(ga.pin[f'a{2 * i + 1}'], gs.pin['out'], radius=10).put()
         chip.waveguide_ic.bend_strt_bend_p2p(ga.pin[f'a{2 * i + 2}'], gs.pin['in'], radius=10).put()
 
-    chip.dice_box((100, 2000)).put(7600, -127)
+    chiplet_divider.put(7600, -127)
     bp_array_left = bp_array_testing.put(7800, 225)
     bp_array_right = bp_array_testing.put(12000 + input_interposer.bbox[0] - 200, 225)
     # pp_array.put(8250, 750)

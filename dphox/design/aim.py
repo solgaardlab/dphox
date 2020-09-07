@@ -83,6 +83,10 @@ class AIMNazca:
                 nd.Pin('b1').put(tdc.pin['b1'])
         return self.tdc_node(diff_ps, cell) if diff_ps is not None else cell
 
+    @property
+    def v1_via(self):
+        return self.v1_ic.strt(0.5)
+
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 100,
                 gap_w: float = 0.15,
                 pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (90, 13.8),
@@ -160,7 +164,7 @@ class AIMNazca:
         return device.nazca_cell(name)
 
     def autoroute_turn(self, n: Union[int, List, np.ndarray], level: int = 1,
-                       period: float = 50, final_period: float = 16, width: float = 8,
+                       period: float = 50, final_period: float = 20, width: float = 8,
                        connector_x: float = 0, connector_y: float = 0, turn_radius: float = 0, overlap: float = 0):
         mt_ic = self.m1_ic if level == 1 else self.m2_ic
         with nd.Cell(f'autoroute_turn_{period}_{final_period}') as autoroute_turn:
@@ -172,7 +176,7 @@ class AIMNazca:
                     if turn_radius > 0:
                         mt_ic.bend(turn_radius, -90, width).put()
                     mt_ic.strt(connector_y, width).put()
-                    output = mt_ic.strt(m * period + turn_radius * 2, width).put()
+                    output = mt_ic.strt(m * period, width).put()
                     nd.Pin(f'p{int(route_num)}', pin=output.pin['b0']).put()
                     route_num += 1
             nd.put_stub([], length=0)
@@ -248,14 +252,11 @@ class AIMNazca:
             nd.Pin('a0').put(0, 0, 180)
             nd.Pin('b0').put(100, 0, 0)
             nd.Pin('c0').put(_ps.pin['p'])
-            self.v1_ic.strt(0.5).put(_ps.pin['p'].x, _ps.pin['p'].y, 90)
-            self.m1_ic.bend(8, 90, width=8).put(_ps.pin['p'].x - 3, _ps.pin['p'].y, 90)
-            end = self.m1_ic.strt(36.3, width=8).put()
-            self.m1_ic.bend_strt_bend_p2p(cell.pin['a0'], radius=4, width=8).put()
+            self.m2_ic.bend(5.5, 90, width=8).put(_ps.pin['p'].x - 3, _ps.pin['p'].y, 90)
+            self.m2_ic.strt(38.8, width=8).put()
             nd.Pin('c1').put(_ps.pin['n'])
-            self.m2_ic.bend(8, 90, width=8).put(_ps.pin['n'].x + 3, _ps.pin['n'].y, 90)
-            end = self.m2_ic.strt(47.3, width=8).put()
-            self.m2_ic.bend_strt_bend_p2p(cell.pin['a0'], radius=4, width=8).put()
+            self.m2_ic.bend(15.5, 90, width=8).put(_ps.pin['n'].x + 3, _ps.pin['n'].y, 90)
+            self.m2_ic.strt(39.8, width=8).put()
             if tap_sep is not None:
                 tap, sep = tap_sep
                 self.waveguide_ic.strt(sep).put(100, 0, 0)
@@ -320,8 +321,8 @@ class AIMNazca:
                                     layer='seam', height=pad_dim[0] / 2)
                         y = nd.text(text=f'{j + 1 if labels is None else labels[i]}', align='cc',
                                     layer='seam', height=pad_dim[0] / 2)
-                        y.put(-pitch[0] / 2 + x_loc, -pad_l / 2 + j * pitch[1])
-                        x.put(x_loc, - 1.73 * pad_l + j * pitch[1])
+                        y.put(-pitch[0] / 2 + x_loc, pad_l / 2 + j * pitch[1])
+                        x.put(x_loc, 0.27 * pad_l + j * pitch[1])
             nd.put_stub()
         return bond_pad_array
 
@@ -369,15 +370,16 @@ class AIMNazca:
                 ic.bend(4, -90).put()
                 ic.strt(16).put()
                 ic.bend(4, -90).put()
-                ic.strt(23.5).put()
+                ic.strt(31.5).put()
                 ic.bend(4, 90).put()
             else:
                 ic.strt(14).put()
                 ic.bend(4, -90).put()
                 ic.strt(16).put()
                 ic.bend(4, -90).put()
-                ic.strt(31.5).put()
+                ic.strt(23.5).put()
                 ic.bend(4, 90).put()
+                self.v1_via.put()
 
         with nd.Cell(name=f'bidirectional_tap_{radius}') as cell:
             tap = self.pdk_cells['cl_band_1p_tap_si'].put()
@@ -390,7 +392,7 @@ class AIMNazca:
                 self.waveguide_ic.strt(radius / 4).put()
                 self.waveguide_ic.bend(radius, angle=-90).put()
             pd0 = self.pdk_cells['cl_band_photodetector_digital'].put(flip=True)
-            self.v1_ic.strt(0.5).put(pd0.pin['p'])
+            self.v1_via.put(pd0.pin['p'])
             self.m1_ic.bend(4, 90).put(pd0.pin['p'])
             metal_route(self.m1_ic, level=1)
             self.m2_ic.bend(4, 90).put(pd0.pin['n'])
@@ -400,7 +402,7 @@ class AIMNazca:
                 self.waveguide_ic.strt(radius / 4).put()
                 self.waveguide_ic.bend(radius, angle=90).put()
             pd1 = self.pdk_cells['cl_band_photodetector_digital'].put()
-            self.v1_ic.strt(0.5).put(pd1.pin['p'])
+            self.v1_via.put(pd1.pin['p'])
             self.m1_ic.bend(4, -90).put(pd1.pin['p'])
             metal_route(self.m1_ic, level=1)
             self.m2_ic.bend(4, -90).put(pd1.pin['n'])
@@ -562,7 +564,7 @@ class AIMNazca:
         return tap_line
 
     def dice_box(self, dim: Dim2 = (100, 2000), bottom_left_corner: Dim2 = (0, 0)):
-        with nd.Cell(name=f'dice_box') as dice_box:
+        with nd.Cell(name=f'dice_box_{dim[0]}_{dim[1]}') as dice_box:
             nd.Polygon(nd.geom.box(*dim), layer=AIM_STACK['layers']['diam']).put(bottom_left_corner[0],
                                                                                  bottom_left_corner[1] + dim[1] / 2)
         return dice_box
