@@ -1,5 +1,8 @@
+from .pattern import Pattern, Path, GroupedPattern
+from .passive import Box
 from collections import defaultdict
 
+import numpy as np
 import gdspy as gy
 import nazca as nd
 from shapely.geometry import Polygon, MultiPolygon
@@ -14,8 +17,6 @@ except ImportError:
     pass
 
 from ...typing import *
-from .pattern import Pattern, GroupedPattern, Path
-from .passive import Box
 
 
 class Multilayer:
@@ -25,6 +26,25 @@ class Multilayer:
                                   for comp, layer in pattern_to_layer}
         self.layer_to_pattern = self._layer_to_pattern()
         self.port = dict(sum([list(pattern.port.items()) for pattern, _ in pattern_to_layer], []))
+
+    @classmethod
+    def from_nazca_cell(self, cell: nd.Cell):
+        # a glimpse into cell_iter()
+        # code from https://nazca-design.org/forums/topic/clipping-check-distance-and-length-for-interconnects/
+        multilayers = {}
+        for named_tuple in nd.cell_iter(cell, flat=True):
+            if named_tuple.cell_start:
+                for i, (polygon, points, bbox) in enumerate(named_tuple.iters['polygon']):
+                    if polygon.layer == 'bb_pin':
+                        continue
+                    # fixing point definitions from mask to 1nm prcesision, kinda hacky but is physical and prevents false polygons
+                    points = np.around(points, decimals=3)
+                    if polygon.layer in multilayers.keys():
+                        multilayers[polygon.layer].append(Pattern(Polygon(points)))
+                    else:
+                        multilayers[polygon.layer] = [Pattern(Polygon(points))]
+
+        return Multilayer([(GroupedPattern(*pattern_list), layer) for layer, pattern_list in multilayers.items()])
 
     @property
     def bounds(self) -> Dim4:
@@ -63,8 +83,8 @@ class Multilayer:
         ax.set_ylim((b[1], b[3]))
         ax.set_aspect('equal')
 
-    def to_trimesh(self, layer_to_zrange: Dict[str, Tuple[float, float]],
-                   layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad'):
+    def to_trimesh_scene(self, layer_to_zrange: Dict[str, Tuple[float, float]],
+                         layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad'):
         meshes = []
         for layer, zrange in layer_to_zrange.items():
             zmin, zmax = zrange
@@ -76,19 +96,74 @@ class Multilayer:
             meshes.append(mesh)
         return trimesh.Scene(meshes)
 
-    # TODO(Nate): change  above to_tirmesh_scene and create a function for the zrange enumeration
-    def to_trimesh_dict(self, layer_to_zrange: Dict[str, Tuple[float, float]],
-                   layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad'):
+    def to_trimesh_dict(self, layer_to_zrange: Dict[str, Tuple[float, float]], process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
+                        layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad'):
         meshes = {}
-        for layer, zrange in layer_to_zrange.items():
-            zmin, zmax = zrange
+        if process_extrusion is not None:
+            layer_to_extrusion = self.build_extrusion_layers(layer_to_zrange, process_extrusion)
+            for layer, pattern_zrange in layer_to_extrusion.items():
+                try:
+                    zmin, zmax = pattern_zrange[1]
+                except KeyError:
+                    print(f"No zranges given for the layer {layer}")
+                layer_meshes = [trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
+                                for poly in pattern_zrange[0]]
+                # TODO(): Do not want to use trimesh Booleans
+                mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
+                mesh.visual.vertex_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
+                meshes[layer] = mesh
+            return meshes
+
+        for layer, pattern in self.layer_to_pattern.items():
+            try:
+                zmin, zmax = layer_to_zrange[layer]
+            except KeyError:
+                print(f"No zranges given for the layer {layer}")
             layer_meshes = [
-                trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
-                for poly in self.layer_to_pattern[layer]]
+                trimesh.creation.extrude_polygon(
+                    poly, height=zmax - zmin).apply_translation((0, 0, zmin))
+                for poly in pattern]
             mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
             mesh.visual.vertex_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
-            meshes[layer] =(mesh)
+            meshes[layer] = mesh
         return meshes
+
+    def build_extrusion_layers(self, layer_to_zrange: Dict[str, Tuple[float, float]], process_extrusion: Dict[str, List[Tuple[str, str, str]]]):
+        layer_to_extrusion = {}
+        layers = self.layer_to_pattern.keys()
+        layer_to_pattern_processed = self.layer_to_pattern.copy()
+        for step, operations in process_extrusion.items():
+            for layer_relation in operations:
+                layer, other_layer, operation = layer_relation
+                if step.split('_')[0] == 'DOPE' and operation == 'intersection':
+                    # make a new layer for each doping intersection
+                    new_layer = layer + '_' + other_layer
+                    zmin, zmax = layer_to_zrange[other_layer]
+                    z0, z1 = layer_to_zrange[layer]
+                    # TODO(): how to deal with differecnt depth doping currently not addressed
+                    new_zrange = (max(zmax - (z1 - z0), zmin), zmax)
+                else:
+                    new_layer = layer
+                    new_zrange = layer_to_zrange[layer]
+                if layer in layers:
+                    if other_layer in layers:
+                        pattern = Pattern(layer_to_pattern_processed[layer]).boolean_operation(Pattern(layer_to_pattern_processed[other_layer]), operation).pattern
+                    else:
+                        pattern = layer_to_pattern_processed[layer]
+                    if pattern.geoms:
+                        layer_to_pattern_processed[new_layer] = pattern
+                        layer_to_extrusion[new_layer] = (pattern, new_zrange)
+        return layer_to_extrusion
+
+    def fill_material(self, layer_name: str, growth: float):
+        all_patterns = [Pattern(poly)
+                        for layer, poly in self.layer_to_pattern.items()]
+        all_patterns = GroupedPattern(*all_patterns)
+        minx, miny, maxx, maxy = all_patterns.bounds
+        fill = Pattern(gy.Polygon([(minx - growth / 2, miny - growth / 2), (minx - growth / 2, maxy + growth / 2), (maxx + growth / 2, maxy + growth / 2), (maxx + growth / 2, miny - growth / 2)]))
+        self.pattern_to_layer.append((fill, layer_name))
+        self.layer_to_pattern = self._layer_to_pattern()
+        return [(fill, layer_name)]
 
 
 class Via(Multilayer):
