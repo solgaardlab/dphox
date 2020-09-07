@@ -71,7 +71,7 @@ class AIMNazca:
                            bend_dim=bend_dim, pad_dim=pad_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
                            dc_taper=dc_taper, beam_taper=beam_taper)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
-        clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='snam',
+        clearout = c.clearout_box(clearout_layer='clearout', clearout_etch_stop_layer='snam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
         dopes = [p.expand(dope_expand).dope('pppam', dope_grow) for p in c.pads]
@@ -95,9 +95,7 @@ class AIMNazca:
                 clearout_etch_stop_grow: float = 0.5, num_taper_evaluations: int = 100,
                 anchor: Optional[nd.Cell] = None, tap_sep: Optional[Tuple[nd.Cell, float]] = None,
                 name: str = 'nems_ps', taper_ls=(2, 0.15, 0.2, 0.15, 2),
-                gap_taper=((0.66 + 2 * 0.63,), (0, -1 * (.30 + 2 * 0.63),),
-                           (0,), (0, (.30 + 2 * 0.63),),
-                           cubic_taper(-0.74 - 2 * 0.63)),
+                gap_taper=((0.66 + 2 * 0.63,), (0, -1 * (.30 + 2 * 0.63),), (0,), (0, (.30 + 2 * 0.63),), cubic_taper(-0.74 - 2 * 0.63)),
                 wg_taper=((0,), (0,), (0,), (0,), cubic_taper(-0.08)),
                 boundary_taper=((0.66 + 2 * 0.63,), (0,), (0,), (0,), cubic_taper(-0.74 - 2 * 0.63)),
                 rib_brim_taper=(cubic_taper(2 * .66), (0,), (0,), (0,), cubic_taper(-0.74 * 2))) -> nd.Cell:
@@ -115,8 +113,7 @@ class AIMNazca:
                           boundary_taper=boundary_taper,
                           rib_brim_taper=rib_brim_taper)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
-        clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='snam',
-                                  clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
+        clearout = c.clearout_box(clearout_layer='clearout', clearout_etch_stop_layer='snam', clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
         device = Multilayer([(c, 'seam')] + pad_to_layer + clearout + ridge_etch)
         if anchor is None:
@@ -618,6 +615,14 @@ class AIMNazca:
             else:
                 nd.Pin('b0').put(_dc_dummy.pin['b0'])
         return dummy
+
+    def cell_to_stl(self, cell: nd.Cell):
+        multi = Multilayer.from_nazca_cell(cell)
+        multi.fill_material('oxide', growth=1)
+        trimeshes = multi.to_trimesh_dict(
+            layer_to_zrange=self.stack['zranges'], process_extrusion=self.stack['process_extrusion'])
+        for layer, mesh in trimeshes.items():
+            mesh.export('{}_{}.stl'.format(cell.cell_name, layer))
 
 
 def _mzi_angle(waveguide_w: float, gap_w: float, interport_w: float, radius: float):

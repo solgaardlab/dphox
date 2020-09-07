@@ -245,8 +245,8 @@ class NemsAnchor(GroupedPattern):
                                                                                opposite=True),
                                        copy(straight).halign(connector, left=False,
                                                              opposite=False).valign(connector,
-                                                                                        bottom=False,
-                                                                                        opposite=True),
+                                                                                    bottom=False,
+                                                                                    opposite=True),
                                        # adding more straight connectors for mirror symmetric mechanics
                                        copy(straight).halign(connector, left=False, opposite=False).valign(
                                            copy(connector).translate(connector.size[0], connector.size[1]), ),
