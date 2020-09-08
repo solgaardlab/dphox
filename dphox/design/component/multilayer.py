@@ -99,7 +99,7 @@ class Multilayer:
             meshes.append(mesh)
         return trimesh.Scene(meshes)
 
-# TODO(Nate): change  above to_tirmesh_scene and create a function for the zrange enumeration
+    # TODO(Nate): change  above to_tirmesh_scene and create a function for the zrange enumeration
     def to_trimesh_dict(self, layer_to_zrange: Dict[str, Tuple[float, float]],
                    layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad'):
         meshes = {}

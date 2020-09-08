@@ -248,7 +248,8 @@ class Pattern:
             nd.put_stub()
         return cell
 
-    def metal_contact(self, metal_layers: Tuple[str, ...], via_sizes: Tuple[float, ...] = (0.4, 0.4)):
+    def metal_contact(self, metal_layers: Tuple[str, ...],
+                      via_sizes: Tuple[float, ...] = (0.4, 0.4, 3.6)):
         patterns = []
         for i, metal_layer in enumerate(metal_layers):
             if i % 2 == 0:
@@ -256,6 +257,9 @@ class Pattern:
             else:
                 pattern = copy(self)
             patterns.append((pattern.center_align(self), metal_layer))
+
+
+
         return [(pattern, metal_layer) for pattern, metal_layer in patterns]
 
     def dope(self, dope_stack: Tuple[str, ...], level: int = 1, dope_grow: float = 0.25):
