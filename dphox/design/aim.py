@@ -151,7 +151,11 @@ class AIMNazca:
             interpad_distance_y = top_anchor.pin['c2'].y - bottom_anchor.pin['c2'].y + 2
             m1_radius = (top_anchor.bbox[3] - top_anchor.pin['c1'].y) + 4
             self.m1_ic.bend(m1_radius, 90).put(top_anchor.pin['c1'].x, top_anchor.pin['c1'].y, 90)
+            v1 = nd.cp.get_xya()
             self.m1_ic.strt(interpad_distance_x - m1_radius * 2).put()
+            v2 = nd.cp.get_xya()
+            self.v1_via_array_4.put(v1)
+            self.v1_via_array_4.put(v2)
             self.m1_ic.bend(m1_radius, 90).put()
             self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c1'].x, bottom_anchor.pin['c1'].y - 1, 90)
             self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c2'].x, bottom_anchor.pin['c2'].y - 1, 90)
@@ -160,8 +164,7 @@ class AIMNazca:
 
     def gnd_wg(self, waveguide_w: float = 0.48, length: float = 20, gnd_contact_dim: Optional[Dim2] = (5, 5),
                rib_brim_w: float = 1.5, gnd_connector_dim: Optional[Dim2] = (1, 4), shift: Optional[Dim2] = (0, 0),
-               flip: bool = False, dope_grow: float = 0.25,
-               name='gnd_wg') -> nd.Cell:
+               flip: bool = False, dope_grow: float = 0.25, name='gnd_wg') -> nd.Cell:
         c = GndWaveguide(waveguide_w=waveguide_w, length=length, gnd_contact_dim=gnd_contact_dim,
                          rib_brim_w=rib_brim_w, gnd_connector_dim=gnd_connector_dim, shift=shift, flip=flip)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am')) for pad in c.pads], [])
@@ -555,26 +558,23 @@ class AIMNazca:
             for idx in range(n_taps):
                 tap = self.pdk_cells['cl_band_1p_tap_si'].put()
                 self.waveguide_ic.bend(radius, -90).put(tap.pin['a1'])
-                # self.waveguide_ic.sbend(radius, offset=(inter_tap_gap - 40) / 2).put()
-                # self.waveguide_ic.strt(2 * radius).put()
                 nd.Pin(f'a{2 * idx}').put()
-                # self.waveguide_ic.bend(radius, 180).put(tap.pin['b1'])
                 self.waveguide_ic.bend(radius, 90).put(tap.pin['b1'])
-                # self.waveguide_ic.sbend(radius, offset=(inter_tap_gap - 40) / 2).put()
                 nd.Pin(f'a{2 * idx + 1}').put()
-                self.waveguide_ic.strt(0 if idx == n_taps - 1 else inter_tap_gap).put(tap.pin['b0'])
+                self.waveguide_ic.strt(inter_tap_gap / 2 if idx == n_taps - 1 else inter_tap_gap).put(tap.pin['b0'])
             self.waveguide_ic.bend(radius, 90).put()
             self.waveguide_ic.strt(inter_wg_dist).put()
             self.waveguide_ic.bend(radius, 90).put()
-            out = self.waveguide_ic.strt(n_taps * (inter_tap_gap + 40) - inter_tap_gap).put()
+            out = self.waveguide_ic.strt(n_taps * (inter_tap_gap + 40) - inter_tap_gap / 2).put()
             nd.Pin('out').put(out.pin['b0'])
             nd.put_stub()
         return tap_line
 
     def dice_box(self, dim: Dim2 = (100, 2000), bottom_left_corner: Dim2 = (0, 0)):
         with nd.Cell(name=f'dice_box_{dim[0]}_{dim[1]}') as dice_box:
-            nd.Polygon(nd.geom.box(*dim), layer=AIM_STACK['layers']['diam']).put(bottom_left_corner[0],
-                                                                                 bottom_left_corner[1] + dim[1] / 2)
+            nd.Polygon(nd.geom.box(*dim),
+                       layer=AIM_STACK['layers']['diam']).put(bottom_left_corner[0],
+                                                              bottom_left_corner[1] + dim[1] / 2)
         return dice_box
 
     def drop_port_array(self, n: Union[int, List[int]], waveguide_w: float, period: float, final_taper_width: float):
