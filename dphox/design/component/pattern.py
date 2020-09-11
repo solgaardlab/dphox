@@ -195,14 +195,7 @@ class Pattern:
             returned_object = self.pattern.symmetric_difference(other_pattern.pattern)
         else:
             raise ValueError (" Not a valid boolean operation: Must be 'intersection', 'difference', 'union', or 'symmetric_difference' ")
-        return(self.pattern_recover(returned_object))
-
-    def pattern_recover(self, returned_object):
-        if isinstance(returned_object, Polygon):
-            collection = MultiPolygon(polygons=[returned_object])
-        else:
-            collection = MultiPolygon([g for g in returned_object.geoms if isinstance(g,Polygon)])
-        return(Pattern(collection))
+        return(pattern_recover(returned_object))
 
     def to_gds(self, cell: gy.Cell):
         """
@@ -311,6 +304,14 @@ class GroupedPattern(Pattern):
         return np.vstack(output_ports) if len(output_ports) > 0 else np.asarray([])
 
 # TODO(nate): find a better place for these functions
+
+def pattern_recover(returned_object):
+        if isinstance(returned_object, Polygon):
+            collection = MultiPolygon(polygons=[returned_object])
+        else:
+            collection = MultiPolygon([g for g in returned_object.geoms if isinstance(g,Polygon)])
+        return(Pattern(collection))
+
 def get_cubic_taper(change_w):
     return (0, 0, 3 * change_w, -2 * change_w)
 
