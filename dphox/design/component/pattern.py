@@ -184,6 +184,26 @@ class Pattern:
         self.polys = new_polys
         return self
 
+    def boolean_operation(self, other_pattern, operation):
+        if operation == 'intersection':
+            returned_object = self.pattern.intersection(other_pattern.pattern)
+        elif operation == 'difference':
+            returned_object = self.pattern.difference(other_pattern.pattern)
+        elif operation == 'union':
+            returned_object = self.pattern.union(other_pattern.pattern)
+        elif operation == 'symmetric_difference':
+            returned_object = self.pattern.symmetric_difference(other_pattern.pattern)
+        else:
+            raise ValueError (" Not a valid boolean operation: Must be 'intersection', 'difference', 'union', or 'symmetric_difference' ")
+        return(self.pattern_recover(returned_object))
+
+    def pattern_recover(self, returned_object):
+        if isinstance(returned_object, Polygon):
+            collection = MultiPolygon(polygons=[returned_object])
+        else:
+            collection = MultiPolygon([g for g in returned_object.geoms if isinstance(g,Polygon)])
+        return(Pattern(collection))
+
     def to_gds(self, cell: gy.Cell):
         """
 
