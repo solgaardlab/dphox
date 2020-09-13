@@ -11,7 +11,7 @@ except ImportError:
 
 
 class Box(Pattern):
-    def __init__(self, box_dim: Dim2, shift: Dim2 = (0, 0)):
+    def __init__(self, box_dim: Dim2):
         self.box_dim = box_dim
         super(Box, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2))
 
@@ -35,7 +35,6 @@ class DC(Pattern):
             interaction_l: interaction length
             coupler_boundary_taper_ls: coupler boundary tapers length
             coupler_boundary_taper: coupler boundary taper params
-            end_l: end length before and after the bends
             end_bend_dim: If specified, places an additional end bend (see DC)
             use_radius: use radius to define bends
         """
@@ -77,8 +76,8 @@ class DC(Pattern):
         self.lower_path, self.upper_path = Pattern(lower_path), Pattern(upper_path)
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['a1'] = Port(0, interport_distance, -np.pi)
-        self.port['b0'] = Port(self.size[0], 0, -np.pi)
-        self.port['b1'] = Port(self.size[0], interport_distance, -np.pi)
+        self.port['b0'] = Port(self.size[0], 0)
+        self.port['b1'] = Port(self.size[0], interport_distance)
 
     @property
     def interaction_points(self) -> np.ndarray:
@@ -114,14 +113,14 @@ class MZI(Pattern):
             interport_distance += 2 * self.end_bend_dim[1]
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['a1'] = Port(0, interport_distance, -np.pi)
-        self.port['b0'] = Port(self.size[0], 0, -np.pi)
-        self.port['b1'] = Port(self.size[0], interport_distance, -np.pi)
+        self.port['b0'] = Port(self.size[0], 0)
+        self.port['b1'] = Port(self.size[0], interport_distance)
 
 
 class MMI(Pattern):
     def __init__(self, box_dim: Dim2, waveguide_w: float, interport_distance: float,
                  taper_dim: Dim2, end_l: float = 0, bend_dim: Optional[Tuple[float, float]] = None,
-                 use_radius: bool = False, shift: Dim2 = (0, 0)):
+                 use_radius: bool = False):
         self.end_l = end_l
         self.waveguide_w = waveguide_w
         self.box_dim = box_dim
@@ -151,8 +150,8 @@ class MMI(Pattern):
         bend_y = 2 * self.bend_dim[1] if self.bend_dim else 0
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['a1'] = Port(0, self.interport_distance + bend_y, -np.pi)
-        self.port['b0'] = Port(self.size[0], 0, -np.pi)
-        self.port['b1'] = Port(self.size[0], self.interport_distance + bend_y, -np.pi)
+        self.port['b0'] = Port(self.size[0], 0)
+        self.port['b1'] = Port(self.size[0], self.interport_distance + bend_y)
 
 
 class GratingPad(Pattern):
@@ -263,7 +262,7 @@ class Interposer(Pattern):
         self.init_pos = init_pos
         self.final_pos = final_pos
         for idx in range(n):
-            self.port[f'a{idx}'] = Port(*init_pos[idx], np.pi)
+            self.port[f'a{idx}'] = Port(*init_pos[idx], -np.pi)
             self.port[f'b{idx}'] = Port(*final_pos[idx])
 
 
@@ -273,20 +272,19 @@ class Waveguide(Pattern):
                  slot_dim: Optional[Dim2] = None, slot_taper_ls: Tuple[float, ...] = 0,
                  slot_taper_params: Tuple[Tuple[float, ...]] = None,
                  num_taper_evaluations: int = 100, symmetric: bool = True, rotate_angle: float = None):
-
         """Waveguide class
         Args:
             waveguide_w: waveguide width at the input of the waveguide path
             length: total length of the waveguide
             taper_ls: a tuple of lengths for tapers starting from the left
-            taper_params:
-
-            symmetric: a temporary toggling variable to turn off the symmetric nature of the waveguide class.
-
-            .
-            .
-            .
-            """
+            taper_params: a tuple of taper params successively :code:`Path.polynomial_taper`
+            symmetric: a toggling variable to turn off the symmetric nature of the waveguide class.
+            slot_dim: initial slot length and width
+            slot_taper_ls: slot taper lengths (in style of waveguide class)
+            slot_taper_params: slot taper parameters
+            num_taper_evaluations: number of taper evaluations
+            symmetric: symmetric
+        """
         self.length = length
         self.waveguide_w = waveguide_w
         self.taper_ls = taper_ls
@@ -333,14 +331,18 @@ class Waveguide(Pattern):
                 super(Waveguide, self).__init__(pattern)
         else:
             super(Waveguide, self).__init__(p)
-        self.port['a0'] = Port(0, 0, np.pi)
+        self.port['a0'] = Port(0, 0, -np.pi)
         self.port['b0'] = Port(self.size[0], 0)
 
 
-class AlignmentMark(Pattern):
-    def __init__(self, waveguide_w: float, length: float, layer: int = 0):
-        self.length = length
-        self.waveguide_w = waveguide_w
-        p = Path(waveguide_w, (0, 0)).segment(length, "+y", layer=layer)
-        q = Path(waveguide_w, (-length/2, length/2)).segment(length, "+x", layer=layer)
-        super(AlignmentMark, self).__init__(p, q)
+class AlignmentCross(Pattern):
+    def __init__(self, line_dim: Dim2):
+        """Alignment cross
+
+        Args:
+            line_dim: line dimension (length, thickness)
+        """
+        self.line_dim = line_dim
+        p = Path(line_dim[1], (0, 0)).segment(line_dim[0], "+y")
+        q = Path(line_dim[1], (-line_dim[0] / 2, line_dim[0] / 2)).segment(line_dim[0], "+x")
+        super(AlignmentCross, self).__init__(p, q)
