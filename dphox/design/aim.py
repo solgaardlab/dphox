@@ -140,9 +140,9 @@ class AIMNazca:
         has_c1 = 'c1' in top_anchor.pin
         m2_radius = (top_anchor.pin['c0'].y - bottom_anchor.pin['c0'].y) / 2
         self.m2_ic.strt(length / 2 + extra_length * has_c1).put(top_anchor.pin['c0'])
-        self.m2_ic.bend(m2_radius, -180).put()
+        self.m2_ic.bend(m2_radius, 180).put()
         self.m2_ic.strt(length + 2 * extra_length * has_c1).put()
-        self.m2_ic.bend(m2_radius, -180).put()
+        self.m2_ic.bend(m2_radius, 180).put()
         self.m2_ic.strt(length / 2 + extra_length * has_c1).put()
         if has_c1:
             interpad_distance_x = top_anchor.pin['c1'].x - top_anchor.pin['c2'].x
@@ -283,8 +283,8 @@ class AIMNazca:
         device = Multilayer([(c, 'seam')])
         return device.nazca_cell('waveguide')
 
-    def alignment_mark(self, length: float, waveguide_w: float = 0.48):
-        c = AlignmentMark(length, waveguide_w)
+    def alignment_mark(self, dim: Dim2 = (100, 10)):
+        c = AlignmentCross(dim)
         device = Multilayer([(c, 'm1am')])
         return device.nazca_cell('alignment_mark')
 
@@ -309,7 +309,7 @@ class AIMNazca:
         else:
             return device.nazca_cell(f'interposer_{n}_{period}_{final_period}_{radius}')
 
-    def bond_pad_array(self, n_pads: Shape2 = (70, 3), pitch: Union[float, Dim2] = 100,
+    def bond_pad_array(self, n_pads: Shape2, pitch: Union[float, Dim2] = 100,
                        pad_dim: Dim2 = (40, 40), labels: Optional[np.ndarray] = None,
                        use_labels: bool = True, stagger_x_frac: float = 0, use_ml_only: bool = False):
         pad_w, pad_l = pad_dim

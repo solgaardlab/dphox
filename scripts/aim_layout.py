@@ -14,26 +14,24 @@ chip = AIMNazca(
 )
 
 
-def get_bend_dim_from_interport_w(interport_w, gap_w, waveguide_w=0.48):
-    return interport_w / 2 - gap_w / 2 - waveguide_w / 2
-
-# number of pads
-n_pads = (344, 12)
-
-# component parameters
+# component params
+n_pads_eu = (344, 12)
+n_pads_bp = (70, 3)
+n_test = 17
 dc_radius = 15
 pdk_dc_radius = 25
 sep = 30
 gnd_length = 15
 
 # testing params
+waveguide_w = 0.48
 test_interport_w = 50
 test_gap_w = 0.3
-test_bend_dim = get_bend_dim_from_interport_w(test_interport_w, test_gap_w)
+test_bend_dim = test_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
 test_tdc_interport_w = 50
 test_tdc_interaction_l = 100
 pull_in_phaseshift_l = 50
-test_tdc_bend_dim = get_bend_dim_from_interport_w(test_tdc_interport_w, test_gap_w)
+test_tdc_bend_dim = test_tdc_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
 
 mesh_interport_w = 50
 mesh_phaseshift_l = 100
@@ -52,7 +50,7 @@ tdc_anchor = chip.nems_anchor(shuttle_dim=(test_tdc_interaction_l, 5),
 tdc = chip.nems_tdc(anchor=tdc_anchor)
 ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap, sep))
 ps_no_anchor = chip.nems_ps()
-alignment_mark = chip.alignment_mark(100, 48)
+alignment_mark = chip.alignment_mark()
 gnd_wg = chip.gnd_wg()
 
 # Mesh generation
@@ -78,10 +76,10 @@ interposer = chip.interposer(
     self_coupling_extension_dim=(30, 200),
     with_gratings=True, horiz_dist=200, num_trombones=2
 )
-# pp_array = chip.bond_pad_array((1, 3), pitch=600, pad_dim=(60, 520), use_labels=False, use_ml_only=True)
-bp_array = chip.bond_pad_array(stagger_x_frac=0.4)
-bp_array_testing = chip.bond_pad_array((2, 17))
-eu_array = chip.eutectic_array(n_pads)
+
+bp_array = chip.bond_pad_array(n_pads_bp, stagger_x_frac=0.4)
+bp_array_testing = chip.bond_pad_array((2, n_test))
+eu_array = chip.eutectic_array(n_pads_eu)
 autoroute_4 = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=0, connector_y=20,
                                   final_period=18.5, width=4)
 autoroute_4_extended = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=9, connector_y=28,
@@ -134,8 +132,7 @@ def pull_in_dict(phaseshift_l: float = 100, taper_change: float = None, taper_le
 
 def taper_dict_tdc(taper_change: float, taper_length: float):
     return dict(
-        dc_taper_ls=(taper_length,), dc_taper=(cubic_taper(taper_change),),
-        beam_taper=(cubic_taper(taper_change),)
+        dc_taper_ls=(taper_length,), dc_taper=(cubic_taper(taper_change),), beam_taper=(cubic_taper(taper_change),)
     )
 
 
@@ -226,9 +223,9 @@ pull_in_taper_tdc = [
 # Motivation: attempt pull-in phase shifter idea with modifying fin width / phase shift per unit length
 pull_in_fin_tdc = [chip.nems_tdc(anchor=tdc_anchor, nanofin_w=nanofin_w) for nanofin_w in (0.1, 0.2)]
 
-N_TEST = 17
-testing_tap_line = chip.tap_line(N_TEST)
-testing_tap_line_tdc = chip.tap_line(N_TEST, inter_wg_dist=200)
+# testing tap lines
+testing_tap_line = chip.tap_line(n_test)
+testing_tap_line_tdc = chip.tap_line(n_test, inter_wg_dist=200)
 
 ps_columns = [
     pull_apart_gap + pull_apart_taper + pull_apart_fin,
@@ -242,7 +239,7 @@ tdc_columns = [
 
 gridsearches = []
 
-# Number of test structures in each tap line, comment this out when not needed (when all are N_TEST)
+# Number of test structures in each tap line, comment this out when not needed (when all are n_test)
 gridsearch_ls = [len(ps_columns[0]), len(ps_columns[1]), len(tdc_columns[0]), len(tdc_columns[1])] * 2
 
 
@@ -295,11 +292,11 @@ chiplet_divider = chip.dice_box((100, 2000))
 # test pad
 with nd.Cell('gnd_pad') as gnd_pad:
     chip.ml_ic.strt(width=1716, length=60).put()
-    chip.va_via.put(50, -813, array=[1, [1, 0], N_TEST, [0, 100]])
+    chip.va_via.put(50, -813, array=[1, [1, 0], n_test, [0, 100]])
 
 with nd.Cell('test_pad') as test_pad:
     chip.ml_ic.strt(width=1716, length=60).put()
-    chip.va_via.put(50, -778, array=[1, [1, 0], N_TEST, [0, 100]])
+    chip.va_via.put(50, -778, array=[1, [1, 0], n_test, [0, 100]])
 
 # Chip construction
 
@@ -322,7 +319,7 @@ with nd.Cell('aim') as aim:
     eu_array_thermal = eu_array.put(-180, 1538, flip=True)
 
     # all ranges are [inclusive, exclusive) as is convention in python range() method
-    # add more in case test structures are added in between the meshes
+    # add more when test structures are added in between the meshes
     eu_bp_port_ranges_m1 = [(0, 2), (5, 7), (15, 17), (20, 25),
                             (28, 30), (38, 40), (43, 48),
                             (50, 53), (61, 64),
@@ -376,7 +373,7 @@ with nd.Cell('aim') as aim:
 
         for pin_nems, pin_thermal in zip(reversed([a2_nems_left.pin[f'p{n}'] for n in range(7)]),
                                          reversed([a2_thermal_left.pin[f'p{n}'] for n in range(7)])):
-            if pin_num < n_pads[0]:
+            if pin_num < n_pads_eu[0]:
                 chip.m2_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
                 chip.m2_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8,
                                               width=8).put()
@@ -384,7 +381,7 @@ with nd.Cell('aim') as aim:
         for i, pins in enumerate(zip(reversed([a1_nems_left.pin[f'p{n}'] for n in range(7)]),
                                      reversed([a1_thermal_left.pin[f'p{n}'] for n in range(7)]))):
             pin_nems, pin_thermal = pins
-            if pin_num < n_pads[0]:
+            if pin_num < n_pads_eu[0]:
                 chip.m1_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
                 chip.v1_via_array_4.put(pin_nems)
                 chip.m1_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8, width=8).put()
@@ -398,7 +395,7 @@ with nd.Cell('aim') as aim:
         for i, pins in enumerate(zip([a1_nems_right.pin[f'p{n}'] for n in range(7)],
                                      [a1_thermal_right.pin[f'p{n}'] for n in range(7)])):
             pin_nems, pin_thermal = pins
-            if pin_num < n_pads[0]:
+            if pin_num < n_pads_eu[0]:
                 chip.m1_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
                 chip.v1_via_array_4.put(pin_nems)
                 chip.m1_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8, width=8).put()
@@ -407,14 +404,14 @@ with nd.Cell('aim') as aim:
         pin_num += 1
         for pin_nems, pin_thermal in zip([a2_nems_right.pin[f'p{n}'] for n in range(7)],
                                          [a2_thermal_right.pin[f'p{n}'] for n in range(7)]):
-            if pin_num < n_pads[0]:
+            if pin_num < n_pads_eu[0]:
                 chip.m2_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
                 chip.m2_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8,
                                               width=8).put()
             pin_num += 1
         pin_num += 1
 
-    # place test gridsearches down at locations corresponding to non-overlapping
+    # place test gridsearches down at non-overlapping locations
     gridsearch_x = [8300, 8700, 9000, 9300, 9700, 10100, 10400, 10700]
     detector_x = []
     gridsearches = gridsearches + gridsearches  # TODO: change this once all 8 columns are added
@@ -429,11 +426,10 @@ with nd.Cell('aim') as aim:
     chiplet_divider.put(7540, -127)
 
     # put bond pad arrays on the left and right of the testing area
-
     bp_array_left = bp_array_testing.put(7780, 212)
     bp_array_right = bp_array_testing.put(12000 + input_interposer.bbox[0] - 232, 212)
 
-    for i in range(min(gridsearch_ls)):  # change this to N_TEST when all structures are filled in each column
+    for i in range(min(gridsearch_ls)):  # change this to n_test when all structures are filled in each column
         # detector wire connections
         chip.m2_ic.bend(26, -90).put(bp_array_left.pin[f'u{0},{i}'])
         p = chip.m2_ic.strt(3000 - 6).put()
