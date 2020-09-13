@@ -270,13 +270,10 @@ class Pattern:
             else:
                 pattern = copy(self)
             patterns.append((pattern.center_align(self), metal_layer))
-
-
-
         return [(pattern, metal_layer) for pattern, metal_layer in patterns]
 
-    def dope(self, dope_stack: Tuple[str, ...], level: int = 1, dope_grow: float = 0.25):
-        return copy(self).grow(dope_grow), dope_stack[level]
+    def dope(self, dope_layer: str, dope_grow: float = 0.1):
+        return copy(self).grow(dope_grow), dope_layer
 
     def clearout_box(self, clearout_layer: str, clearout_etch_stop_layer: str,
                      dim: Tuple[float, float], clearout_etch_stop_grow: float = 0.5,

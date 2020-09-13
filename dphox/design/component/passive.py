@@ -1,10 +1,8 @@
 from ...typing import *
-from .pattern import Pattern, Path, get_cubic_taper, GroupedPattern
+from .pattern import Pattern, Path, GroupedPattern
 
 from copy import deepcopy as copy
-from shapely.ops import polygonize
 from shapely.geometry import MultiPolygon
-from .multilayer import Multilayer
 
 try:
     import plotly.graph_objects as go
@@ -16,6 +14,11 @@ class Box(Pattern):
     def __init__(self, box_dim: Dim2, shift: Dim2 = (0, 0)):
         self.box_dim = box_dim
         super(Box, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2), shift=shift)
+
+    def expand(self, grow: float):
+        big_box_dim = (self.box_dim[0] + grow, self.box_dim[1] + grow)
+        return Pattern(Path(big_box_dim[1]).segment(big_box_dim[0]).translate(dx=0,
+                                                                              dy=big_box_dim[1] / 2)).center_align(self)
 
 
 class DC(Pattern):

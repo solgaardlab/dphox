@@ -61,21 +61,20 @@ class AIMNazca:
     def nems_tdc(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
                  interaction_l: float = 100, dc_gap_w: float = 0.2, beam_gap_w: float = 0.15,
                  bend_dim: Dim2 = (10, 24.66), pad_dim: Dim3 = (5, 5, 30), anchor: nd.Cell = None,
-                 middle_fin_dim=None, use_radius: bool = True,
-                 clearout_box_dim: Dim2 = (100, 2.5), dc_taper_ls: Tuple[float, ...] = None,
-                 dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5, dope_grow: float = 0.25,
+                 use_radius: bool = True, clearout_box_dim: Dim2 = (100, 2.5), dc_taper_ls: Tuple[float, ...] = None,
+                 dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5,
+                 dope_grow: float = 0.25, dope_expand: float = 0.1,
                  diff_ps: Optional[nd.Cell] = None, name: str = 'nems_tdc') -> nd.Cell:
         # TODO(Nate): Use pad_dim which is a dead param to define ground connector
         c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
                            interaction_l=interaction_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
-                           bend_dim=bend_dim, pad_dim=pad_dim,
-                           middle_fin_dim=middle_fin_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
+                           bend_dim=bend_dim, pad_dim=pad_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
                            dc_taper=dc_taper, beam_taper=beam_taper)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
         clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='snam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
-        dopes = (list(zip([p.grow(dope_grow) for p in c.dope_patterns], ('pppam',))))
+        dopes = (list(zip([p.expand(dope_expand).grow(dope_grow) for p in c.pads], ('pppam',))))
         device = Multilayer([(c, 'seam')] + pad_to_layer + clearout + ridge_etch + dopes)
         if anchor is None:
             cell = device.nazca_cell(name)
@@ -193,11 +192,12 @@ class AIMNazca:
             nd.put_stub()
         return autoroute_turn
 
-    def nems_anchor(self, fin_spring_dim: Dim2 = (100, 0.15), connector_dim: Dim2 = (50, 2),
+    def nems_anchor(self, fin_spring_dim: Dim2 = (100, 0.15), shuttle_dim: Dim2 = (50, 2),
                     top_spring_dim: Dim2 = None, straight_connector: Optional[Dim2] = (0.25, 1),
                     loop_connector: Optional[Dim3] = (50, 0.5, 0.15), pos_electrode_dim: Optional[Dim3] = (90, 4, 2),
-                    neg_electrode_dim: Optional[Dim2] = (3, 5), dope_grow: float = 0.25, name: str = 'nems_anchor'):
-        c = NemsAnchor(fin_spring_dim=fin_spring_dim, connector_dim=connector_dim,
+                    neg_electrode_dim: Optional[Dim2] = (3, 5), dope_expand: float = 0.25,
+                    dope_grow: float = 0.1, name: str = 'nems_anchor'):
+        c = NemsAnchor(fin_spring_dim=fin_spring_dim, shuttle_dim=shuttle_dim,
                        top_spring_dim=top_spring_dim, straight_connector=straight_connector,
                        loop_connector=loop_connector, pos_electrode_dim=pos_electrode_dim,
                        neg_electrode_dim=neg_electrode_dim,
@@ -208,12 +208,12 @@ class AIMNazca:
                 raise ValueError('must specify neg_electrode_dim if pos_electrode_dim specified but got None')
             pads.extend(sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads[:1]], []))
             pads.extend(sum([pad.metal_contact(('cbam', 'm1am')) for pad in c.pads[1:]], []))
-            dopes.extend(
-                list(zip([p.grow(dope_grow) for p in c.dope_patterns], ('pdam', 'pppam', 'pdam', 'pdam', 'pppam'))))
+            dopes.extend([p.expand(dope_expand).dope('pppam', dope_grow) for p in c.pads])
+            dopes.extend([p.expand(dope_expand).dope('pdam', dope_grow) for p in c.springs])
+            dopes.append(c.shuttle.expand(dope_expand).dope('pdam', dope_grow))
         else:
-            pads.extend(
-                sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.dope_patterns[:1]], []))
-            dopes.extend(list(zip([p.grow(dope_grow) for p in c.dope_patterns], ('pppam', 'pppam'))))
+            pads.extend(c.shuttle.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')))
+            dopes.extend([p.expand(dope_expand).dope('pppam', dope_grow) for p in c.pads])
         device = Multilayer([(c, 'seam')] + pads + dopes)
         return device.nazca_cell(name)
 
@@ -322,9 +322,9 @@ class AIMNazca:
                     pad = self.ml_ic.strt(length=pad_l, width=pad_w).put(x_loc, j * pitch[1], 270)
                     if not use_ml_only:
                         self.m2_ic.strt(-6, width=8).put()
-                        self.va_ic.strt(5.1).put(nd.cp.x(), nd.cp.y(), 90)
+                        self.va_via.put(nd.cp.x(), nd.cp.y(), 90)
                         self.m2_ic.strt(6, width=8).put(x_loc, j * pitch[1], 270)
-                        self.va_ic.strt(5.1).put()
+                        self.va_via.put()
                     nd.Pin(f'u{i},{j}').put(pad.pin['a0'])
                     nd.Pin(f'd{i},{j}').put(pad.pin['b0'])
                     if use_labels:

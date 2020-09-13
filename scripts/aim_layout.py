@@ -13,25 +13,9 @@ chip = AIMNazca(
     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
 )
 
-##### Nate: New device/active class #####
-gnd_wg = chip.gnd_wg()
-
-
-########################################
-
 
 def get_bend_dim_from_interport_w(interport_w, gap_w, waveguide_w=0.48):
     return interport_w / 2 - gap_w / 2 - waveguide_w / 2
-
-
-def is_adiabatic(taper_params, init_width: float = 0.48, wavelength: float = 1.55, neff: float = 2.75,
-                 num_points: int = 100, taper_l: float = 5):
-    taper_params = np.asarray(taper_params)
-    u = np.linspace(0, 1 + 1 / num_points, num_points)[:, np.newaxis]
-    width = init_width + np.sum(taper_params * u ** np.arange(taper_params.size, dtype=float), axis=1)
-    theta = np.arctan(np.diff(width) / taper_l * num_points)
-    max_pt = np.argmax(theta)
-    return theta[max_pt], wavelength / (2 * width[max_pt] * neff)
 
 
 dc_radius = 15
@@ -58,14 +42,15 @@ dc = chip.custom_dc(bend_dim=(dc_radius, test_bend_dim))[0]
 mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
 tap = chip.bidirectional_tap(10, mesh_bend=True)
 pull_apart_anchor = chip.nems_anchor()
-pull_in_anchor = chip.nems_anchor(connector_dim=(40, 5), fin_spring_dim=(50, 0.15),
+pull_in_anchor = chip.nems_anchor(shuttle_dim=(40, 5), fin_spring_dim=(50, 0.15),
                                   pos_electrode_dim=None, neg_electrode_dim=None)
-tdc_anchor = chip.nems_anchor(connector_dim=(test_tdc_interaction_l, 5),
+tdc_anchor = chip.nems_anchor(shuttle_dim=(test_tdc_interaction_l, 5),
                               pos_electrode_dim=None, neg_electrode_dim=None)
 tdc = chip.nems_tdc(anchor=tdc_anchor)
 ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap, sep))
 ps_no_anchor = chip.nems_ps()
 alignment_mark = chip.alignment_mark(100, 48)
+gnd_wg = chip.gnd_wg()
 
 # Mesh generation
 
@@ -426,7 +411,6 @@ with nd.Cell('aim') as aim:
                                               width=8).put()
             pin_num += 1
         pin_num += 1
-
 
     # place test gridsearches down at locations corresponding to non-overlapping
     gridsearch_x = [8300, 8700, 9000, 9300, 9700, 10100, 10400, 10700]

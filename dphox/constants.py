@@ -163,8 +163,8 @@ AIM_STACK = {
             },
             {
                 'layer': 'vaam',
-                'growx': -1.5,
-                'growy': -1.5
+                'growx': -0.75,
+                'growy': -0.75
             },
             {
                 'layer': 'm2am'

@@ -6,6 +6,7 @@ from shapely.geometry import Polygon, MultiPolygon
 from descartes import PolygonPatch
 import trimesh
 from trimesh import creation, visual
+from copy import deepcopy as copy
 
 try:
     import plotly.graph_objects as go
@@ -13,33 +14,35 @@ except ImportError:
     pass
 
 from ...typing import *
-from .pattern import Pattern, Path
+from .pattern import Pattern, GroupedPattern, Path
+from .passive import Box
 
 
 class Multilayer:
     def __init__(self, pattern_to_layer: List[Tuple[Union[Pattern, Path, gy.Polygon, gy.FlexPath, Polygon], Union[int, str]]]):
-        self.pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
-                                 for comp, layer in pattern_to_layer}
+        self.pattern_to_layer = pattern_to_layer
+        self._pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
+                                  for comp, layer in pattern_to_layer}
         self.layer_to_pattern = self._layer_to_pattern()
 
     @property
     def input_ports(self) -> np.ndarray:
-        all_input_ports = [c.input_ports for c in self.pattern_to_layer.keys() if c.input_ports.size > 0]
+        all_input_ports = [c.input_ports for c in self._pattern_to_layer.keys() if c.input_ports.size > 0]
         return np.vstack(all_input_ports) if len(all_input_ports) > 0 else np.asarray([])
 
     @property
     def output_ports(self) -> np.ndarray:
-        all_output_ports = [c.output_ports for c in self.pattern_to_layer.keys() if c.output_ports.size > 0]
+        all_output_ports = [c.output_ports for c in self._pattern_to_layer.keys() if c.output_ports.size > 0]
         return np.vstack(all_output_ports) if len(all_output_ports) > 0 else np.asarray([])
 
     @property
     def contact_ports(self) -> np.ndarray:
-        contact_ports = [c.contact_ports for c in self.pattern_to_layer.keys() if c.contact_ports.size > 0]
+        contact_ports = [c.contact_ports for c in self._pattern_to_layer.keys() if c.contact_ports.size > 0]
         return np.vstack(contact_ports) if len(contact_ports) > 0 else np.asarray([])
 
     @property
     def attachment_ports(self) -> np.ndarray:
-        attachment_ports = [c.attachment_ports for c in self.pattern_to_layer.keys() if c.attachment_ports.size > 0]
+        attachment_ports = [c.attachment_ports for c in self._pattern_to_layer.keys() if c.attachment_ports.size > 0]
         return np.vstack(attachment_ports) if len(attachment_ports) > 0 else np.asarray([])
 
     @property
@@ -48,14 +51,14 @@ class Multilayer:
 
     def gdspy_cell(self, cell_name: str = 'dummy') -> gy.Cell:
         cell = gy.Cell(cell_name, exclude_from_current=(cell_name == 'dummy'))
-        for pattern, layer in self.pattern_to_layer.items():
+        for pattern, layer in self._pattern_to_layer.items():
             for poly in pattern.polys:
                 cell.add(gy.Polygon(np.asarray(poly.exterior.coords.xy).T, layer=layer))
         return cell
 
     def nazca_cell(self, cell_name: str) -> nd.Cell:
         with nd.Cell(cell_name) as cell:
-            for pattern, layer in self.pattern_to_layer.items():
+            for pattern, layer in self._pattern_to_layer.items():
                 for poly in pattern.polys:
                     nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
             for idx, port in enumerate(self.input_ports):
@@ -71,11 +74,9 @@ class Multilayer:
 
     def _layer_to_pattern(self) -> Dict[Union[int, str], MultiPolygon]:
         layer_to_polys = defaultdict(list)
-        for component, layer in self.pattern_to_layer.items():
+        for component, layer in self._pattern_to_layer.items():
             layer_to_polys[layer].extend(component.polys)
         pattern_dict = {layer: MultiPolygon(polys) for layer, polys in layer_to_polys.items()}
-        # pattern_dict = {layer: (pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern]))
-        #                 for layer, pattern in pattern_dict.items()}
         return pattern_dict
 
     def plot(self, ax, layer_to_color: Dict[Union[int, str], Union[Dim3, str]], alpha: float = 0.5):
@@ -112,3 +113,33 @@ class Multilayer:
             mesh.visual.vertex_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
             meshes[layer] =(mesh)
         return meshes
+
+
+class Via(Multilayer):
+    def __init__(self, via_dim: Dim2, boundary_grow: float,
+                 top_metal: str, bot_metal: str, via: str,
+                 pitch: float = 0, shape: Optional[Shape2] = None):
+        self.via_dim = via_dim
+        self.boundary_grow = boundary_grow
+        self.top_metal = top_metal
+        self.bot_metal = bot_metal
+        self.via = via
+        self.pitch = pitch
+        self.shape = shape
+        self.config = self.__dict__
+
+        via_pattern = Box(via_dim)
+
+        if pitch > 0 and shape is not None:
+            patterns = []
+            x, y = np.meshgrid(np.arange(shape[0]) * pitch, np.arange(shape[1]) * pitch)
+            for x, y in zip(x.flatten(), y.flatten()):
+                patterns.append(copy(via_pattern).translate(x, y))
+            via_pattern = GroupedPattern(*patterns)
+
+        via_pattern = via_pattern.center_align((0, 0))
+        boundary = Box((via_pattern.size[0] + 2 * boundary_grow, via_pattern.size[1] + 2 * boundary_grow))
+        boundary.horz_align(0)
+        via_pattern.center_align(boundary)
+
+        super(Via, self).__init__([(via_pattern, via), (boundary, top_metal), (boundary, bot_metal)])
