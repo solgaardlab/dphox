@@ -3,7 +3,7 @@ import itertools
 import nazca as nd
 import numpy as np
 from dphox.design.aim import AIMNazca
-from dphox.design.component import get_cubic_taper
+from dphox.design.component import cubic_taper
 from datetime import date
 from tqdm import tqdm
 
@@ -17,7 +17,10 @@ chip = AIMNazca(
 def get_bend_dim_from_interport_w(interport_w, gap_w, waveguide_w=0.48):
     return interport_w / 2 - gap_w / 2 - waveguide_w / 2
 
+# number of pads
+n_pads = (344, 12)
 
+# component parameters
 dc_radius = 15
 pdk_dc_radius = 25
 sep = 30
@@ -78,7 +81,7 @@ interposer = chip.interposer(
 # pp_array = chip.bond_pad_array((1, 3), pitch=600, pad_dim=(60, 520), use_labels=False, use_ml_only=True)
 bp_array = chip.bond_pad_array(stagger_x_frac=0.4)
 bp_array_testing = chip.bond_pad_array((2, 17))
-eu_array = chip.eutectic_array()
+eu_array = chip.eutectic_array(n_pads)
 autoroute_4 = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=0, connector_y=20,
                                   final_period=18.5, width=4)
 autoroute_4_extended = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=9, connector_y=28,
@@ -103,14 +106,14 @@ def pull_apart_taper_dict(taper_change: float, taper_length: float):
         taper_ls=(2, 0.15, 0.2, 0.15, 2, taper_length),
         gap_taper=(
             (0.66 + 2 * 0.63,), (0, -1 * (.30 + 2 * 0.63),), (0,), (0, (.30 + 2 * 0.63),),
-            get_cubic_taper(-0.74 - 2 * 0.63), get_cubic_taper(taper_change)),
-        wg_taper=((0,), (0,), (0,), (0,), get_cubic_taper(-0.08),
-                  get_cubic_taper(taper_change)),
+            cubic_taper(-0.74 - 2 * 0.63), cubic_taper(taper_change)),
+        wg_taper=((0,), (0,), (0,), (0,), cubic_taper(-0.08),
+                  cubic_taper(taper_change)),
         boundary_taper=(
-            (0.66 + 2 * 0.63,), (0,), (0,), (0,), get_cubic_taper(-0.74 - 2 * 0.63), (0,)),
+            (0.66 + 2 * 0.63,), (0,), (0,), (0,), cubic_taper(-0.74 - 2 * 0.63), (0,)),
         rib_brim_taper=(
-            get_cubic_taper(2 * .66), (0,), (0,), (0,), get_cubic_taper(-0.74 * 2),
-            get_cubic_taper(taper_change))
+            cubic_taper(2 * .66), (0,), (0,), (0,), cubic_taper(-0.74 * 2),
+            cubic_taper(taper_change))
     )
 
 
@@ -124,15 +127,15 @@ def pull_in_dict(phaseshift_l: float = 100, taper_change: float = None, taper_le
     else:
         return dict(
             phaseshift_l=phaseshift_l, clearout_box_dim=(phaseshift_l - 10, 3),
-            taper_ls=(taper_length,), gap_taper=(get_cubic_taper(taper_change),),
-            wg_taper=(get_cubic_taper(taper_change),), boundary_taper=((0,),), rib_brim_taper=None
+            taper_ls=(taper_length,), gap_taper=(cubic_taper(taper_change),),
+            wg_taper=(cubic_taper(taper_change),), boundary_taper=((0,),), rib_brim_taper=None
         )
 
 
 def taper_dict_tdc(taper_change: float, taper_length: float):
     return dict(
-        dc_taper_ls=(taper_length,), dc_taper=(get_cubic_taper(taper_change),),
-        beam_taper=(get_cubic_taper(taper_change),)
+        dc_taper_ls=(taper_length,), dc_taper=(cubic_taper(taper_change),),
+        beam_taper=(cubic_taper(taper_change),)
     )
 
 
@@ -309,7 +312,6 @@ with nd.Cell('aim') as aim:
     mzi_node_thermal_detector.put(input_interposer.pin['a6'])
     mdc = mesh_dc.put(output_interposer.pin['a6'])
     mzi_node_nems_detector.put(input_interposer.pin['a7'], flip=True)
-    num_ports = 344
     alignment_mark.put(-500, 0)
     alignment_mark.put(-500 + 8400, 0)
 
@@ -374,7 +376,7 @@ with nd.Cell('aim') as aim:
 
         for pin_nems, pin_thermal in zip(reversed([a2_nems_left.pin[f'p{n}'] for n in range(7)]),
                                          reversed([a2_thermal_left.pin[f'p{n}'] for n in range(7)])):
-            if pin_num < num_ports:
+            if pin_num < n_pads[0]:
                 chip.m2_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
                 chip.m2_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8,
                                               width=8).put()
@@ -382,7 +384,7 @@ with nd.Cell('aim') as aim:
         for i, pins in enumerate(zip(reversed([a1_nems_left.pin[f'p{n}'] for n in range(7)]),
                                      reversed([a1_thermal_left.pin[f'p{n}'] for n in range(7)]))):
             pin_nems, pin_thermal = pins
-            if pin_num < num_ports:
+            if pin_num < n_pads[0]:
                 chip.m1_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
                 chip.v1_via_array_4.put(pin_nems)
                 chip.m1_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8, width=8).put()
@@ -396,7 +398,7 @@ with nd.Cell('aim') as aim:
         for i, pins in enumerate(zip([a1_nems_right.pin[f'p{n}'] for n in range(7)],
                                      [a1_thermal_right.pin[f'p{n}'] for n in range(7)])):
             pin_nems, pin_thermal = pins
-            if pin_num < num_ports:
+            if pin_num < n_pads[0]:
                 chip.m1_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
                 chip.v1_via_array_4.put(pin_nems)
                 chip.m1_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8, width=8).put()
@@ -405,7 +407,7 @@ with nd.Cell('aim') as aim:
         pin_num += 1
         for pin_nems, pin_thermal in zip([a2_nems_right.pin[f'p{n}'] for n in range(7)],
                                          [a2_thermal_right.pin[f'p{n}'] for n in range(7)]):
-            if pin_num < num_ports:
+            if pin_num < n_pads[0]:
                 chip.m2_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
                 chip.m2_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8,
                                               width=8).put()

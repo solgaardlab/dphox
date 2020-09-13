@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 import gdspy as gy
 import nazca as nd
@@ -103,10 +103,31 @@ class Path(gy.Path):
         return self.sbend((port[0] - self.x, port[1] - self.y))
 
 
+class Port:
+    def __init__(self, x: float, y: float, a: float = 0):
+        """Port used by dphox
+
+        Args:
+            x: x position of the port
+            y: y position of the port
+            a: angle (orientation) of the port (in radians)
+        """
+        self.x = x
+        self.y = y
+        self.a = a
+        self.xy = (x, y)
+        self.xya = (x, y, a)
+        self.xya_nazca = (x, y, a * 180 / np.pi)
+
+
 class Pattern:
-    def __init__(self, *polygons: Union[Path, gy.Polygon, gy.FlexPath, Polygon], shift: Dim2 = (0, 0),
-                 call_union: bool = True):
-        self.shift = shift
+    """Pattern or layer of material used in a GDS layout
+
+        Args:
+            *polygons: A list of polygons specified by the user
+            call_union: Do not call union
+    """
+    def __init__(self, *polygons: Union[Path, gy.Polygon, gy.FlexPath, Polygon], call_union: bool = True):
         self.config = copy(self.__dict__)
         self.polys = []
         for shape in polygons:
@@ -120,8 +141,7 @@ class Pattern:
                 self.polys.append(shape)
         self.call_union = call_union
         self.pattern = self._pattern()
-        if shift != (0, 0):
-            self.translate(shift[0], shift[1])
+        self.port: Dict[str, Port] = {}
 
     def _pattern(self) -> MultiPolygon:
         if not self.call_union:
@@ -130,52 +150,128 @@ class Pattern:
             pattern = cascaded_union(self.polys)
             return pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern])
 
-    def mask(self, shape: Shape, grid_spacing: GridSpacing):
+    def mask(self, shape: Shape, grid_spacing: GridSpacing) -> np.ndarray:
+        """Pixelized mask used for simulating this component
+
+        Args:
+            shape: Shape of the mask
+            grid_spacing: The grid spacing resolution to use for the pixellized mask
+
+        Returns:
+            An array of indicators of whether a volumetric image contains the mask
+
+        """
         x_, y_ = np.mgrid[0:grid_spacing[0] * shape[0]:grid_spacing[0], 0:grid_spacing[1] * shape[1]:grid_spacing[1]]
         return contains(self.pattern, x_, y_)
 
     @property
     def bounds(self) -> Dim4:
+        """Bounds of the pattern
+
+        Returns:
+            Tuple of the form :code:`(minx, miny, maxx, maxy)`
+
+        """
         return self.pattern.bounds
 
     @property
     def size(self) -> Dim2:
+        """Size of the pattern
+
+        Returns:
+            Tuple of the form :code:`(sizex, sizey)`
+
+        """
         b = self.bounds  # (minx, miny, maxx, maxy)
         return b[2] - b[0], b[3] - b[1]  # (maxx - minx, maxy - miny)
 
     @property
     def center(self) -> Dim2:
+        """
+
+        Returns:
+            Center for the component
+
+        """
         b = self.bounds  # (minx, miny, maxx, maxy)
         return (b[2] + b[0]) / 2, (b[3] + b[1]) / 2  # (avgx, avgy)
 
     def translate(self, dx: float = 0, dy: float = 0) -> "Pattern":
+        """Translate patter
+
+        Args:
+            dx: Displacement in x
+            dy: Displacement in y
+
+        Returns:
+            The translated pattern
+
+        """
         self.polys = [translate(path, dx, dy) for path in self.polys]
         self.pattern = self._pattern()
-        self.shift = (self.shift[0] + dx, self.shift[1] + dy)
-        self.config["shift"] = self.shift
         return self
 
-    def center_align(self, c: Union["Pattern", Tuple[float, float]]) -> "Pattern":
+    def align(self, c: Union["Pattern", Tuple[float, float]]) -> "Pattern":
+        """Align center of pattern
+
+        Args:
+            c: A pattern (align to the pattern's center) or a center point for alignment
+
+        Returns:
+            Aligned pattern
+
+        """
         old_x, old_y = self.center
         center = c if isinstance(c, tuple) else c.center
         self.translate(center[0] - old_x, center[1] - old_y)
         return self
 
-    def horz_align(self, c: Union["Pattern", float], left: bool = True, opposite: bool = False) -> "Pattern":
+    def halign(self, c: Union["Pattern", float], left: bool = True, opposite: bool = False) -> "Pattern":
+        """Horizontal alignment of pattern
+
+        Args:
+            c: A pattern (horizontal align to the pattern's boundary) or a center x for alignment
+            left: (if :code:`c` is pattern) Align to left boundary of component, otherwise right boundary
+            opposite: (if :code:`c` is pattern) Align opposite faces (left-right, right-left)
+
+        Returns:
+            Horizontally aligned pattern
+
+        """
         x = self.bounds[0] if left else self.bounds[2]
-        p = c[0] if isinstance(c, tuple) else (
-            c.bounds[0] if left and not opposite or opposite and not left else c.bounds[2])
+        p = (c.bounds[0] if left and not opposite or opposite and not left else c.bounds[2])\
+            if isinstance(c, Pattern) else c
         self.translate(dx=p - x)
         return self
 
-    def vert_align(self, c: Union["Pattern", float], bottom: bool = True, opposite: bool = False) -> "Pattern":
-        x = self.bounds[1] if bottom else self.bounds[3]
-        p = c[1] if isinstance(c, tuple) else (
-            c.bounds[1] if bottom and not opposite or opposite and not bottom else c.bounds[3])
-        self.translate(dy=p - x)
+    def valign(self, c: Union["Pattern", float], bottom: bool = True, opposite: bool = False) -> "Pattern":
+        """Vertical alignment of pattern
+
+        Args:
+            c: A pattern (vertical align to the pattern's boundary) or a center y for alignment
+            bottom: (if :code:`c` is pattern) Align to upper boundary of component, otherwise lower boundary
+            opposite: (if :code:`c` is pattern) Align opposite faces (upper-lower, lower-upper)
+
+        Returns:
+            Vertically aligned pattern
+
+        """
+        y = self.bounds[1] if bottom else self.bounds[3]
+        p = (c.bounds[1] if bottom and not opposite or opposite and not bottom else c.bounds[3])\
+            if isinstance(c, Pattern) else c
+        self.translate(dy=p - y)
         return self
 
-    def flip(self, horiz: bool = False):
+    def flip(self, horiz: bool = False) -> "Pattern":
+        """Flip the component across center
+
+        Args:
+            horiz: do horizontal flip, otherwise vertical flip
+
+        Returns:
+            Flipped pattern
+
+        """
         new_polys = []
         for poly in self.polys:
             points = np.asarray(poly.exterior.coords.xy)
@@ -183,6 +279,10 @@ class Pattern:
             new_polys.append(Polygon(new_points.T))
         self.polys = new_polys
         return self
+
+    @property
+    def copy(self) -> "Pattern":
+        return copy(self)
 
     def boolean_operation(self, other_pattern, operation):
         if operation == 'intersection':
@@ -194,8 +294,9 @@ class Pattern:
         elif operation == 'symmetric_difference':
             returned_object = self.pattern.symmetric_difference(other_pattern.pattern)
         else:
-            raise ValueError (" Not a valid boolean operation: Must be 'intersection', 'difference', 'union', or 'symmetric_difference' ")
-        return(pattern_recover(returned_object))
+            raise ValueError("Not a valid boolean operation: Must be 'intersection',"
+                             "'difference', 'union', or 'symmetric_difference' ")
+        return pattern_recover(returned_object)
 
     def to_gds(self, cell: gy.Cell):
         """
@@ -224,40 +325,16 @@ class Pattern:
         ax.set_ylim((b[1], b[3]))
         ax.set_aspect('equal')
 
-    @property
-    def input_ports(self) -> np.ndarray:
-        return np.asarray([])
-
-    @property
-    def output_ports(self) -> np.ndarray:
-        return np.asarray([])
-
-    @property
-    def contact_ports(self) -> np.ndarray:
-        return np.asarray([])
-
-    @property
-    def attachment_ports(self) -> np.ndarray:
-        return np.asarray([])
-
-    def grow(self, grow_d: float, subtract: bool = False, cap_style: int = CAP_STYLE.square) -> "Pattern":
-        rib_pattern = self.pattern.buffer(grow_d, cap_style=cap_style)
-        if subtract:
-            rib_pattern = rib_pattern - self.pattern
-        return Pattern(rib_pattern if isinstance(rib_pattern, MultiPolygon) else rib_pattern)
+    def offset(self, grow_d: float) -> "Pattern":
+        pattern = self.pattern.buffer(grow_d)
+        return Pattern(pattern if isinstance(pattern, MultiPolygon) else pattern)
 
     def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> nd.Cell:
         with nd.Cell(cell_name) as cell:
             for poly in self.polys:
                 nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
-            for idx, port in enumerate(self.input_ports):
-                nd.Pin(f'a{idx}').put(*port, 180)
-            for idx, port in enumerate(self.output_ports):
-                nd.Pin(f'b{idx}').put(*port)
-            for idx, port in enumerate(self.contact_ports):
-                nd.Pin(f'c{idx}').put(*port)
-            for idx, port in enumerate(self.attachment_ports):
-                nd.Pin(f't{idx}').put(*port)
+            for name, port in self.port.items():
+                nd.Pin(name).put(*port.xya_nazca)
             nd.put_stub()
         return cell
 
@@ -266,39 +343,31 @@ class Pattern:
         patterns = []
         for i, metal_layer in enumerate(metal_layers):
             if i % 2 == 0:
-                pattern = Pattern(Path(via_sizes[i // 2]).segment(via_sizes[i // 2])).center_align(self)
+                pattern = Pattern(Path(via_sizes[i // 2]).segment(via_sizes[i // 2])).align(self)
             else:
                 pattern = copy(self)
-            patterns.append((pattern.center_align(self), metal_layer))
+            patterns.append((pattern.align(self), metal_layer))
         return [(pattern, metal_layer) for pattern, metal_layer in patterns]
 
     def dope(self, dope_layer: str, dope_grow: float = 0.1):
-        return copy(self).grow(dope_grow), dope_layer
+        return copy(self).offset(dope_grow), dope_layer
 
     def clearout_box(self, clearout_layer: str, clearout_etch_stop_layer: str,
                      dim: Tuple[float, float], clearout_etch_stop_grow: float = 0.5,
                      center: Tuple[float, float] = None):
         center = center if center is not None else self.center
-        box = Pattern(Path(dim[1]).segment(dim[0]).translate(dx=0, dy=dim[1] / 2)).center_align(center)
-        box_grow = box.grow(clearout_etch_stop_grow)
+        box = Pattern(Path(dim[1]).segment(dim[0]).translate(dx=0, dy=dim[1] / 2)).align(center)
+        box_grow = box.offset(clearout_etch_stop_grow)
         return [(box, clearout_layer), (box_grow, clearout_etch_stop_layer)]
 
 
 class GroupedPattern(Pattern):
-    def __init__(self, *patterns: Pattern, shift: Dim2 = (0, 0), call_union: bool = True):
+    def __init__(self, *patterns: Pattern, call_union: bool = True):
         self.patterns = patterns
         super(GroupedPattern, self).__init__(*sum([list(pattern.polys) for pattern in patterns], []),
-                                             shift=shift, call_union=call_union)
+                                             call_union=call_union)
+        self.port = dict(sum([list(pattern.port.items()) for pattern in patterns], []))
 
-    @property
-    def input_ports(self) -> np.ndarray:
-        input_ports = [c.input_ports for c in self.patterns if c.input_ports.size > 0]
-        return np.vstack(input_ports) if len(input_ports) > 0 else np.asarray([])
-
-    @property
-    def output_ports(self) -> np.ndarray:
-        output_ports = [c.output_ports for c in self.patterns if c.output_ports.size > 0]
-        return np.vstack(output_ports) if len(output_ports) > 0 else np.asarray([])
 
 # TODO(nate): find a better place for these functions
 
@@ -309,8 +378,10 @@ def pattern_recover(returned_object):
             collection = MultiPolygon([g for g in returned_object.geoms if isinstance(g,Polygon)])
         return(Pattern(collection))
 
-def get_cubic_taper(change_w):
-    return (0, 0, 3 * change_w, -2 * change_w)
+
+def cubic_taper(change_w):
+    return 0, 0, 3 * change_w, -2 * change_w
+
 
 def is_adiabatic(taper_params, init_width: float = 0.48, wavelength: float = 1.55, neff: float = 2.75,
                  num_points: int = 100, taper_l: float = 5):
@@ -320,6 +391,7 @@ def is_adiabatic(taper_params, init_width: float = 0.48, wavelength: float = 1.5
     theta = np.arctan(np.diff(width) / taper_l * num_points)
     max_pt = np.argmax(theta)
     return theta[max_pt], wavelength / (2 * width[max_pt] * neff)
+
 
 def get_linear_adiabatic(min_width: float = 0.48, max_width: float = 1,  wavelength: float = 1.55, neff_max: float = 2.75,
                  num_points: int = 100, min_to_max: bool = True, aggressive: bool = False):

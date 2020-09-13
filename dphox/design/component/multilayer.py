@@ -24,30 +24,12 @@ class Multilayer:
         self._pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
                                   for comp, layer in pattern_to_layer}
         self.layer_to_pattern = self._layer_to_pattern()
-
-    @property
-    def input_ports(self) -> np.ndarray:
-        all_input_ports = [c.input_ports for c in self._pattern_to_layer.keys() if c.input_ports.size > 0]
-        return np.vstack(all_input_ports) if len(all_input_ports) > 0 else np.asarray([])
-
-    @property
-    def output_ports(self) -> np.ndarray:
-        all_output_ports = [c.output_ports for c in self._pattern_to_layer.keys() if c.output_ports.size > 0]
-        return np.vstack(all_output_ports) if len(all_output_ports) > 0 else np.asarray([])
-
-    @property
-    def contact_ports(self) -> np.ndarray:
-        contact_ports = [c.contact_ports for c in self._pattern_to_layer.keys() if c.contact_ports.size > 0]
-        return np.vstack(contact_ports) if len(contact_ports) > 0 else np.asarray([])
-
-    @property
-    def attachment_ports(self) -> np.ndarray:
-        attachment_ports = [c.attachment_ports for c in self._pattern_to_layer.keys() if c.attachment_ports.size > 0]
-        return np.vstack(attachment_ports) if len(attachment_ports) > 0 else np.asarray([])
+        self.port = dict(sum([list(pattern.port.items()) for pattern, _ in pattern_to_layer], []))
 
     @property
     def bounds(self) -> Dim4:
-        return self.gdspy_cell().get_bounding_box()
+        bbox = self.gdspy_cell().get_bounding_box()
+        return bbox[0][0], bbox[0][1], bbox[1][0], bbox[1][1]
 
     def gdspy_cell(self, cell_name: str = 'dummy') -> gy.Cell:
         cell = gy.Cell(cell_name, exclude_from_current=(cell_name == 'dummy'))
@@ -61,14 +43,8 @@ class Multilayer:
             for pattern, layer in self._pattern_to_layer.items():
                 for poly in pattern.polys:
                     nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
-            for idx, port in enumerate(self.input_ports):
-                nd.Pin(f'a{idx}').put(*port, 180)
-            for idx, port in enumerate(self.output_ports):
-                nd.Pin(f'b{idx}').put(*port)
-            for idx, port in enumerate(self.contact_ports):
-                nd.Pin(f'c{idx}').put(*port)
-            for idx, port in enumerate(self.attachment_ports):
-                nd.Pin(f't{idx}').put(*port)
+            for name, port in self.port.items():
+                nd.Pin(name).put(*port.xya_nazca)
             nd.put_stub()
         return cell
 
@@ -80,7 +56,7 @@ class Multilayer:
         return pattern_dict
 
     def plot(self, ax, layer_to_color: Dict[Union[int, str], Union[Dim3, str]], alpha: float = 0.5):
-        for layer, pattern in self.layer_to_pattern:
+        for layer, pattern in self.layer_to_pattern.items():
             ax.add_patch(PolygonPatch(pattern, facecolor=layer_to_color[layer], edgecolor='none', alpha=alpha))
         b = self.bounds
         ax.set_xlim((b[0], b[2]))
@@ -116,8 +92,7 @@ class Multilayer:
 
 
 class Via(Multilayer):
-    def __init__(self, via_dim: Dim2, boundary_grow: float,
-                 top_metal: str, bot_metal: str, via: str,
+    def __init__(self, via_dim: Dim2, boundary_grow: float, top_metal: str, bot_metal: str, via: str,
                  pitch: float = 0, shape: Optional[Shape2] = None):
         self.via_dim = via_dim
         self.boundary_grow = boundary_grow
@@ -129,17 +104,15 @@ class Via(Multilayer):
         self.config = self.__dict__
 
         via_pattern = Box(via_dim)
-
         if pitch > 0 and shape is not None:
             patterns = []
             x, y = np.meshgrid(np.arange(shape[0]) * pitch, np.arange(shape[1]) * pitch)
             for x, y in zip(x.flatten(), y.flatten()):
                 patterns.append(copy(via_pattern).translate(x, y))
             via_pattern = GroupedPattern(*patterns)
-
-        via_pattern = via_pattern.center_align((0, 0))
-        boundary = Box((via_pattern.size[0] + 2 * boundary_grow, via_pattern.size[1] + 2 * boundary_grow))
-        boundary.horz_align(0)
-        via_pattern.center_align(boundary)
-
-        super(Via, self).__init__([(via_pattern, via), (boundary, top_metal), (boundary, bot_metal)])
+        boundary = Box((via_pattern.size[0] + 2 * boundary_grow,
+                        via_pattern.size[1] + 2 * boundary_grow)).align((0, 0)).halign(0)
+        via_pattern.align(boundary)
+        super(Via, self).__init__([(via_pattern, via), (boundary, top_metal), (copy(boundary), bot_metal)])
+        self.port['a0'] = boundary.port['a0']
+        self.port['b0'] = boundary.port['b0']

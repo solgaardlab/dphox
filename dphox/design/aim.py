@@ -74,7 +74,7 @@ class AIMNazca:
         clearout = c.clearout_box(clearout_layer='tram', clearout_etch_stop_layer='snam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
-        dopes = (list(zip([p.expand(dope_expand).grow(dope_grow) for p in c.pads], ('pppam',))))
+        dopes = [p.expand(dope_expand).dope('pppam', dope_grow) for p in c.pads]
         device = Multilayer([(c, 'seam')] + pad_to_layer + clearout + ridge_etch + dopes)
         if anchor is None:
             cell = device.nazca_cell(name)
@@ -91,17 +91,16 @@ class AIMNazca:
         return self.tdc_node(diff_ps, cell) if diff_ps is not None else cell
 
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 100,
-                gap_w: float = 0.15,
-                pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (90, 13.8),
-                clearout_etch_stop_grow: float = 0.5,
-                num_taper_evaluations: int = 100, anchor: Optional[nd.Cell] = None,
-                tap_sep: Optional[Tuple[nd.Cell, float]] = None, name: str = 'nems_ps',
-                taper_ls=(2, 0.15, 0.2, 0.15, 2),
-                gap_taper=((0.66 + 2 * 0.63,), (0, -1 * (.30 + 2 * 0.63),), (0,), (0, (.30 + 2 * 0.63),),
-                           get_cubic_taper(-0.74 - 2 * 0.63)),
-                wg_taper=((0,), (0,), (0,), (0,), get_cubic_taper(-0.08)),
-                boundary_taper=((0.66 + 2 * 0.63,), (0,), (0,), (0,), get_cubic_taper(-0.74 - 2 * 0.63)),
-                rib_brim_taper=(get_cubic_taper(2 * .66), (0,), (0,), (0,), get_cubic_taper(-0.74 * 2))) -> nd.Cell:
+                gap_w: float = 0.15, pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (90, 13.8),
+                clearout_etch_stop_grow: float = 0.5, num_taper_evaluations: int = 100,
+                anchor: Optional[nd.Cell] = None, tap_sep: Optional[Tuple[nd.Cell, float]] = None,
+                name: str = 'nems_ps', taper_ls=(2, 0.15, 0.2, 0.15, 2),
+                gap_taper=((0.66 + 2 * 0.63,), (0, -1 * (.30 + 2 * 0.63),),
+                           (0,), (0, (.30 + 2 * 0.63),),
+                           cubic_taper(-0.74 - 2 * 0.63)),
+                wg_taper=((0,), (0,), (0,), (0,), cubic_taper(-0.08)),
+                boundary_taper=((0.66 + 2 * 0.63,), (0,), (0,), (0,), cubic_taper(-0.74 - 2 * 0.63)),
+                rib_brim_taper=(cubic_taper(2 * .66), (0,), (0,), (0,), cubic_taper(-0.74 * 2))) -> nd.Cell:
         # TODO(nate):The tapers should depend on whether an anchor is present
         # taper_ls = (2, 0.15,0.2,0.15, 2)
         # wg_taper = ((0,), (0,), (0,), (0,), get_cubic_taper(-0.08))
@@ -162,12 +161,12 @@ class AIMNazca:
                 self.v1_via.put(pin)
 
     def gnd_wg(self, waveguide_w: float = 0.48, length: float = 20, gnd_contact_dim: Optional[Dim2] = (5, 5),
-               rib_brim_w: float = 1.5, gnd_connector_dim: Optional[Dim2] = (1, 4), shift: Optional[Dim2] = (0, 0),
+               rib_brim_w: float = 1.5, gnd_connector_dim: Optional[Dim2] = (1, 4),
                flip: bool = False, dope_grow: float = 0.25, name='gnd_wg') -> nd.Cell:
         c = GndWaveguide(waveguide_w=waveguide_w, length=length, gnd_contact_dim=gnd_contact_dim,
-                         rib_brim_w=rib_brim_w, gnd_connector_dim=gnd_connector_dim, shift=shift, flip=flip)
+                         rib_brim_w=rib_brim_w, gnd_connector_dim=gnd_connector_dim, flip=flip)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am')) for pad in c.pads], [])
-        dopes = list(zip([p.grow(dope_grow) for p in c.pads], ('pppam',)))
+        dopes = list(zip([p.offset(dope_grow) for p in c.pads], ('pppam',)))
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
         device = Multilayer([(c, 'seam')] + pad_to_layer + ridge_etch + dopes)
         return device.nazca_cell(name)
@@ -337,7 +336,7 @@ class AIMNazca:
             nd.put_stub()
         return bond_pad_array
 
-    def eutectic_array(self, n_pads: Shape2 = (344, 12), pitch: float = 20, width: float = 12, strip: bool = True):
+    def eutectic_array(self, n_pads: Shape2, pitch: float = 20, width: float = 12, strip: bool = True):
         def oct(w: float):
             a = w / (1 + np.sqrt(2)) / 2
             return [(w / 2, a), (a, w / 2), (-a, w / 2), (-w / 2, a),

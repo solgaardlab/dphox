@@ -1,5 +1,5 @@
 from ...typing import *
-from .pattern import Pattern, Path, GroupedPattern
+from .pattern import Pattern, Path, GroupedPattern, Port
 
 from copy import deepcopy as copy
 from shapely.geometry import MultiPolygon
@@ -13,19 +13,19 @@ except ImportError:
 class Box(Pattern):
     def __init__(self, box_dim: Dim2, shift: Dim2 = (0, 0)):
         self.box_dim = box_dim
-        super(Box, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2), shift=shift)
+        super(Box, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2))
 
     def expand(self, grow: float):
         big_box_dim = (self.box_dim[0] + grow, self.box_dim[1] + grow)
         return Pattern(Path(big_box_dim[1]).segment(big_box_dim[0]).translate(dx=0,
-                                                                              dy=big_box_dim[1] / 2)).center_align(self)
+                                                                              dy=big_box_dim[1] / 2)).align(self)
 
 
 class DC(Pattern):
     def __init__(self, bend_dim: Dim2, waveguide_w: float, gap_w: float, interaction_l: float,
                  coupler_boundary_taper_ls: Tuple[float, ...] = (0,),
                  coupler_boundary_taper: Optional[Tuple[Tuple[float, ...]]] = None,
-                 end_bend_dim: Optional[Dim3] = None, use_radius: bool = False, shift: Dim2 = (0, 0)):
+                 end_bend_dim: Optional[Dim3] = None, use_radius: bool = False):
         """Directional coupler
 
         Args:
@@ -38,7 +38,6 @@ class DC(Pattern):
             end_l: end length before and after the bends
             end_bend_dim: If specified, places an additional end bend (see DC)
             use_radius: use radius to define bends
-            shift:
         """
         self.bend_dim = bend_dim
         self.waveguide_w = waveguide_w
@@ -63,30 +62,23 @@ class DC(Pattern):
             current_dc = Pattern(upper_path, lower_path)
             outer_boundary = Waveguide(waveguide_w=2 * waveguide_w + gap_w, length=interaction_l,
                                        taper_params=coupler_boundary_taper,
-                                       taper_ls=coupler_boundary_taper_ls).center_align(current_dc)
-            center_wg = Box((interaction_l, waveguide_w)).center_align(current_dc.center)
+                                       taper_ls=coupler_boundary_taper_ls).align(current_dc)
+            center_wg = Box((interaction_l, waveguide_w)).align(current_dc.center)
             dc_interaction = GroupedPattern(copy(center_wg).translate(dy=-gap_w / 2 - waveguide_w / 2),
                                             copy(center_wg).translate(dy=gap_w / 2 + waveguide_w / 2))
             cuts = dc_interaction.pattern - outer_boundary.pattern
             # hacky way to make sure polygons are completely separated
             dc_without_interaction = current_dc.pattern - Box((dc_interaction.size[0],
-                                                               dc_interaction.size[1] * 2)).center_align(current_dc).pattern
+                                                               dc_interaction.size[1] * 2)).align(current_dc).pattern
             paths = [dc_without_interaction, dc_interaction.pattern - cuts]
         else:
             paths = lower_path, upper_path
-        super(DC, self).__init__(*paths, shift=shift)
+        super(DC, self).__init__(*paths)
         self.lower_path, self.upper_path = Pattern(lower_path), Pattern(upper_path)
-
-    @property
-    def input_ports(self) -> np.ndarray:
-        interport_distance = self.waveguide_w + 2 * self.bend_dim[1] + self.gap_w
-        if self.end_bend_dim:
-            interport_distance += 2 * self.end_bend_dim[1]
-        return np.asarray(((0, 0), (0, interport_distance))) + self.shift
-
-    @property
-    def output_ports(self) -> np.ndarray:
-        return self.input_ports + np.asarray((self.size[0], 0))
+        self.port['a0'] = Port(0, 0, -np.pi)
+        self.port['a1'] = Port(0, interport_distance, -np.pi)
+        self.port['b0'] = Port(self.size[0], 0, -np.pi)
+        self.port['b1'] = Port(self.size[0], interport_distance, -np.pi)
 
     @property
     def interaction_points(self) -> np.ndarray:
@@ -99,8 +91,7 @@ class DC(Pattern):
 
 class MZI(Pattern):
     def __init__(self, bend_dim: Dim2, waveguide_w: float, arm_l: float, gap_w: float,
-                 interaction_l: float, end_l: float = 0, end_bend_dim: Optional[Dim3] = None, use_radius: bool = False,
-                 shift: Dim2 = (0, 0)):
+                 interaction_l: float, end_l: float = 0, end_bend_dim: Optional[Dim3] = None, use_radius: bool = False):
         self.end_l = end_l
         self.arm_l = arm_l
         self.bend_dim = bend_dim
@@ -116,30 +107,15 @@ class MZI(Pattern):
                                            end_bend_dim=end_bend_dim, inverted=True, use_radius=use_radius)
         upper_path.translate(dx=0, dy=waveguide_w + 2 * bend_dim[1] + gap_w)
 
-        super(MZI, self).__init__(lower_path, upper_path, shift=shift)
+        super(MZI, self).__init__(lower_path, upper_path)
         self.lower_path, self.upper_path = Pattern(lower_path), Pattern(upper_path)
-
-    @property
-    def input_ports(self) -> np.ndarray:
         interport_distance = self.waveguide_w + 2 * self.bend_dim[1] + self.gap_w
         if self.end_bend_dim:
             interport_distance += 2 * self.end_bend_dim[1]
-        return np.asarray(((0, 0), (0, interport_distance))) + self.shift
-
-    @property
-    def output_ports(self) -> np.ndarray:
-        return self.input_ports + np.asarray((self.size[0], 0))
-
-    @property
-    def interaction_points(self) -> np.ndarray:
-        input_ports = self.input_ports
-        bl = input_ports[0] + np.asarray(self.bend_dim) + np.asarray(self.end_bend_dim) + np.asarray((self.end_l, 0))
-        tl = bl + np.asarray((self.waveguide_w + self.gap_w, 0))
-        br = bl + np.asarray((self.interaction_l, 0))
-        tr = tl + np.asarray((self.interaction_l, 0))
-        left_dc_pts = np.vstack((bl, tl, br, tr))
-        right_dc_pts = left_dc_pts + np.asarray((self.arm_l + self.bend_dim[0], 0))
-        return np.vstack((left_dc_pts, right_dc_pts))
+        self.port['a0'] = Port(0, 0, -np.pi)
+        self.port['a1'] = Port(0, interport_distance, -np.pi)
+        self.port['b0'] = Port(self.size[0], 0, -np.pi)
+        self.port['b1'] = Port(self.size[0], interport_distance, -np.pi)
 
 
 class MMI(Pattern):
@@ -171,23 +147,17 @@ class MMI(Pattern):
         mmi = Path(box_dim[1], mmi_start).segment(box_dim[0])
         p_10 = copy(p_01).rotate(np.pi, center)
         p_11 = copy(p_00).rotate(np.pi, center)
-
-        super(MMI, self).__init__(mmi, p_00, p_01, p_10, p_11, shift=shift)
-
-    @property
-    def input_ports(self) -> np.ndarray:
+        super(MMI, self).__init__(mmi, p_00, p_01, p_10, p_11)
         bend_y = 2 * self.bend_dim[1] if self.bend_dim else 0
-        return np.asarray(((0, 0), (0, self.interport_distance + bend_y))) + self.shift
-
-    @property
-    def output_ports(self) -> np.ndarray:
-        return self.input_ports + np.asarray((self.size[0], 0))
+        self.port['a0'] = Port(0, 0, -np.pi)
+        self.port['a1'] = Port(0, self.interport_distance + bend_y, -np.pi)
+        self.port['b0'] = Port(self.size[0], 0, -np.pi)
+        self.port['b1'] = Port(self.size[0], self.interport_distance + bend_y, -np.pi)
 
 
 class GratingPad(Pattern):
     def __init__(self, pad_dim: Dim2, taper_l: float, final_width: float, out: bool = False,
-                 end_l: Optional[float] = None, bend_dim: Optional[Dim2] = None, shift: Dim2 = (0, 0),
-                 layer: int = 0):
+                 end_l: Optional[float] = None, bend_dim: Optional[Dim2] = None, layer: int = 0):
         self.pad_dim = pad_dim
         self.taper_l = taper_l
         self.final_width = final_width
@@ -202,14 +172,15 @@ class GratingPad(Pattern):
             if bend_dim:
                 path.sbend(bend_dim)
             super(GratingPad, self).__init__(
-                path.segment(taper_l, final_width=pad_dim[1]).segment(pad_dim[0]), shift=shift)
+                path.segment(taper_l, final_width=pad_dim[1]).segment(pad_dim[0]))
         else:
             path = Path(pad_dim[1]).segment(pad_dim[0]).segment(taper_l, final_width=final_width)
             if bend_dim:
                 path.sbend(bend_dim, layer=layer)
             if end_l > 0:
                 path.segment(end_l, layer=layer)
-            super(GratingPad, self).__init__(path, shift=shift)
+            super(GratingPad, self).__init__(path)
+        self.port['a0'] = Port(0, 0)
 
     def to(self, port: Dim2):
         if self.out:
@@ -217,10 +188,6 @@ class GratingPad(Pattern):
         else:
             bend_y = self.bend_dim[1] if self.bend_dim else 0
             return self.translate(port[0] - self.size[0], port[1] - bend_y)
-
-    @property
-    def copy(self) -> "GratingPad":
-        return copy(self)
 
 
 class Interposer(Pattern):
@@ -290,19 +257,14 @@ class Interposer(Pattern):
             self_coupling_path.turn(radius=radius, angle=-np.pi, tolerance=0.001)
             paths.append(self_coupling_path)
 
-        super(Interposer, self).__init__(*paths, call_union=False, shift=shift)
+        super(Interposer, self).__init__(*paths, call_union=False)
         self.self_coupling_path = None if self_coupling_extension_dim is None else paths[-1]
         self.paths = paths
         self.init_pos = init_pos
         self.final_pos = final_pos
-
-    @property
-    def input_ports(self) -> np.ndarray:
-        return self.init_pos + self.shift
-
-    @property
-    def output_ports(self) -> np.ndarray:
-        return self.final_pos + self.shift
+        for idx in range(n):
+            self.port[f'a{idx}'] = Port(*init_pos[idx], np.pi)
+            self.port[f'b{idx}'] = Port(*final_pos[idx])
 
 
 class Waveguide(Pattern):
@@ -310,14 +272,14 @@ class Waveguide(Pattern):
                  taper_params: Tuple[Tuple[float, ...]] = None,
                  slot_dim: Optional[Dim2] = None, slot_taper_ls: Tuple[float, ...] = 0,
                  slot_taper_params: Tuple[Tuple[float, ...]] = None,
-                 num_taper_evaluations: int = 100, shift: Dim2 = (0, 0),
-                 symmetric: bool = True, rotate_angle = None):
+                 num_taper_evaluations: int = 100, symmetric: bool = True, rotate_angle: float = None):
 
         """Waveguide class
         Args:
             waveguide_w: waveguide width at the input of the waveguide path
             length: total length of the waveguide
             taper_ls: a tuple of lengths for tapers starting from the left
+            taper_params:
 
             symmetric: a temporary toggling variable to turn off the symmetric nature of the waveguide class.
 
@@ -362,28 +324,23 @@ class Waveguide(Pattern):
 
         if slot_taper_params:
             center_x = length / 2
-            slot = self.__init__(slot_dim[1], slot_dim[0], slot_taper_ls, slot_taper_params).center_align((center_x, 0))
+            slot = self.__init__(slot_dim[1], slot_dim[0], slot_taper_ls, slot_taper_params).align((center_x, 0))
             pattern = Pattern(p).pattern - slot.pattern
             if isinstance(pattern, MultiPolygon):
                 slot_waveguide = [Pattern(poly) for poly in pattern]
-                super(Waveguide, self).__init__(*slot_waveguide, shift=shift)
+                super(Waveguide, self).__init__(*slot_waveguide)
             else:
-                super(Waveguide, self).__init__(pattern, shift=shift)
+                super(Waveguide, self).__init__(pattern)
         else:
-            super(Waveguide, self).__init__(p, shift=shift)
+            super(Waveguide, self).__init__(p)
+        self.port['a0'] = Port(0, 0, np.pi)
+        self.port['b0'] = Port(self.size[0], 0)
 
-    @property
-    def input_ports(self) -> np.ndarray:
-        return np.asarray(((0, 0),)) + self.shift
-
-    @property
-    def output_ports(self) -> np.ndarray:
-        return self.input_ports + np.asarray((self.size[0], 0))
 
 class AlignmentMark(Pattern):
-	def __init__(self, waveguide_w: float, length: float, shift: Dim2 = (0, 0), layer: int = 0):
-		self.length = length
-		self.waveguide_w = waveguide_w
-		p = Path(waveguide_w, (0,0)).segment(length, "+y", layer=layer)
-		q = Path(waveguide_w, (-length/2, length/2)).segment(length, "+x", layer=layer)
-		super(AlignmentMark, self).__init__(p,q, shift=shift)
+    def __init__(self, waveguide_w: float, length: float, layer: int = 0):
+        self.length = length
+        self.waveguide_w = waveguide_w
+        p = Path(waveguide_w, (0, 0)).segment(length, "+y", layer=layer)
+        q = Path(waveguide_w, (-length/2, length/2)).segment(length, "+x", layer=layer)
+        super(AlignmentMark, self).__init__(p, q)
