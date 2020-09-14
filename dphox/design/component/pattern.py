@@ -4,7 +4,7 @@ import gdspy as gy
 import nazca as nd
 from copy import deepcopy as copy
 from shapely.vectorized import contains
-from shapely.geometry import Polygon, MultiPolygon, CAP_STYLE
+from shapely.geometry import Polygon, MultiPolygon, GeometryCollection, CAP_STYLE
 from shapely.ops import cascaded_union
 from shapely.affinity import translate
 from descartes import PolygonPatch
@@ -144,11 +144,11 @@ class Pattern:
         self.port: Dict[str, Port] = {}
 
     @classmethod
-    def from_shapely(cls, polygon_or_multipolygon: Union[Polygon, MultiPolygon]):
-        if isinstance(polygon_or_multipolygon, Polygon):
-            collection = MultiPolygon(polygons=[polygon_or_multipolygon])
+    def from_shapely(cls, polygon_or_collection: Union[Polygon, GeometryCollection]):
+        if isinstance(polygon_or_collection, Polygon):
+            collection = MultiPolygon(polygons=[polygon_or_collection])
         else:
-            collection = MultiPolygon([g for g in polygon_or_multipolygon.geoms if isinstance(g, Polygon)])
+            collection = MultiPolygon([g for g in polygon_or_collection.geoms if isinstance(g, Polygon)])
         return cls(collection)
 
     def _pattern(self) -> MultiPolygon:
@@ -302,18 +302,18 @@ class Pattern:
         }
         boolean_func = op_to_func.get(operation,
                                       lambda: f"Not a valid boolean operation: Must be in {op_to_func.keys()}")
-        return boolean_func(other_pattern.pattern)
+        return boolean_func(other_pattern)
 
-    def intersection(self, other_pattern: "Pattern"):
+    def intersection(self, other_pattern: "Pattern") -> "Pattern":
         return Pattern.from_shapely(self.pattern.intersection(other_pattern))
 
-    def difference(self, other_pattern: "Pattern"):
+    def difference(self, other_pattern: "Pattern") -> "Pattern":
         return Pattern.from_shapely(self.pattern.difference(other_pattern))
 
-    def union(self, other_pattern: "Pattern"):
+    def union(self, other_pattern: "Pattern") -> "Pattern":
         return Pattern.from_shapely(self.pattern.union(other_pattern))
 
-    def symmetric_difference(self, other_pattern: "Pattern"):
+    def symmetric_difference(self, other_pattern: "Pattern") -> "Pattern":
         return Pattern.from_shapely(self.pattern.symmetric_difference(other_pattern))
 
     def to_gds(self, cell: gy.Cell):
