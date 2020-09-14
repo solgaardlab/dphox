@@ -29,7 +29,7 @@ class Multilayer:
         self.port = dict(sum([list(pattern.port.items()) for pattern, _ in pattern_to_layer], []))
 
     @classmethod
-    def from_nazca_cell(self, cell: nd.Cell):
+    def from_nazca_cell(cls, cell: nd.Cell):
         # a glimpse into cell_iter()
         # code from https://nazca-design.org/forums/topic/clipping-check-distance-and-length-for-interconnects/
         multilayers = {}
@@ -38,14 +38,14 @@ class Multilayer:
                 for i, (polygon, points, bbox) in enumerate(named_tuple.iters['polygon']):
                     if polygon.layer == 'bb_pin':
                         continue
-                    # fixing point definitions from mask to 1nm prcesision, kinda hacky but is physical and prevents false polygons
+                    # fixing point definitions from mask to 1nm prcesision,
+                    # kinda hacky but is physical and prevents false polygons
                     points = np.around(points, decimals=3)
                     if polygon.layer in multilayers.keys():
                         multilayers[polygon.layer].append(Pattern(Polygon(points)))
                     else:
                         multilayers[polygon.layer] = [Pattern(Polygon(points))]
-
-        return Multilayer([(GroupedPattern(*pattern_list), layer) for layer, pattern_list in multilayers.items()])
+        return cls([(GroupedPattern(*pattern_list), layer) for layer, pattern_list in multilayers.items()])
 
     @property
     def bounds(self) -> Dim4:

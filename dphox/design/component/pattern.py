@@ -305,16 +305,16 @@ class Pattern:
         return boolean_func(other_pattern)
 
     def intersection(self, other_pattern: "Pattern") -> "Pattern":
-        return Pattern.from_shapely(self.pattern.intersection(other_pattern))
+        return Pattern.from_shapely(self.pattern.intersection(other_pattern.pattern))
 
     def difference(self, other_pattern: "Pattern") -> "Pattern":
-        return Pattern.from_shapely(self.pattern.difference(other_pattern))
+        return Pattern.from_shapely(self.pattern.difference(other_pattern.pattern))
 
     def union(self, other_pattern: "Pattern") -> "Pattern":
-        return Pattern.from_shapely(self.pattern.union(other_pattern))
+        return Pattern.from_shapely(self.pattern.union(other_pattern.pattern))
 
     def symmetric_difference(self, other_pattern: "Pattern") -> "Pattern":
-        return Pattern.from_shapely(self.pattern.symmetric_difference(other_pattern))
+        return Pattern.from_shapely(self.pattern.symmetric_difference(other_pattern.pattern))
 
     def to_gds(self, cell: gy.Cell):
         """
