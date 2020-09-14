@@ -220,9 +220,9 @@ class Interposer(Pattern):
             path = Path(waveguide_w).segment(length=0).translate(dx=0, dy=period * idx)
             mid = int(np.ceil(n / 2))
             max_length_diff = (angled_length - x_length) * (mid - 1)
-            num_trombones = int(np.ceil(max_length_diff / 2 / (final_period - 3 * radius))) if not num_trombones else num_trombones
-            length_diff = (angled_length - x_length) * \
-                idx if idx < mid else (angled_length - x_length) * (n - 1 - idx)
+            num_trombones = int(np.ceil(max_length_diff / 2 / (final_period - 3 * radius))) \
+                if not num_trombones else num_trombones
+            length_diff = (angled_length - x_length) * idx if idx < mid else (angled_length - x_length) * (n - 1 - idx)
             path.segment(horiz_dist)
             if idx < mid:
                 path.turn(radius, -angle)

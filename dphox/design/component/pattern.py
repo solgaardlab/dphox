@@ -144,11 +144,9 @@ class Pattern:
         self.port: Dict[str, Port] = {}
 
     @classmethod
-    def from_shapely(cls, polygon_or_collection: Union[Polygon, GeometryCollection]):
-        if isinstance(polygon_or_collection, Polygon):
-            collection = MultiPolygon(polygons=[polygon_or_collection])
-        else:
-            collection = MultiPolygon([g for g in polygon_or_collection.geoms if isinstance(g, Polygon)])
+    def from_shapely(cls, shapely_pattern: Union[Polygon, GeometryCollection]) -> "Pattern":
+        collection = shapely_pattern if isinstance(shapely_pattern, Polygon)\
+            else MultiPolygon([g for g in shapely_pattern.geoms if isinstance(g, Polygon)])
         return cls(collection)
 
     def _pattern(self) -> MultiPolygon:
@@ -248,7 +246,7 @@ class Pattern:
 
         """
         x = self.bounds[0] if left else self.bounds[2]
-        p = (c.bounds[0] if left and not opposite or opposite and not left else c.bounds[2])\
+        p = (c.bounds[0] if left and not opposite or opposite and not left else c.bounds[2]) \
             if isinstance(c, Pattern) else c
         self.translate(dx=p - x)
         return self
@@ -266,7 +264,7 @@ class Pattern:
 
         """
         y = self.bounds[1] if bottom else self.bounds[3]
-        p = (c.bounds[1] if bottom and not opposite or opposite and not bottom else c.bounds[3])\
+        p = (c.bounds[1] if bottom and not opposite or opposite and not bottom else c.bounds[3]) \
             if isinstance(c, Pattern) else c
         self.translate(dy=p - y)
         return self
@@ -412,7 +410,8 @@ def is_adiabatic(taper_params, init_width: float = 0.48, wavelength: float = 1.5
     return theta[max_pt], wavelength / (2 * width[max_pt] * neff)
 
 
-def get_linear_adiabatic(min_width: float = 0.48, max_width: float = 1, wavelength: float = 1.55, neff_max: float = 2.75,
+def get_linear_adiabatic(min_width: float = 0.48, max_width: float = 1, wavelength: float = 1.55,
+                         neff_max: float = 2.75,
                          num_points: int = 100, min_to_max: bool = True, aggressive: bool = False):
     taper_params = (0, max_width - min_width) if min_to_max else (0, min_width - max_width)
     taper_l = 1.1 * abs(max_width - min_width) / np.arctan(wavelength / (2 * max_width * neff_max)) \
