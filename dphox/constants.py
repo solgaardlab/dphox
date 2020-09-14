@@ -103,7 +103,74 @@ AIM_STACK = {
         'tzam': (737, 727),  # tzam
         'diam': (726, 727),  # diam, dicing channel
         'paam': (779, 727),  # metal passivation
-        'mlam': (780, 727)
+        'mlam': (780, 727),
+        'oxide': (998, 1),  # oxide fill
+        'clearout': (999, 1),  # pseudo clearout for nems devices
+    },
+    'zranges': {
+        # 'ream': (0.11, 0.22),  # ream, ridge etch
+        'ream': (0.00, 0.11),  # ream, si ridge remaining
+        'seam': (0.00, 0.22),  # seam, silicon
+        'fnam': (0.32, 0.54),  # fnam, nitride waveguide
+        'snam': (0.64, 0.86),  # snam, nitride waveguide
+        'ndam': (0.00, 0.11),  # ndam, n implant #this is a depth estimate
+        'nnam': (0.00, 0.11),  # nnam, nn implant #this is a depth estimate
+        'nnnam': (0.00, 0.22),  # nnnam, nnn implant #this is a depth estimate
+        'pdam': (0.11, 0.22),  # pdam, p implant #this is a depth estimate
+        'ppam': (0.11, 0.22),  # ppam, pp implant #this is a depth estimate
+        'pppam': (0.11, 0.22),  # pppam, ppp implant #this is a depth estimate
+        'tram': (0.22, 1.00),  # tram, detector trench # guessing
+        'ngam': (0.78, 1.00),  # ngam, n-type ion # guessing
+        'esam': (1.00, 1.100),  # esam, etch nitride etch stop # guessing
+        'caam': (0.93, 1.135),  # detector contact # guessing
+        'cbam': (0.22, 1.135),  # contact to Si Level # guessing
+        'm1am': (1.135, 1.24),  # metal 1 contact to caam/cbam # guessing
+        'v1am': (1.24, 1.44),  # via to m1am # guessing
+        'm2am': (1.44, 1.53),  # metal 2 level # guessing
+        'vaam': (1.53, 1.73),  # aluminum via to m2am # guessing
+        'tzam': (0.64, 2.00),  # tzam # guessing
+        'diam': (-2.00, 2.00),  # diam, dicing channel # guessing
+        'paam': (1.95, 2.00),  # metal passivation # guessing
+        'mlam': (1.73, 1.95),  # mteal pad layer # guessing
+        'oxide': (-2.00, 2.00),  # oxide fill
+        'clearout': (-2.00, 2.00),  # pseudo clearout for nems devices
+    },
+    'process_extrusion': {
+        # ream, si ridge remaining
+        'ETCH_RE': [('ream', 'seam', 'intersection'), ('ream', 'diam', 'difference')],
+        'ETCH_SE': [('seam', 'ream', 'difference'), ('seam', 'diam', 'difference')],
+        'DOPE_ND': [('ndam', 'seam', 'intersection'), ('ndam', 'ream', 'intersection')],
+        'DOPE_NN': [('nnam', 'seam', 'intersection'), ('nnam', 'ream', 'intersection')],
+        'DOPE_NNN': [('nnnam', 'seam', 'intersection'), ('nnnam', 'ream', 'intersection')],
+        'DOPE_PD': [('pdam', 'seam', 'intersection'), ('pdam', 'ream', 'intersection')],
+        'DOPE_PP': [('ppam', 'seam', 'intersection'), ('ppam', 'ream', 'intersection')],
+        'DOPE_PPP': [('pppam', 'seam', 'intersection'), ('pppam', 'ream', 'intersection')],
+        'ETCH_FN': [('fnam', 'diam', 'difference')],  # fnam, nitride waveguide
+        # snam, nitride waveguide
+        'ETCH_SN': [('snam', 'tzam', 'difference'), ('snam', 'diam', 'difference')],
+        # tram, detector trench # guessing
+        'ETCH_TR': [('tram', 'diam', 'difference')],
+        # ngam, n-type ion # guessing
+        'DOPE_NG': [('ngam', 'tram', 'intersection'), ('ngam', 'diam', 'difference')],
+        # esam, etch nitride etch stop # guessing
+        'ETCH_ES': [('esam', 'caam', 'difference'), ('esam', 'diam', 'difference')],
+        # detector contact # guessing
+        'VIA_CA': [('caam', 'diam', 'difference')],
+        # contact to Si Level # guessing
+        'VIA_CB': [('cbam', 'diam', 'difference')],
+        # metal 1 contact to caam/cbam # guessing
+        'METAL_M1': [('m1am', 'diam', 'difference')],
+        'VIA_V1': [('v1am', 'diam', 'difference')],  # via to m1am # guessing
+        # metal 2 level # guessing
+        'METAL_M2': [('m2am', 'diam', 'difference')],
+        # aluminum via to m2am # guessing
+        'VIA_VA': [('vaam', 'diam', 'difference')],
+        # mteal pad layer # guessing
+        'METAL_ML': [('mlam', 'diam', 'difference')],
+        # metal passivation # guessing
+        'FILL_PA': [('paam', 'diam', 'difference')],
+        # oxide fill
+        'ETCH_OX': [('oxide', 'clearout', 'difference'), ('oxide', 'tzam', 'difference'), ('oxide', 'diam', 'difference')],
     },
     'cross_sections': {
         'v1_xs': [

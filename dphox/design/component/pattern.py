@@ -26,9 +26,8 @@ class Path(gy.Path):
         taper_params = np.asarray(taper_params)
         self.parametric(lambda u: (length * u, 0),
                         lambda u: (1, 0),
-                        final_width=lambda u: curr_width - np.sum(taper_params) +
-                                              np.sum(taper_params * (1 - u) ** np.arange(taper_params.size,
-                                                                                         dtype=float)) if inverted
+                        final_width=lambda u: curr_width - np.sum(taper_params) + np.sum(taper_params * (1 - u) ** np.arange(taper_params.size,
+                                                                                                                             dtype=float)) if inverted
                         else curr_width + np.sum(taper_params * u ** np.arange(taper_params.size, dtype=float)),
                         number_of_evaluations=num_taper_evaluations,
                         layer=layer)
@@ -127,7 +126,8 @@ class Pattern:
             *polygons: A list of polygons specified by the user
             call_union: Do not call union
     """
-    def __init__(self, *polygons: Union[Path, gy.Polygon, gy.FlexPath, Polygon], call_union: bool = True):
+
+    def __init__(self, *polygons: Union[Path, gy.Polygon, gy.FlexPath, Polygon, MultiPolygon], call_union: bool = True):
         self.config = copy(self.__dict__)
         self.polys = []
         for shape in polygons:
@@ -162,6 +162,7 @@ class Pattern:
 
         """
         x_, y_ = np.mgrid[0:grid_spacing[0] * shape[0]:grid_spacing[0], 0:grid_spacing[1] * shape[1]:grid_spacing[1]]
+
         return contains(self.pattern, x_, y_)
 
     @property
@@ -294,9 +295,9 @@ class Pattern:
         elif operation == 'symmetric_difference':
             returned_object = self.pattern.symmetric_difference(other_pattern.pattern)
         else:
-            raise ValueError("Not a valid boolean operation: Must be 'intersection',"
-                             "'difference', 'union', or 'symmetric_difference' ")
-        return pattern_recover(returned_object)
+
+            raise ValueError(" Not a valid boolean operation: Must be 'intersection', 'difference', 'union', or 'symmetric_difference' ")
+        return(pattern_recover(returned_object))
 
     def to_gds(self, cell: gy.Cell):
         """
@@ -371,12 +372,14 @@ class GroupedPattern(Pattern):
 
 # TODO(nate): find a better place for these functions
 
+
 def pattern_recover(returned_object):
-        if isinstance(returned_object, Polygon):
-            collection = MultiPolygon(polygons=[returned_object])
-        else:
-            collection = MultiPolygon([g for g in returned_object.geoms if isinstance(g,Polygon)])
-        return(Pattern(collection))
+    if isinstance(returned_object, Polygon):
+        collection = MultiPolygon(polygons=[returned_object])
+    else:
+        collection = MultiPolygon(
+            [g for g in returned_object.geoms if isinstance(g, Polygon)])
+    return(Pattern(collection))
 
 
 def cubic_taper(change_w):
@@ -393,8 +396,8 @@ def is_adiabatic(taper_params, init_width: float = 0.48, wavelength: float = 1.5
     return theta[max_pt], wavelength / (2 * width[max_pt] * neff)
 
 
-def get_linear_adiabatic(min_width: float = 0.48, max_width: float = 1,  wavelength: float = 1.55, neff_max: float = 2.75,
-                 num_points: int = 100, min_to_max: bool = True, aggressive: bool = False):
-    taper_params =(0, max_width - min_width) if min_to_max else (0, min_width - max_width)
-    taper_l =  1.1*abs(max_width - min_width) / np.arctan(wavelength / (2 * max_width * neff_max)) if aggressive else 2* abs(max_width - min_width) / np.arctan(wavelength / (2 * max_width * neff_max))
+def get_linear_adiabatic(min_width: float = 0.48, max_width: float = 1, wavelength: float = 1.55, neff_max: float = 2.75,
+                         num_points: int = 100, min_to_max: bool = True, aggressive: bool = False):
+    taper_params = (0, max_width - min_width) if min_to_max else (0, min_width - max_width)
+    taper_l = 1.1 * abs(max_width - min_width) / np.arctan(wavelength / (2 * max_width * neff_max)) if aggressive else 2 * abs(max_width - min_width) / np.arctan(wavelength / (2 * max_width * neff_max))
     return taper_l, taper_params

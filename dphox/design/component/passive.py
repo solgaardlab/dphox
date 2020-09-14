@@ -17,8 +17,7 @@ class Box(Pattern):
 
     def expand(self, grow: float):
         big_box_dim = (self.box_dim[0] + grow, self.box_dim[1] + grow)
-        return Pattern(Path(big_box_dim[1]).segment(big_box_dim[0]).translate(dx=0,
-                                                                              dy=big_box_dim[1] / 2)).align(self)
+        return Pattern(Path(big_box_dim[1]).segment(big_box_dim[0]).translate(dx=0, dy=big_box_dim[1] / 2)).align(self)
 
 
 class DC(Pattern):
@@ -135,8 +134,7 @@ class MMI(Pattern):
             p_00.sbend(bend_dim, use_radius=use_radius).segment(taper_dim[0], final_width=taper_dim[1])
             p_01 = Path(waveguide_w, (0, interport_distance + 2 * bend_dim[1]))
             p_01 = p_01.segment(end_l) if end_l > 0 else p_01
-            p_01.sbend(bend_dim, inverted=True, use_radius=use_radius).segment(
-                taper_dim[0], final_width=taper_dim[1])
+            p_01.sbend(bend_dim, inverted=True, use_radius=use_radius).segment(taper_dim[0], final_width=taper_dim[1])
         else:
             center = (end_l + taper_dim[0] + box_dim[0] / 2, interport_distance / 2)
             p_00 = Path(waveguide_w).segment(end_l) if end_l > 0 else Path(waveguide_w)
@@ -170,8 +168,7 @@ class GratingPad(Pattern):
                 path.segment(end_l)
             if bend_dim:
                 path.sbend(bend_dim)
-            super(GratingPad, self).__init__(
-                path.segment(taper_l, final_width=pad_dim[1]).segment(pad_dim[0]))
+            super(GratingPad, self).__init__(path.segment(taper_l, final_width=pad_dim[1]).segment(pad_dim[0]))
         else:
             path = Path(pad_dim[1]).segment(pad_dim[0]).segment(taper_l, final_width=final_width)
             if bend_dim:
@@ -223,9 +220,9 @@ class Interposer(Pattern):
             path = Path(waveguide_w).segment(length=0).translate(dx=0, dy=period * idx)
             mid = int(np.ceil(n / 2))
             max_length_diff = (angled_length - x_length) * (mid - 1)
-            num_trombones = int(
-                np.ceil(max_length_diff / 2 / (final_period - 3 * radius))) if not num_trombones else num_trombones
-            length_diff = (angled_length - x_length) * idx if idx < mid else (angled_length - x_length) * (n - 1 - idx)
+            num_trombones = int(np.ceil(max_length_diff / 2 / (final_period - 3 * radius))) if not num_trombones else num_trombones
+            length_diff = (angled_length - x_length) * \
+                idx if idx < mid else (angled_length - x_length) * (n - 1 - idx)
             path.segment(horiz_dist)
             if idx < mid:
                 path.turn(radius, -angle)
