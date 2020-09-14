@@ -47,16 +47,12 @@ class AIMNazca:
         self.m1_ic = nd.interconnects.Interconnect(width=4, xs='m1_xs')
         self.m2_ic = nd.interconnects.Interconnect(width=4, xs='m2_xs')
         self.ml_ic = nd.interconnects.Interconnect(width=100, xs='ml_xs')
-        self.v1_ic = nd.interconnects.Interconnect(width=0.5, xs='v1_xs')
-        self.va_ic = nd.interconnects.Interconnect(width=5.1, xs='va_xs')
-        with nd.Cell('v1_via') as self.v1_via:
-            self.v1_ic.strt(0.5).put()
-        with nd.Cell('va_via') as self.va_via:
-            self.va_ic.strt(5.1).put()
-        with nd.Cell('v1_via_array_4') as self.v1_via_array_4:
-            self.v1_via.put(0, -1, array=[1, [1, 0], 3, [0, 1]])
-        with nd.Cell('v1_via_array_8') as self.v1_via_array_8:
-            self.v1_via.put(0, -3, array=[1, [1, 0], 7, [0, 1]])
+        self.v1_via = Via((0.4, 0.4), 0.1, top_metal='m2am', bot_metal='m1am', via='v1am').nazca_cell('v1_via')
+        self.va_via = Via((3.6, 3.6), 1.5, top_metal='mlam', bot_metal='m2am', via='vaam').nazca_cell('va_via')
+        self.v1_via_4 = Via((0.4, 0.4), 0.1, shape=(1, 4), pitch=1,
+                            top_metal='m2am', bot_metal='m1am', via='v1am').nazca_cell('v1_via_4')
+        self.v1_via_8 = Via((0.4, 0.4), 0.1, shape=(1, 8), pitch=1,
+                            top_metal='m2am', bot_metal='m1am', via='v1am').nazca_cell('v1_via_8')
 
     def nems_tdc(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
                  interaction_l: float = 100, dc_gap_w: float = 0.2, beam_gap_w: float = 0.15,
@@ -149,9 +145,9 @@ class AIMNazca:
             v1 = nd.cp.get_xya()
             self.m1_ic.strt(interpad_distance_x - m1_radius * 2).put()
             v2 = nd.cp.get_xya()
-            self.v1_via_array_4.put(v1)
-            self.v1_via_array_4.put(v2)
             self.m1_ic.bend(m1_radius, 90).put()
+            self.v1_via_4.put(*v1)
+            self.v1_via_4.put(*v2)
             self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c1'].x, bottom_anchor.pin['c1'].y - 1, 90)
             self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c2'].x, bottom_anchor.pin['c2'].y - 1, 90)
             for pin in (top_anchor.pin['c1'], top_anchor.pin['c2'], bottom_anchor.pin['c1'], bottom_anchor.pin['c2']):
@@ -386,7 +382,7 @@ class AIMNazca:
                 ic.bend(4, -90).put()
                 ic.strt(23.5).put()
                 ic.bend(4, 90).put()
-                self.v1_via_array_4.put()
+                self.v1_via_4.put()
 
         with nd.Cell(name=f'bidirectional_tap_{radius}') as cell:
             tap = self.pdk_cells['cl_band_1p_tap_si'].put()

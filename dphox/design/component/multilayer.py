@@ -1,5 +1,7 @@
-from .pattern import Pattern, Path, GroupedPattern
+from .pattern import Pattern, Path, GroupedPattern, Port
 from .passive import Box
+from ...typing import *
+
 from collections import defaultdict
 
 import numpy as np
@@ -16,8 +18,6 @@ try:
 except ImportError:
     pass
 
-from ...typing import *
-
 
 class Multilayer:
     def __init__(self, pattern_to_layer: List[Tuple[Union[Pattern, Path, gy.Polygon, gy.FlexPath, Polygon],
@@ -32,7 +32,7 @@ class Multilayer:
     def from_nazca_cell(cls, cell: nd.Cell):
         # a glimpse into cell_iter()
         # code from https://nazca-design.org/forums/topic/clipping-check-distance-and-length-for-interconnects/
-        multilayers = {}
+        multilayers = defaultdict(list)
         for named_tuple in nd.cell_iter(cell, flat=True):
             if named_tuple.cell_start:
                 for i, (polygon, points, bbox) in enumerate(named_tuple.iters['polygon']):
@@ -41,10 +41,7 @@ class Multilayer:
                     # fixing point definitions from mask to 1nm prcesision,
                     # kinda hacky but is physical and prevents false polygons
                     points = np.around(points, decimals=3)
-                    if polygon.layer in multilayers.keys():
-                        multilayers[polygon.layer].append(Pattern(Polygon(points)))
-                    else:
-                        multilayers[polygon.layer] = [Pattern(Polygon(points))]
+                    multilayers[polygon.layer].append(Pattern(Polygon(points)))
         return cls([(GroupedPattern(*pattern_list), layer) for layer, pattern_list in multilayers.items()])
 
     @property
@@ -111,7 +108,7 @@ class Multilayer:
                         for poly in pattern_zrange[0]]
                     # TODO(): Do not want to use trimesh Booleans
                     mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
-                    mesh.visual.vertex_colors = visual.random_color()\
+                    mesh.visual.vertex_colors = visual.random_color() \
                         if layer_to_color is None else layer_to_color[layer]
                     meshes[layer] = mesh
                 except KeyError:
@@ -166,8 +163,8 @@ class Multilayer:
         all_patterns = GroupedPattern(*all_patterns)
         minx, miny, maxx, maxy = all_patterns.bounds
         fill = Pattern(gy.Polygon(
-            [(minx - growth/2, miny - growth/2), (minx - growth/2, maxy + growth/2),
-             (maxx + growth/2, maxy + growth/2), (maxx + growth/2, miny - growth/2)]
+            [(minx - growth / 2, miny - growth / 2), (minx - growth / 2, maxy + growth / 2),
+             (maxx + growth / 2, maxy + growth / 2), (maxx + growth / 2, miny - growth / 2)]
         ))
         self.pattern_to_layer.append((fill, layer_name))
         self.layer_to_pattern = self._layer_to_pattern()
@@ -189,13 +186,13 @@ class Via(Multilayer):
         via_pattern = Box(via_dim)
         if pitch > 0 and shape is not None:
             patterns = []
-            x, y = np.meshgrid(np.arange(shape[0])*pitch, np.arange(shape[1])*pitch)
+            x, y = np.meshgrid(np.arange(shape[0]) * pitch, np.arange(shape[1]) * pitch)
             for x, y in zip(x.flatten(), y.flatten()):
                 patterns.append(copy(via_pattern).translate(x, y))
             via_pattern = GroupedPattern(*patterns)
-        boundary = Box((via_pattern.size[0] + 2*boundary_grow,
-                        via_pattern.size[1] + 2*boundary_grow)).align((0, 0)).halign(0)
+        boundary = Box((via_pattern.size[0] + 2 * boundary_grow,
+                        via_pattern.size[1] + 2 * boundary_grow)).align((0, 0)).halign(0)
         via_pattern.align(boundary)
         super(Via, self).__init__([(via_pattern, via), (boundary, top_metal), (copy(boundary), bot_metal)])
-        self.port['a0'] = boundary.port['a0']
-        self.port['b0'] = boundary.port['b0']
+        self.port['a0'] = Port(self.bounds[0], 0, np.pi)
+        self.port['b0'] = Port(self.bounds[2], 0)

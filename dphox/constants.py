@@ -145,7 +145,8 @@ AIM_STACK = {
         'DOPE_PD': [('pdam', 'seam', 'intersection'), ('pdam', 'ream', 'intersection')],
         'DOPE_PP': [('ppam', 'seam', 'intersection'), ('ppam', 'ream', 'intersection')],
         'DOPE_PPP': [('pppam', 'seam', 'intersection'), ('pppam', 'ream', 'intersection')],
-        'ETCH_FN': [('fnam', 'diam', 'difference')],  # fnam, nitride waveguide
+        # fnam, nitride waveguide
+        'ETCH_FN': [('fnam', 'diam', 'difference')],
         # snam, nitride waveguide
         'ETCH_SN': [('snam', 'tzam', 'difference'), ('snam', 'diam', 'difference')],
         # tram, detector trench # guessing
@@ -160,7 +161,8 @@ AIM_STACK = {
         'VIA_CB': [('cbam', 'diam', 'difference')],
         # metal 1 contact to caam/cbam # guessing
         'METAL_M1': [('m1am', 'diam', 'difference')],
-        'VIA_V1': [('v1am', 'diam', 'difference')],  # via to m1am # guessing
+        # via to m1am # guessing
+        'VIA_V1': [('v1am', 'diam', 'difference')],
         # metal 2 level # guessing
         'METAL_M2': [('m2am', 'diam', 'difference')],
         # aluminum via to m2am # guessing

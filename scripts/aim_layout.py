@@ -15,10 +15,17 @@ chip = AIMNazca(
 
 
 # chip params
-chip_height = 1973
-chip_width = 12000
+
+chip_h = 1973  # total height allowed by Xian
+chip_w = 12000
+perimeter_w = 50  # along the perimeter, include dicing trench of this width
+edge_shift_dim = (-56, 20)  # shift entire perimeter box in xy
+mesh_chiplet_x = 30
+test_chiplet_x = 7670
+chiplet_divider_x = 7530
 
 # component params
+
 n_pads_eu = (344, 12)
 n_pads_bp = (70, 3)
 n_test = 17
@@ -26,8 +33,10 @@ dc_radius = 15
 pdk_dc_radius = 25
 sep = 30
 gnd_length = 15
+standard_grating_interport = 127
 
 # testing params
+
 waveguide_w = 0.48
 test_interport_w = 50
 test_gap_w = 0.3
@@ -36,10 +45,21 @@ test_tdc_interport_w = 50
 test_tdc_interaction_l = 100
 pull_in_phaseshift_l = 50
 test_tdc_bend_dim = test_tdc_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
-
 mesh_interport_w = 50
 mesh_phaseshift_l = 100
-detector_loopback_params = (5, 20)
+detector_route_loop = (20, 30, 40)  # height, length, relative starting x for loops around detectors
+tapline_x_start = 600
+# x for the 8 taplines, numpy gives errors for some reason...
+tapline_x = [tapline_x_start + x for x in [0, 400, 700, 1000, 1400, 1800, 2100, 2400]]
+tapline_y = 162  # y for the taplines
+grating_array_xy = (600, 125)
+
+# bond pad (testing)
+
+left_bp_x = 100
+right_bp_x = 3070
+test_pad_y = 995
+test_bp_w = 212
 
 # Basic components
 
@@ -76,7 +96,7 @@ grating_array = chip.grating_array(18, period=127, link_end_gratings_radius=10)
 
 interposer = chip.interposer(
     n=14, waveguide_w=0.48, period=50,
-    final_period=127, radius=50, trombone_radius=10,
+    final_period=standard_grating_interport, radius=50, trombone_radius=10,
     self_coupling_extension_dim=(30, 200),
     with_gratings=True, horiz_dist=200, num_trombones=2
 )
@@ -230,11 +250,13 @@ pull_in_fin_tdc = [chip.nems_tdc(anchor=tdc_anchor, nanofin_w=nanofin_w) for nan
 testing_tap_line = chip.tap_line(n_test)
 testing_tap_line_tdc = chip.tap_line(n_test, inter_wg_dist=200)
 
+# make sure there are 17 structures per column
 ps_columns = [
     pull_apart_gap + pull_apart_taper + pull_apart_fin,
     pull_in_gap + pull_in_taper + pull_in_fin
 ]
 
+# make sure there are 17 structures per column
 tdc_columns = [
     pull_apart_gap_tdc + pull_apart_taper_tdc + pull_apart_fin_tdc,
     pull_in_gap_tdc + pull_in_taper_tdc + pull_in_fin_tdc
@@ -248,10 +270,10 @@ gridsearch_ls = [len(ps_columns[0]), len(ps_columns[1]), len(tdc_columns[0]), le
 
 def route_detector(p1, n2, n1, p2):
     # annoying routing hard-coding... TODO(sunil): make this better
-    chip.v1_via_array_4.put(p1)
+    chip.v1_via_4.put(p1)
     chip.m1_ic.bend(8, 90).put(p1)
     chip.m1_ic.strt(27).put()
-    chip.v1_via_array_4.put(n2)
+    chip.v1_via_4.put(n2)
     chip.m1_ic.bend(4, -90).put(n2)
     chip.m1_ic.strt(19).put()
     chip.m2_ic.bend(4, 90).put(n1)
@@ -290,13 +312,12 @@ for col, tdc_column in enumerate(tdc_columns):
     gridsearches.append(gridsearch)
 
 chiplet_divider = chip.dice_box((100, 2000))
-chip_horiz_dice = chip.dice_box((chip_width, 50))
-chip_vert_dice = chip.dice_box((50, chip_height))
+chip_horiz_dice = chip.dice_box((chip_w, 50))
+chip_vert_dice = chip.dice_box((50, chip_h))
 
 # test pad
 with nd.Cell('gnd_pad') as gnd_pad:
     chip.ml_ic.strt(width=1716, length=60).put()
-    chip.va_via.put(50, -813, array=[1, [1, 0], n_test, [0, 100]])
 
 with nd.Cell('test_pad') as test_pad:
     chip.ml_ic.strt(width=1716, length=60).put()
@@ -312,7 +333,6 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
     mdc = mesh_dc.put(output_interposer.pin['a6'])
     mzi_node_nems_detector.put(input_interposer.pin['a7'], flip=True)
     alignment_mark.put(-500, 0)
-    alignment_mark.put(-500 + 8400, 0)
 
     # routing code for the meshes
     bp_array_nems = bp_array.put(-180, -40)
@@ -383,13 +403,13 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             pin_nems, pin_thermal = pins
             if pin_num < n_pads_eu[0]:
                 chip.m1_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
-                chip.v1_via_array_4.put(pin_nems)
+                chip.v1_via_4.put(pin_nems)
                 chip.m1_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8, width=8).put()
-                chip.v1_via_array_8.put(pin_thermal)
-                chip.v1_via_array_8.put(layer * 450 - 26.5, 1204, 90,
-                                        array=[6, [-18.5, 0], 6, [0, -mesh_interport_w]])
-                chip.v1_via_array_8.put(layer * 450 - 26.5, 1204 - 7.5, 90,
-                                        array=[6, [-18.5, 0], 6, [0, -mesh_interport_w]])
+                chip.v1_via_8.put(pin_thermal)
+                chip.v1_via_8.put(layer * 450 - 26.5, 1204, 90,
+                                  array=[6, [-18.5, 0], 6, [0, -mesh_interport_w]])
+                chip.v1_via_8.put(layer * 450 - 26.5, 1204 - 7.5, 90,
+                                  array=[6, [-18.5, 0], 6, [0, -mesh_interport_w]])
             pin_num += 1 if i % 2 else 0
         pin_num += 1
         for i, pins in enumerate(zip([a1_nems_right.pin[f'p{n}'] for n in range(7)],
@@ -397,9 +417,9 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             pin_nems, pin_thermal = pins
             if pin_num < n_pads_eu[0]:
                 chip.m1_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
-                chip.v1_via_array_4.put(pin_nems)
+                chip.v1_via_4.put(pin_nems)
                 chip.m1_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8, width=8).put()
-                chip.v1_via_array_8.put(pin_thermal)
+                chip.v1_via_8.put(pin_thermal)
             pin_num += 1 if i % 2 else 0
         pin_num += 1
         for pin_nems, pin_thermal in zip([a2_nems_right.pin[f'p{n}'] for n in range(7)],
@@ -413,20 +433,21 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
 # Test chiplet layout
 with nd.Cell('test_chiplet') as test_chiplet:
     # place test taplines down at non-overlapping locations
-    tapline_x = [600, 1000, 1300, 1600, 2000, 2400, 2700, 3000]
     detector_x = []
     test_structures = gridsearches + gridsearches  # TODO: change this once all 8 columns are added
-    ga = grating_array.put(600, 125, -90)
+    ga = grating_array.put(*grating_array_xy, -90)
     for i, item in enumerate(zip(tapline_x, test_structures)):
         x, gridsearch = item
-        gs = gridsearch.put(x - 40, 162)
+        gs = gridsearch.put(x, tapline_y)
         chip.waveguide_ic.bend_strt_bend_p2p(ga.pin[f'a{2 * i + 1}'], gs.pin['out'], radius=10).put()
         chip.waveguide_ic.bend_strt_bend_p2p(ga.pin[f'a{2 * i + 2}'], gs.pin['in'], radius=10).put()
         detector_x.append([gs.pin[f'd{j}'].x for j in range(gridsearch_ls[i])])
 
     # put bond pad arrays on the left and right of the testing area
-    bp_array_left = bp_array_testing.put(80, 212)
-    bp_array_right = bp_array_testing.put(3050, 212)
+    bp_array_left = bp_array_testing.put(left_bp_x, test_bp_w)
+    bp_array_right = bp_array_testing.put(right_bp_x, test_bp_w)
+
+    alignment_mark.put(300, 0)
 
     for i in range(min(gridsearch_ls)):  # change this to n_test when all structures are filled in each column
         # detector wire connections
@@ -438,42 +459,48 @@ with nd.Cell('test_chiplet') as test_chiplet:
         chip.m1_ic.strt(2994).put()
         chip.m2_ic.bend(22, -90).put(bp_array_right.pin[f'd{0},{i}'])
         chip.m2_ic.strt(2900).put()
-        chip.v1_via.put(bp_array_right.pin[f'd{1},{i}'])
-        chip.v1_via.put(bp_array_left.pin[f'u{1},{i}'])
+        chip.v1_via_4.put(bp_array_right.pin[f'd{1},{i}'])
+        chip.v1_via_4.put(bp_array_left.pin[f'u{1},{i}'])
+
 
         # loop ground wires around detectors
         cx = 10
+        chip.va_via.put(cx, p.pin['a0'].y - 80)
         for x in detector_x:
-            chip.m2_ic.strt(x[i] - 40 - cx).put(cx, p.pin['a0'].y - 80)
+            chip.m2_ic.strt(x[i] - detector_route_loop[2] - cx).put(cx, p.pin['a0'].y - 80)
             chip.m2_ic.bend(radius=4, angle=90).put()
-            chip.m2_ic.strt(20).put()
+            chip.m2_ic.strt(detector_route_loop[0]).put()
             chip.m2_ic.bend(radius=4, angle=-90).put()
-            chip.m2_ic.strt(30).put()
+            chip.m2_ic.strt(detector_route_loop[1]).put()
             chip.m2_ic.bend(radius=4, angle=-90).put()
-            chip.m2_ic.strt(20).put()
+            chip.m2_ic.strt(detector_route_loop[0]).put()
             chip.m2_ic.bend(radius=4, angle=90).put()
             cx = nd.cp.x()
 
     # place ground bus
-    gnd_pad.put(-15, 971)
+    gnd_pad.put(-15, test_pad_y)
 
     # place test pads
-    test_pad_x = [tapline_x[0] - 120, tapline_x[1] - 120, tapline_x[2] - 290, tapline_x[3] - 290,
-                  tapline_x[4] - 120, tapline_x[5] - 120, tapline_x[6] - 290, tapline_x[7] - 290]
+    test_pad_x = [tapline_x[0] - 60, tapline_x[1] - 60, tapline_x[2] - 230, tapline_x[3] - 230,
+                  tapline_x[4] - 60, tapline_x[5] - 60, tapline_x[6] - 230, tapline_x[7] - 230]
 
     # for probes, we can either manually cut them in the end or have a semiautomated way of doing it (modify below)
     for x in test_pad_x:
-        test_pad.put(x, 971)
+        test_pad.put(x, test_pad_y)
+
 
 # Final chip layout
 with nd.Cell('aim_layout') as aim_layout:
-    mesh_chiplet.put(30)
-    test_chiplet.put(7650)
-    edge_distance = 56
-    chiplet_divider.put(7530, -127)
-    chip_horiz_dice.put(input_interposer.bbox[0] - edge_distance, -157)
-    chip_horiz_dice.put(input_interposer.bbox[0] - edge_distance, -107 + chip_height)
-    chip_vert_dice.put(input_interposer.bbox[0] - edge_distance, -107)
-    chip_vert_dice.put(input_interposer.bbox[0] + chip_width - 50 - edge_distance, -107)
+    mesh_chiplet.put(mesh_chiplet_x)
+    test_chiplet.put(test_chiplet_x)
+    chiplet_divider.put(chiplet_divider_x, -standard_grating_interport)
+    chip_horiz_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],
+                        -standard_grating_interport + edge_shift_dim[1] - perimeter_w)
+    chip_horiz_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],
+                        -standard_grating_interport + edge_shift_dim[1] + chip_h)
+    chip_vert_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],
+                       -standard_grating_interport + edge_shift_dim[1])
+    chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
+                       -standard_grating_interport + edge_shift_dim[1])
 
 nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
