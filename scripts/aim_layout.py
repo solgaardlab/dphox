@@ -14,6 +14,10 @@ chip = AIMNazca(
 )
 
 
+# chip params
+chip_height = 1973
+chip_width = 12000
+
 # component params
 n_pads_eu = (344, 12)
 n_pads_bp = (70, 3)
@@ -105,8 +109,7 @@ def pull_apart_taper_dict(taper_change: float, taper_length: float):
         gap_taper=(
             (0.66 + 2 * 0.63,), (0, -1 * (.30 + 2 * 0.63),), (0,), (0, (.30 + 2 * 0.63),),
             cubic_taper(-0.74 - 2 * 0.63), cubic_taper(taper_change)),
-        wg_taper=((0,), (0,), (0,), (0,), cubic_taper(-0.08),
-                  cubic_taper(taper_change)),
+        wg_taper=((0,), (0,), (0,), (0,), cubic_taper(-0.08), cubic_taper(taper_change)),
         boundary_taper=(
             (0.66 + 2 * 0.63,), (0,), (0,), (0,), cubic_taper(-0.74 - 2 * 0.63), (0,)),
         rib_brim_taper=(
@@ -264,8 +267,7 @@ for col, ps_columns in enumerate(ps_columns):
             # all structures for a tap line should be specified here
             node = chip.mzi_node(ps, dc, include_input_ps=False,
                                  detector=chip.pdk_cells['cl_band_photodetector_digital'],
-                                 name=f'test_mzi_{ps.name}'
-                                 ).put(line.pin[f'a{2 * i + 1}'])
+                                 name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
             route_detector(node.pin['p1'], node.pin['n2'], node.pin['n1'], node.pin['p2'])
             nd.Pin(f'd{i}').put(node.pin['b0'])  # this is useful for autorouting the gnd path
         nd.Pin('in').put(line.pin['in'])
@@ -288,6 +290,8 @@ for col, tdc_column in enumerate(tdc_columns):
     gridsearches.append(gridsearch)
 
 chiplet_divider = chip.dice_box((100, 2000))
+chip_horiz_dice = chip.dice_box((chip_width, 50))
+chip_vert_dice = chip.dice_box((50, chip_height))
 
 # test pad
 with nd.Cell('gnd_pad') as gnd_pad:
@@ -299,9 +303,7 @@ with nd.Cell('test_pad') as test_pad:
     chip.va_via.put(50, -778, array=[1, [1, 0], n_test, [0, 100]])
 
 # Chip construction
-
-# TODO(sunil): remove hardcoding! tsk tsk...
-with nd.Cell('aim') as aim:
+with nd.Cell('mesh_chiplet') as mesh_chiplet:
     nems = nems_mesh.put(0, 750, flip=True)
     thermal = thermal_mesh.put(0, 1000)
     input_interposer = interposer.put(thermal.pin['a4'])
@@ -362,8 +364,6 @@ with nd.Cell('aim') as aim:
     for layer in range(15):
         a1_nems_left = autoroute_4_nems_gnd.put(layer * 450 + 8.05, 536, flop=True)
         a2_nems_left = autoroute_4_nems_pos.put(layer * 450 - 10, 550, flop=True)
-        # for i in range(7):
-        #     chip.v1_via_array_4.put(a1_nems_left.pin[f'a{i}'])
         a1_nems_right = autoroute_4.put(layer * 450 + 178, 542)
         a2_nems_right = autoroute_4_extended.put(layer * 450 + 178, 550)
         a1_thermal_left = autoroute_8.put(layer * 450, 1228, flop=True, flip=True)
@@ -406,44 +406,43 @@ with nd.Cell('aim') as aim:
                                          [a2_thermal_right.pin[f'p{n}'] for n in range(7)]):
             if pin_num < n_pads_eu[0]:
                 chip.m2_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
-                chip.m2_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8,
-                                              width=8).put()
+                chip.m2_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8, width=8).put()
             pin_num += 1
         pin_num += 1
 
-    # place test gridsearches down at non-overlapping locations
-    gridsearch_x = [8300, 8700, 9000, 9300, 9700, 10100, 10400, 10700]
+# Test chiplet layout
+with nd.Cell('test_chiplet') as test_chiplet:
+    # place test taplines down at non-overlapping locations
+    tapline_x = [600, 1000, 1300, 1600, 2000, 2400, 2700, 3000]
     detector_x = []
-    gridsearches = gridsearches + gridsearches  # TODO: change this once all 8 columns are added
-    ga = grating_array.put(8300, 125, -90)
-    for i, item in enumerate(zip(gridsearch_x, gridsearches)):
+    test_structures = gridsearches + gridsearches  # TODO: change this once all 8 columns are added
+    ga = grating_array.put(600, 125, -90)
+    for i, item in enumerate(zip(tapline_x, test_structures)):
         x, gridsearch = item
         gs = gridsearch.put(x - 40, 162)
         chip.waveguide_ic.bend_strt_bend_p2p(ga.pin[f'a{2 * i + 1}'], gs.pin['out'], radius=10).put()
         chip.waveguide_ic.bend_strt_bend_p2p(ga.pin[f'a{2 * i + 2}'], gs.pin['in'], radius=10).put()
         detector_x.append([gs.pin[f'd{j}'].x for j in range(gridsearch_ls[i])])
 
-    chiplet_divider.put(7540, -127)
-
     # put bond pad arrays on the left and right of the testing area
-    bp_array_left = bp_array_testing.put(7780, 212)
-    bp_array_right = bp_array_testing.put(12000 + input_interposer.bbox[0] - 232, 212)
+    bp_array_left = bp_array_testing.put(80, 212)
+    bp_array_right = bp_array_testing.put(3050, 212)
 
     for i in range(min(gridsearch_ls)):  # change this to n_test when all structures are filled in each column
         # detector wire connections
         chip.m2_ic.bend(26, -90).put(bp_array_left.pin[f'u{0},{i}'])
-        p = chip.m2_ic.strt(3000 - 6).put()
+        p = chip.m2_ic.strt(2994).put()
         chip.m1_ic.bend(20, -90).put(bp_array_left.pin[f'u{1},{i}'])
-        chip.m1_ic.strt(3000 - 100).put()
+        chip.m1_ic.strt(2900).put()
         chip.m1_ic.bend(28, -90).put(bp_array_right.pin[f'd{1},{i}'])
-        chip.m1_ic.strt(3000 - 6).put()
+        chip.m1_ic.strt(2994).put()
         chip.m2_ic.bend(22, -90).put(bp_array_right.pin[f'd{0},{i}'])
-        chip.m2_ic.strt(3000 - 100).put()
+        chip.m2_ic.strt(2900).put()
         chip.v1_via.put(bp_array_right.pin[f'd{1},{i}'])
         chip.v1_via.put(bp_array_left.pin[f'u{1},{i}'])
 
         # loop ground wires around detectors
-        cx = 7700
+        cx = 10
         for x in detector_x:
             chip.m2_ic.strt(x[i] - 40 - cx).put(cx, p.pin['a0'].y - 80)
             chip.m2_ic.bend(radius=4, angle=90).put()
@@ -455,20 +454,26 @@ with nd.Cell('aim') as aim:
             chip.m2_ic.bend(radius=4, angle=90).put()
             cx = nd.cp.x()
 
-    # place test pads (the first is gnd, needs some manual adjustment later on)
-    gx = gridsearch_x
-    test_pad_x = [gx[0] - 120, gx[1] - 120,
-                  gx[2] - 290, gx[3] - 290,
-                  gx[4] - 120, gx[5] - 120,
-                  gx[6] - 290, gx[7] - 290]
-    gnd_pad.put(7690, 971)
+    # place ground bus
+    gnd_pad.put(-15, 971)
 
-    # for probes, we can either manually cut them in the end or have a semiautomated way of doing it
+    # place test pads
+    test_pad_x = [tapline_x[0] - 120, tapline_x[1] - 120, tapline_x[2] - 290, tapline_x[3] - 290,
+                  tapline_x[4] - 120, tapline_x[5] - 120, tapline_x[6] - 290, tapline_x[7] - 290]
+
+    # for probes, we can either manually cut them in the end or have a semiautomated way of doing it (modify below)
     for x in test_pad_x:
         test_pad.put(x, 971)
 
-    # Boundary indicators (REMOVE IN FINAL LAYOUT)
-    chip.dice_box((12000, 100)).put(input_interposer.bbox[0] - 50, -227)
-    chip.dice_box((12000, 100)).put(input_interposer.bbox[0] - 50, 2100 - 227)
+# Final chip layout
+with nd.Cell('aim_layout') as aim_layout:
+    mesh_chiplet.put(30)
+    test_chiplet.put(7650)
+    edge_distance = 56
+    chiplet_divider.put(7530, -127)
+    chip_horiz_dice.put(input_interposer.bbox[0] - edge_distance, -157)
+    chip_horiz_dice.put(input_interposer.bbox[0] - edge_distance, -107 + chip_height)
+    chip_vert_dice.put(input_interposer.bbox[0] - edge_distance, -107)
+    chip_vert_dice.put(input_interposer.bbox[0] + chip_width - 50 - edge_distance, -107)
 
-nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim])
+nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])

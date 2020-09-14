@@ -14,8 +14,7 @@ except ImportError:
 class LateralNemsPS(GroupedPattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float,
                  gap_w: float, taper_ls: Tuple[float, ...], num_taper_evaluations: int = 100,
-                 pad_dim: Optional[Dim3] = None,
-                 gap_taper: Optional[Tuple[Tuple[float, ...]]] = None,
+                 pad_dim: Optional[Dim3] = None, gap_taper: Optional[Tuple[Tuple[float, ...]]] = None,
                  wg_taper: Optional[Tuple[Tuple[float, ...]]] = None,
                  boundary_taper: Optional[Tuple[Tuple[float, ...]]] = None,
                  rib_brim_taper: Optional[Tuple[Tuple[float, ...]]] = None):
@@ -55,8 +54,7 @@ class LateralNemsPS(GroupedPattern):
                        num_taper_evaluations=num_taper_evaluations)
         boundary = Waveguide(box_w, taper_params=boundary_taper, taper_ls=taper_ls, length=phaseshift_l,
                              num_taper_evaluations=num_taper_evaluations).pattern
-        gap_path = Waveguide(waveguide_w + gap_w * 2, taper_params=gap_taper,
-                             taper_ls=taper_ls, length=phaseshift_l,
+        gap_path = Waveguide(waveguide_w + gap_w * 2, taper_params=gap_taper, taper_ls=taper_ls, length=phaseshift_l,
                              num_taper_evaluations=num_taper_evaluations).pattern
         nanofins = [Pattern(poly) for poly in (boundary - gap_path)]
 
@@ -72,8 +70,7 @@ class LateralNemsPS(GroupedPattern):
             pad = Box(pad_dim[:2]).align(wg)
             pad_y = nanofin_w + pad_dim[2] + pad_dim[1] / 2
             pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
-        super(LateralNemsPS, self).__init__(*([wg] + nanofins + pads + anchors + rib_brim),
-                                            call_union=False)
+        super(LateralNemsPS, self).__init__(*([wg] + nanofins + pads + anchors + rib_brim), call_union=False)
         self.waveguide, self.anchors, self.pads, self.nanofins, self.rib_brim = wg, anchors, pads, nanofins, rib_brim
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)

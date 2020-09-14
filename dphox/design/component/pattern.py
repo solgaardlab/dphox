@@ -26,8 +26,8 @@ class Path(gy.Path):
         taper_params = np.asarray(taper_params)
         self.parametric(lambda u: (length * u, 0),
                         lambda u: (1, 0),
-                        final_width=lambda u: curr_width - np.sum(taper_params) + np.sum(taper_params * (1 - u) ** np.arange(taper_params.size,
-                                                                                                                             dtype=float)) if inverted
+                        final_width=lambda u: curr_width - np.sum(taper_params) + np.sum(
+                            taper_params * (1 - u) ** np.arange(taper_params.size, dtype=float)) if inverted
                         else curr_width + np.sum(taper_params * u ** np.arange(taper_params.size, dtype=float)),
                         number_of_evaluations=num_taper_evaluations,
                         layer=layer)
@@ -142,6 +142,14 @@ class Pattern:
         self.call_union = call_union
         self.pattern = self._pattern()
         self.port: Dict[str, Port] = {}
+
+    @classmethod
+    def from_shapely(cls, polygon_or_multipolygon: Union[Polygon, MultiPolygon]):
+        if isinstance(polygon_or_multipolygon, Polygon):
+            collection = MultiPolygon(polygons=[polygon_or_multipolygon])
+        else:
+            collection = MultiPolygon([g for g in polygon_or_multipolygon.geoms if isinstance(g, Polygon)])
+        return cls(collection)
 
     def _pattern(self) -> MultiPolygon:
         if not self.call_union:
@@ -285,19 +293,28 @@ class Pattern:
     def copy(self) -> "Pattern":
         return copy(self)
 
-    def boolean_operation(self, other_pattern, operation):
-        if operation == 'intersection':
-            returned_object = self.pattern.intersection(other_pattern.pattern)
-        elif operation == 'difference':
-            returned_object = self.pattern.difference(other_pattern.pattern)
-        elif operation == 'union':
-            returned_object = self.pattern.union(other_pattern.pattern)
-        elif operation == 'symmetric_difference':
-            returned_object = self.pattern.symmetric_difference(other_pattern.pattern)
-        else:
+    def boolean_operation(self, other_pattern: "Pattern", operation: str):
+        op_to_func = {
+            'intersection': self.intersection,
+            'difference': self.difference,
+            'union': self.union,
+            'symmetric_difference': self.symmetric_difference
+        }
+        boolean_func = op_to_func.get(operation,
+                                      lambda: f"Not a valid boolean operation: Must be in {op_to_func.keys()}")
+        return boolean_func(other_pattern.pattern)
 
-            raise ValueError(" Not a valid boolean operation: Must be 'intersection', 'difference', 'union', or 'symmetric_difference' ")
-        return(pattern_recover(returned_object))
+    def intersection(self, other_pattern: "Pattern"):
+        return Pattern.from_shapely(self.pattern.intersection(other_pattern))
+
+    def difference(self, other_pattern: "Pattern"):
+        return Pattern.from_shapely(self.pattern.difference(other_pattern))
+
+    def union(self, other_pattern: "Pattern"):
+        return Pattern.from_shapely(self.pattern.union(other_pattern))
+
+    def symmetric_difference(self, other_pattern: "Pattern"):
+        return Pattern.from_shapely(self.pattern.symmetric_difference(other_pattern))
 
     def to_gds(self, cell: gy.Cell):
         """
@@ -373,13 +390,12 @@ class GroupedPattern(Pattern):
 # TODO(nate): find a better place for these functions
 
 
-def pattern_recover(returned_object):
-    if isinstance(returned_object, Polygon):
-        collection = MultiPolygon(polygons=[returned_object])
+def pattern_recover(polygon_or_collection):
+    if isinstance(polygon_or_collection, Polygon):
+        collection = MultiPolygon(polygons=[polygon_or_collection])
     else:
-        collection = MultiPolygon(
-            [g for g in returned_object.geoms if isinstance(g, Polygon)])
-    return(Pattern(collection))
+        collection = MultiPolygon([g for g in polygon_or_collection.geoms if isinstance(g, Polygon)])
+    return Pattern(collection)
 
 
 def cubic_taper(change_w):
@@ -399,5 +415,6 @@ def is_adiabatic(taper_params, init_width: float = 0.48, wavelength: float = 1.5
 def get_linear_adiabatic(min_width: float = 0.48, max_width: float = 1, wavelength: float = 1.55, neff_max: float = 2.75,
                          num_points: int = 100, min_to_max: bool = True, aggressive: bool = False):
     taper_params = (0, max_width - min_width) if min_to_max else (0, min_width - max_width)
-    taper_l = 1.1 * abs(max_width - min_width) / np.arctan(wavelength / (2 * max_width * neff_max)) if aggressive else 2 * abs(max_width - min_width) / np.arctan(wavelength / (2 * max_width * neff_max))
+    taper_l = 1.1 * abs(max_width - min_width) / np.arctan(wavelength / (2 * max_width * neff_max)) \
+        if aggressive else 2 * abs(max_width - min_width) / np.arctan(wavelength / (2 * max_width * neff_max))
     return taper_l, taper_params
