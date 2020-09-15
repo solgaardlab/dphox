@@ -134,11 +134,11 @@ class AIMNazca:
         m2_radius = (top_anchor.pin['c0'].y - bottom_anchor.pin['c0'].y) / 2
         self.m2_ic.strt(length / 2 + extra_length * has_c1).put(top_anchor.pin['c0'])
         self.m2_ic.bend(m2_radius, 180).put()
-        self.m2_ic.strt(length + 2 * extra_length * has_c1).put()
+        x = self.m2_ic.strt(length + 2 * extra_length * has_c1).put()
+        nd.Pin('c0').put(x.pin['a0'])
+        nd.Pin('c1').put(x.pin['b0'])
         self.m2_ic.bend(m2_radius, 180).put()
         self.m2_ic.strt(length / 2 + extra_length * has_c1).put()
-        nd.Pin('c0').put(top_anchor.pin['c0'])
-        nd.Pin('c1').put(bottom_anchor.pin['c0'])
         if has_c1:
             interpad_distance_x = top_anchor.pin['c1'].x - top_anchor.pin['c2'].x
             interpad_distance_y = top_anchor.pin['c2'].y - bottom_anchor.pin['c2'].y + 2
@@ -150,7 +150,7 @@ class AIMNazca:
             self.m1_ic.bend(m1_radius, 90).put()
             self.v1_via_4.put(*v0)
             self.v1_via_4.put(*v1)
-            nd.Pin('v0').put(v0[0], v0[1], 180)
+            nd.Pin('v0').put(v0[0], v0[1], 360)
             nd.Pin('v1').put(*v1)
             self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c1'].x, bottom_anchor.pin['c1'].y - 1, 90)
             self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c2'].x, bottom_anchor.pin['c2'].y - 1, 90)

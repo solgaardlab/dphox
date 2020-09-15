@@ -294,7 +294,7 @@ for col, ps_columns in enumerate(ps_columns):
             route_detector(node.pin['p1'], node.pin['n2'], node.pin['n1'], node.pin['p2'])
             nd.Pin(f'd{i}').put(node.pin['b0'])  # this is useful for autorouting the gnd path
             if 'c1' in node.pin:
-                nd.Pin(f'c{i}').put(node.pin['c1'])
+                nd.Pin(f'c{i}').put(node.pin['c0'])
             if 'v0' in node.pin:
                 nd.Pin(f'v{i}').put(node.pin['v0'])
         nd.Pin('in').put(line.pin['in'])
@@ -312,8 +312,9 @@ for col, tdc_column in enumerate(tdc_columns):
             d2 = detector.put(_tdc.pin['b1'], flip=True)
             route_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
             nd.Pin(f'd{i}').put(_tdc.pin['b0'])  # this is useful for autorouting the gnd path
+            # TODO: fix this for the TDC
             if 'c0' in _tdc.pin:
-                nd.Pin(f'c{i}').put(_tdc.pin['c0'])
+                nd.Pin(f'c{i}').put(_tdc.pin['c1'])
             if 'v0' in _tdc.pin:
                 nd.Pin(f'v{i}').put(_tdc.pin['v0'])
         nd.Pin('in').put(line.pin['in'])
@@ -324,13 +325,8 @@ for col, tdc_column in enumerate(tdc_columns):
 with nd.Cell('gnd_pad') as gnd_pad:
     chip.ml_ic.strt(width=1716, length=60).put()
 
-# test pad (testing side)
 with nd.Cell('test_pad') as test_pad:
-    for i in range(n_test):
-        via = chip.va_via.put(50, via_y + i * 100)
-        nd.Pin(f'a{i}').put(via.pin['a0'])
-        nd.Pin(f'b{i}').put(via.pin['b0'])
-    chip.ml_ic.strt(width=1716, length=60).put(0, 0)
+    chip.ml_ic.strt(width=1716, length=60).put()
 
 chiplet_divider = chip.dice_box((100, 1923))
 chip_horiz_dice = chip.dice_box((chip_w, perimeter_w))
@@ -408,8 +404,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
                                          reversed([a2_thermal_left.pin[f'p{n}'] for n in range(7)])):
             if pin_num < n_pads_eu[0]:
                 chip.m2_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
-                chip.m2_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8,
-                                              width=8).put()
+                chip.m2_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8, width=8).put()
             pin_num += 1
         for i, pins in enumerate(zip(reversed([a1_nems_left.pin[f'p{n}'] for n in range(7)]),
                                      reversed([a1_thermal_left.pin[f'p{n}'] for n in range(7)]))):
@@ -469,11 +464,11 @@ with nd.Cell('test_chiplet') as test_chiplet:
     gnd_pad.put(-15, test_pad_y)
 
     # place test pads
-    test_pad_x = [tapline_x[0] - 20, tapline_x[1] - 20, tapline_x[2] - 190, tapline_x[3] - 190,
-                  tapline_x[4] - 20, tapline_x[5] - 20, tapline_x[6] - 190, tapline_x[7] - 190]
+    test_pad_x = [tapline_x[0] - 80, tapline_x[1] - 80, tapline_x[2] - 250, tapline_x[3] - 250,
+                  tapline_x[4] - 80, tapline_x[5] - 80, tapline_x[6] - 250, tapline_x[7] - 250]
 
     # for probes, we can either manually cut them in the end or have a semiautomated way of doing it (modify below)
-    test_pads = [test_pad.put(x, test_pad_y - 770) for x in test_pad_x]
+    test_pads = [test_pad.put(x, test_pad_y) for x in test_pad_x]
 
     for i in range(min(gridsearch_ls)):  # change this to n_test when all structures are filled in each column
 
@@ -491,13 +486,14 @@ with nd.Cell('test_chiplet') as test_chiplet:
 
         # loop ground wires around detectors
         cx = 10
-        chip.va_via.put(cx, p.pin['a0'].y - 80)
+        cy = p.pin['a0'].y - 80
+        chip.va_via.put(cx, cy)
         for j, x in enumerate(detector_x):
-            chip.m2_ic.strt(x[i] - detector_route_loop[2] - cx).put(cx, p.pin['a0'].y - 80)
+            chip.m2_ic.strt(x[i] - detector_route_loop[2] - cx).put(cx, cy)
             chip.m2_ic.bend(radius=4, angle=90).put()
             chip.m2_ic.strt(detector_route_loop[0]).put()
             chip.m2_ic.bend(radius=4, angle=-90).put()
-            chip.m2_ic.strt(detector_route_loop[1]).put()
+            ground_wire = chip.m2_ic.strt(detector_route_loop[1]).put()
             chip.m2_ic.bend(radius=4, angle=-90).put()
             chip.m2_ic.strt(detector_route_loop[0]).put()
             chip.m2_ic.bend(radius=4, angle=90).put()
@@ -507,10 +503,14 @@ with nd.Cell('test_chiplet') as test_chiplet:
                 chip.m2_ic.bend_strt_bend_p2p(gs_list[j].pin[f'v{i}'], radius=8).put()
             # pos electrode connection
             if f'c{i}' in gs_list[j].pin:
-                chip.m2_ic.bend_strt_bend_p2p(
-                    test_pads[j].pin[f'a{i}'],
-                    gs_list[j].pin[f'c{i}'], radius=8).put()
-
+                pin = gs_list[j].pin[f'c{i}']
+                # ensures that this route will not intersect any of the current routes
+                offset = ground_wire.pin['a0'].y + 6 - pin.y
+                offset = -offset if pin.a == 180 else offset
+                chip.m2_ic.sbend(radius=4, offset=offset).put(pin)
+                chip.m2_ic.strt(test_pads[j].bbox[0] - nd.cp.x()).put(*nd.cp.get_xy(), 0)
+                # connect to the pad using via
+                chip.va_via.put()
 
 
 # Final chip layout
