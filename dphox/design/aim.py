@@ -137,17 +137,21 @@ class AIMNazca:
         self.m2_ic.strt(length + 2 * extra_length * has_c1).put()
         self.m2_ic.bend(m2_radius, 180).put()
         self.m2_ic.strt(length / 2 + extra_length * has_c1).put()
+        nd.Pin('c0').put(top_anchor.pin['c0'])
+        nd.Pin('c1').put(bottom_anchor.pin['c0'])
         if has_c1:
             interpad_distance_x = top_anchor.pin['c1'].x - top_anchor.pin['c2'].x
             interpad_distance_y = top_anchor.pin['c2'].y - bottom_anchor.pin['c2'].y + 2
             m1_radius = (top_anchor.bbox[3] - top_anchor.pin['c1'].y) + 4
             self.m1_ic.bend(m1_radius, 90).put(top_anchor.pin['c1'].x, top_anchor.pin['c1'].y, 90)
-            v1 = nd.cp.get_xya()
+            v0 = nd.cp.get_xya()
             self.m1_ic.strt(interpad_distance_x - m1_radius * 2).put()
-            v2 = nd.cp.get_xya()
+            v1 = nd.cp.get_xya()
             self.m1_ic.bend(m1_radius, 90).put()
+            self.v1_via_4.put(*v0)
             self.v1_via_4.put(*v1)
-            self.v1_via_4.put(*v2)
+            nd.Pin('v0').put(v0[0], v0[1], 180)
+            nd.Pin('v1').put(*v1)
             self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c1'].x, bottom_anchor.pin['c1'].y - 1, 90)
             self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c2'].x, bottom_anchor.pin['c2'].y - 1, 90)
             for pin in (top_anchor.pin['c1'], top_anchor.pin['c2'], bottom_anchor.pin['c1'], bottom_anchor.pin['c2']):
@@ -215,9 +219,20 @@ class AIMNazca:
             pl = ps.put()
             nd.Pin('a0').put(pl.pin['a0'])
             nd.Pin('b0').put(pl.pin['b0'])
+            # if 'v0' in pl.pin:
+            #     nd.Pin('c2').put(pl.pin['c0'])
+            #     nd.Pin('c3').put(pl.pin['c1'])
+            #     nd.Pin('v2').put(pl.pin['v0'])
+            #     nd.Pin('v3').put(pl.pin['v1'])
             pu = ps.put(0, interport_w)
             nd.Pin('a1').put(pu.pin['a0'])
             nd.Pin('b1').put(pu.pin['b0'])
+            if 'c0' in pu.pin:
+                nd.Pin('c0').put(pu.pin['c0'])
+                nd.Pin('c1').put(pu.pin['c1'])
+            if 'v0' in pu.pin:
+                nd.Pin('v0').put(pu.pin['v0'])
+                nd.Pin('v1').put(pu.pin['v1'])
         return cell
 
     def singlemode_ps(self, ps: nd.Cell, interport_w: float, phaseshift_l: float,
@@ -229,6 +244,13 @@ class AIMNazca:
             pu = self.waveguide_ic.strt(phaseshift_l).put(0, interport_w) if top else ps.put(0, interport_w)
             nd.Pin('a1').put(pu.pin['a0'])
             nd.Pin('b1').put(pu.pin['b0'])
+            p = pl if top else pu
+            if 'c0' in p.pin:
+                nd.Pin('c0').put(p.pin['c0'])
+                nd.Pin('c1').put(p.pin['c1'])
+            if 'v0' in p.pin:
+                nd.Pin('v0').put(p.pin['v0'])
+                nd.Pin('v1').put(p.pin['v1'])
         return cell
 
     def singlemode_ps_ext_gnd(self, ps: nd.Cell, gnd_wg_l: float, interport_w: float, phaseshift_l: float,
@@ -254,10 +276,10 @@ class AIMNazca:
             _ps = ps.put(0, 0, 0)
             nd.Pin('a0').put(0, 0, 180)
             nd.Pin('b0').put(100, 0, 0)
-            nd.Pin('c0').put(_ps.pin['p'])
+            nd.Pin('p').put(_ps.pin['p'])
             self.m2_ic.bend(5.5, 90, width=8).put(_ps.pin['p'].x - 3, _ps.pin['p'].y, 90)
             self.m2_ic.strt(38.8, width=8).put()
-            nd.Pin('c1').put(_ps.pin['n'])
+            nd.Pin('n').put(_ps.pin['n'])
             self.m2_ic.bend(15.5, 90, width=8).put(_ps.pin['n'].x + 3, _ps.pin['n'].y, 90)
             self.m2_ic.strt(39.8, width=8).put()
             if tap_sep is not None:
@@ -461,6 +483,12 @@ class AIMNazca:
                     internal_ps = diff_ps.put(upper_sampler.pin['b0'])
             else:
                 internal_ps = diff_ps.put(first_dc.pin['b0'])
+            if 'c0' in internal_ps.pin:
+                nd.Pin('c0').put(internal_ps.pin['c0'])
+                nd.Pin('c1').put(internal_ps.pin['c1'])
+            if 'v0' in internal_ps.pin:
+                nd.Pin('v0').put(internal_ps.pin['v0'])
+                nd.Pin('v1').put(internal_ps.pin['v1'])
             second_dc = dc.put(internal_ps.pin['b0'])
             if tap_external is not None:
                 upper_sampler = tap_external.put(second_dc.pin['b0'])
@@ -509,6 +537,11 @@ class AIMNazca:
             else:
                 nd.Pin('b0').put(_tdc.pin['b0'])
                 nd.Pin('b1').put(_tdc.pin['b1'])
+            if 'v0' in _tdc.pin:
+                nd.Pin('c0').put(_tdc.pin['c0'])
+                nd.Pin('c1').put(_tdc.pin['c1'])
+                nd.Pin('v0').put(_tdc.pin['v0'])
+                nd.Pin('v1').put(_tdc.pin['v1'])
             if detector is not None:
                 if detector_loopback_radius > 0:
                     self.waveguide_ic.bend(detector_loopback_radius, 180).put(node.pin['b1'])
