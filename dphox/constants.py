@@ -173,6 +173,8 @@ AIM_STACK = {
         'FILL_PA': [('paam', 'diam', 'difference')],
         # oxide fill
         'ETCH_OX': [('oxide', 'clearout', 'difference'), ('oxide', 'tzam', 'difference'), ('oxide', 'diam', 'difference')],
+        # air incase it's needed for
+        'ETCH_AIR': [('clearout', 'diam', 'difference')],
     },
     'cross_sections': {
         'v1_xs': [

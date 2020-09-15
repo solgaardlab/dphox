@@ -167,6 +167,8 @@ class Multilayer:
              (maxx + growth / 2, maxy + growth / 2), (maxx + growth / 2, miny - growth / 2)]
         ))
         self.pattern_to_layer.append((fill, layer_name))
+        self._pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
+                                  for comp, layer in self.pattern_to_layer}
         self.layer_to_pattern = self._layer_to_pattern()
         return [(fill, layer_name)]
 

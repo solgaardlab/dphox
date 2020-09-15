@@ -396,8 +396,11 @@ def pattern_recover(polygon_or_collection):
     return Pattern(collection)
 
 
-def cubic_taper(change_w):
-    return 0, 0, 3 * change_w, -2 * change_w
+def cubic_taper(change_w, off: bool = False):
+    if off:
+        return 0, change_w  # quick hack to change to linear taper
+    else:
+        return 0, 0, 3 * change_w, -2 * change_w
 
 
 def is_adiabatic(taper_params, init_width: float = 0.48, wavelength: float = 1.55, neff: float = 2.75,
