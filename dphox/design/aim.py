@@ -259,13 +259,14 @@ class AIMNazca:
         # TODO(Nate): use single instance of gnd_wg, and use nazca's flip in the put method to suppress warnings,
         #               gnd_wg could be default-None arg to singlemode_ps instead of separate method?
         with nd.Cell(name) as cell:
-            gnd_ll = self.gnd_wg(length=gnd_wg_l, flip=False).put()
+            gnd_wg = self.gnd_wg(length=gnd_wg_l, flip=False)
+            gnd_ll = gnd_wg.put()
             pl = ps.put() if top else self.waveguide_ic.strt(phaseshift_l - 2 * gnd_wg_l).put()
-            gnd_lr = self.gnd_wg(length=gnd_wg_l, flip=False).put()
+            gnd_lr = gnd_wg.put()
             nd.Pin('a0').put(gnd_ll.pin['a0'])
             nd.Pin('b0').put(gnd_lr.pin['b0'])
 
-            gnd_ul = self.gnd_wg(length=gnd_wg_l, flip=True).put(0, interport_w)
+            gnd_ul = gnd_wg.put(0, interport_w, flip=True)
             pu = self.waveguide_ic.strt(phaseshift_l - 2 * gnd_wg_l).put() if top else ps.put()
             gnd_ur = self.gnd_wg(length=gnd_wg_l, flip=True).put()
             nd.Pin('a1').put(gnd_ul.pin['a0'])
@@ -662,6 +663,11 @@ class AIMNazca:
             layer_to_zrange=self.stack['zranges'], process_extrusion=self.stack['process_extrusion'])
         for layer, mesh in trimeshes.items():
             mesh.export('{}_{}.stl'.format(cell.cell_name, layer))
+
+    def delay_line(self, waveguide_width=0.48, delay_length=200, bend_radius=5, straight_length=100, number_bend_pairs=1):
+        c = DelayLine(waveguide_width=waveguide_width, delay_length=delay_length, bend_radius=bend_radius, straight_length=straight_length, number_bend_pairs=number_bend_pairs)
+        device = Multilayer([(c, 'seam')])
+        return device.nazca_cell('delay_line')
 
 
 def _mzi_angle(waveguide_w: float, gap_w: float, interport_w: float, radius: float):

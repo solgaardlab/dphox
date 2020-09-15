@@ -248,7 +248,10 @@ class NemsAnchor(GroupedPattern):
                                        copy(straight).halign(connector, left=False, opposite=False).valign(
                                            copy(connector).translate(connector.size[0], connector.size[1]), ),
                                        copy(straight).halign(connector).valign(
-                                           copy(connector).translate(connector.size[0], connector.size[1]), ))
+                                           copy(connector).translate(connector.size[0], connector.size[1]), ),
+                                       copy(straight).align(connector).valign(
+                                           copy(connector).translate(connector.size[0], connector.size[1]), )
+                                       )
         if include_fin_dummy:
             # this is the mirror image dummy for mechanics
             patterns.append(Box(fin_spring_dim).align((connector.center[0], connector.bounds[3])))
