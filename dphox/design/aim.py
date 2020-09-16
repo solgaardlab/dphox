@@ -657,7 +657,7 @@ class AIMNazca:
 
     def cell_to_stl(self, cell: nd.Cell):
         multi = Multilayer.from_nazca_cell(cell)
-        multi.fill_material('oxide', growth=1)
+        multi.fill_material('oxide', growth=1, centered_layer='seam')
         trimeshes = multi.to_trimesh_dict(
             layer_to_zrange=self.stack['zranges'], process_extrusion=self.stack['process_extrusion'])
         for layer, mesh in trimeshes.items():

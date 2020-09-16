@@ -158,14 +158,15 @@ class Multilayer:
                         layer_to_extrusion[new_layer] = (pattern, new_zrange)
         return layer_to_extrusion
 
-    def fill_material(self, layer_name: str, growth: float):
+    def fill_material(self, layer_name: str, growth: float, centered_layer: str = None):
         all_patterns = [Pattern(poly) for layer, poly in self.layer_to_pattern.items()]
         all_patterns = GroupedPattern(*all_patterns)
         minx, miny, maxx, maxy = all_patterns.bounds
+        centered_pattern = all_patterns if centered_layer is None else Pattern(self.layer_to_pattern[centered_layer])
         fill = Pattern(gy.Polygon(
             [(minx - growth / 2, miny - growth / 2), (minx - growth / 2, maxy + growth / 2),
              (maxx + growth / 2, maxy + growth / 2), (maxx + growth / 2, miny - growth / 2)]
-        ))
+        )).align(centered_pattern)
         self.pattern_to_layer.append((fill, layer_name))
         self._pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
                                   for comp, layer in self.pattern_to_layer}
