@@ -109,7 +109,8 @@ class AIMNazca:
                           boundary_taper=boundary_taper,
                           rib_brim_taper=rib_brim_taper)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
-        clearout = c.clearout_box(clearout_layer='clearout', clearout_etch_stop_layer='snam', clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
+        clearout = c.clearout_box(clearout_layer='clearout', clearout_etch_stop_layer='snam',
+                                  clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
         device = Multilayer([(c, 'seam')] + pad_to_layer + clearout + ridge_etch)
         if anchor is None:
@@ -135,8 +136,8 @@ class AIMNazca:
         self.m2_ic.strt(length / 2 + extra_length * has_c1).put(top_anchor.pin['c0'])
         self.m2_ic.bend(m2_radius, 180).put()
         x = self.m2_ic.strt(length + 2 * extra_length * has_c1).put()
-        nd.Pin('c0').put(x.pin['a0'])
-        nd.Pin('c1').put(x.pin['b0'])
+        nd.Pin('pos0').put(x.pin['a0'])
+        nd.Pin('pos1').put(x.pin['b0'])
         self.m2_ic.bend(m2_radius, 180).put()
         self.m2_ic.strt(length / 2 + extra_length * has_c1).put()
         if has_c1:
@@ -150,8 +151,8 @@ class AIMNazca:
             self.m1_ic.bend(m1_radius, 90).put()
             self.v1_via_4.put(*v0)
             self.v1_via_4.put(*v1)
-            nd.Pin('v0').put(v0[0], v0[1], 360)
-            nd.Pin('v1').put(*v1)
+            nd.Pin('gnd0').put(v0[0], v0[1], 360)
+            nd.Pin('gnd1').put(*v1)
             self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c1'].x, bottom_anchor.pin['c1'].y - 1, 90)
             self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c2'].x, bottom_anchor.pin['c2'].y - 1, 90)
             for pin in (top_anchor.pin['c1'], top_anchor.pin['c2'], bottom_anchor.pin['c1'], bottom_anchor.pin['c2']):
@@ -213,8 +214,7 @@ class AIMNazca:
         device = Multilayer([(c, 'seam')] + pads + dopes)
         return device.nazca_cell(name)
 
-    def double_ps(self, ps: nd.Cell, interport_w: float = 40,
-                  name: str = 'double_ps'):
+    def double_ps(self, ps: nd.Cell, interport_w: float = 40, name: str = 'double_ps'):
         with nd.Cell(name) as cell:
             pl = ps.put()
             nd.Pin('a0').put(pl.pin['a0'])
@@ -227,12 +227,12 @@ class AIMNazca:
             pu = ps.put(0, interport_w)
             nd.Pin('a1').put(pu.pin['a0'])
             nd.Pin('b1').put(pu.pin['b0'])
-            if 'c0' in pu.pin:
-                nd.Pin('c0').put(pu.pin['c0'])
-                nd.Pin('c1').put(pu.pin['c1'])
-            if 'v0' in pu.pin:
-                nd.Pin('v0').put(pu.pin['v0'])
-                nd.Pin('v1').put(pu.pin['v1'])
+            if 'pos0' in pu.pin:  # equivalent to "raising pins" but not all phase shifters have these pins...
+                nd.Pin('pos0').put(pu.pin['pos0'])
+                nd.Pin('pos1').put(pu.pin['pos1'])
+            if 'gnd0' in pu.pin:
+                nd.Pin('gnd0').put(pu.pin['gnd0'])
+                nd.Pin('gnd1').put(pu.pin['gnd1'])
         return cell
 
     def singlemode_ps(self, ps: nd.Cell, interport_w: float, phaseshift_l: float,
@@ -245,17 +245,19 @@ class AIMNazca:
             nd.Pin('a1').put(pu.pin['a0'])
             nd.Pin('b1').put(pu.pin['b0'])
             p = pl if top else pu
-            if 'c0' in p.pin:
-                nd.Pin('c0').put(p.pin['c0'])
-                nd.Pin('c1').put(p.pin['c1'])
-            if 'v0' in p.pin:
-                nd.Pin('v0').put(p.pin['v0'])
-                nd.Pin('v1').put(p.pin['v1'])
+            if 'pos0' in p.pin:  # equivalent to "raising pins" but not all phase shifters have these pins...
+                nd.Pin('pos0').put(p.pin['pos0'])
+                nd.Pin('pos1').put(p.pin['pos1'])
+            if 'gnd0' in p.pin:
+                nd.Pin('gnd0').put(p.pin['gnd0'])
+                nd.Pin('gnd1').put(p.pin['gnd1'])
         return cell
 
     def singlemode_ps_ext_gnd(self, ps: nd.Cell, gnd_wg_l: float, interport_w: float, phaseshift_l: float,
                               top: bool = True, name: str = 'nems_singlemode_ps_ext_gnd'):
         # TODO(Nate): Figure out if gnds should be on both arms base on testing
+        # TODO(Nate): use single instance of gnd_wg, and use nazca's flip in the put method to suppress warnings,
+        #               gnd_wg could be default-None arg to singlemode_ps instead of separate method?
         with nd.Cell(name) as cell:
             gnd_ll = self.gnd_wg(length=gnd_wg_l, flip=False).put()
             pl = ps.put() if top else self.waveguide_ic.strt(phaseshift_l - 2 * gnd_wg_l).put()
@@ -268,6 +270,14 @@ class AIMNazca:
             gnd_ur = self.gnd_wg(length=gnd_wg_l, flip=True).put()
             nd.Pin('a1').put(gnd_ul.pin['a0'])
             nd.Pin('b1').put(gnd_ur.pin['b0'])
+
+            p = pl if top else pu
+            if 'pos0' in p.pin:  # equivalent to "raising pins" but not all phase shifters have these pins...
+                nd.Pin('pos0').put(p.pin['pos0'])
+                nd.Pin('pos1').put(p.pin['pos1'])
+            if 'gnd0' in p.pin:
+                nd.Pin('gnd0').put(p.pin['gnd0'])
+                nd.Pin('gnd1').put(p.pin['gnd1'])
         return cell
 
     def thermal_ps(self, tap_sep: Optional[Tuple[nd.Cell, float]] = None):
@@ -483,12 +493,12 @@ class AIMNazca:
                     internal_ps = diff_ps.put(upper_sampler.pin['b0'])
             else:
                 internal_ps = diff_ps.put(first_dc.pin['b0'])
-            if 'c0' in internal_ps.pin:
-                nd.Pin('c0').put(internal_ps.pin['c0'])
-                nd.Pin('c1').put(internal_ps.pin['c1'])
-            if 'v0' in internal_ps.pin:
-                nd.Pin('v0').put(internal_ps.pin['v0'])
-                nd.Pin('v1').put(internal_ps.pin['v1'])
+            if 'gnd0' in internal_ps.pin:
+                nd.Pin('gnd0').put(internal_ps.pin['gnd0'])
+                nd.Pin('gnd1').put(internal_ps.pin['gnd1'])
+            if 'pos0' in internal_ps.pin:
+                nd.Pin('pos0').put(internal_ps.pin['pos0'])
+                nd.Pin('pos1').put(internal_ps.pin['pos1'])
             second_dc = dc.put(internal_ps.pin['b0'])
             if tap_external is not None:
                 upper_sampler = tap_external.put(second_dc.pin['b0'])
@@ -538,10 +548,10 @@ class AIMNazca:
                 nd.Pin('b0').put(_tdc.pin['b0'])
                 nd.Pin('b1').put(_tdc.pin['b1'])
             if 'v0' in _tdc.pin:
-                nd.Pin('c0').put(_tdc.pin['c0'])
-                nd.Pin('c1').put(_tdc.pin['c1'])
-                nd.Pin('v0').put(_tdc.pin['v0'])
-                nd.Pin('v1').put(_tdc.pin['v1'])
+                nd.Pin('gnd0').put(_tdc.pin['gnd0'])
+                nd.Pin('gnd1').put(_tdc.pin['gnd1'])
+                nd.Pin('pos0').put(_tdc.pin['pos0'])
+                nd.Pin('pos1').put(_tdc.pin['pos1'])
             if detector is not None:
                 if detector_loopback_radius > 0:
                     self.waveguide_ic.bend(detector_loopback_radius, 180).put(node.pin['b1'])

@@ -34,6 +34,7 @@ pdk_dc_radius = 25
 sep = 30
 gnd_length = 15
 standard_grating_interport = 127
+mesh_layer_x = 450
 
 # testing params
 
@@ -49,7 +50,7 @@ mesh_interport_w = 50
 mesh_phaseshift_l = 100
 detector_route_loop = (20, 30, 40)  # height, length, relative starting x for loops around detectors
 tapline_x_start = 600
-# x for the 8 taplines, numpy gives errors for some reason...
+# x for the 8 taplines, numpy gives errors for some reason, so need to use raw python
 tapline_x = [tapline_x_start + x for x in [0, 400, 700, 1000, 1400, 1800, 2100, 2400]]
 tapline_y = 162  # y for the taplines
 grating_array_xy = (600, 125)
@@ -105,15 +106,20 @@ interposer = chip.interposer(
 bp_array = chip.bond_pad_array(n_pads_bp, stagger_x_frac=0.4)
 bp_array_testing = chip.bond_pad_array((2, n_test))
 eu_array = chip.eutectic_array(n_pads_eu)
-autoroute_4 = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=0, connector_y=20,
+autoroute_4 = chip.autoroute_turn(7, level=2, turn_radius=8,
+                                  connector_x=0, connector_y=20,
                                   final_period=18.5, width=4)
-autoroute_4_extended = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=9, connector_y=28,
+autoroute_4_extended = chip.autoroute_turn(7, level=2, turn_radius=8,
+                                           connector_x=9, connector_y=28,
                                            final_period=18.5, width=4)
-autoroute_4_nems_gnd = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=8, connector_y=16,
+autoroute_4_nems_gnd = chip.autoroute_turn(7, level=2, turn_radius=8,
+                                           connector_x=8, connector_y=16,
                                            final_period=18.5, width=4)
-autoroute_4_nems_pos = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=1, connector_y=28,
+autoroute_4_nems_pos = chip.autoroute_turn(7, level=2, turn_radius=8,
+                                           connector_x=1, connector_y=28,
                                            final_period=18.5, width=4)
-autoroute_8 = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=0, connector_y=0,
+autoroute_8 = chip.autoroute_turn(7, level=2, turn_radius=8,
+                                  connector_x=0, connector_y=0,
                                   final_period=18.5, width=8)
 autoroute_8_extended = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=9, connector_y=10,
                                            final_period=18.5, width=8)
@@ -293,10 +299,10 @@ for col, ps_columns in enumerate(ps_columns):
                                  name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
             route_detector(node.pin['p1'], node.pin['n2'], node.pin['n1'], node.pin['p2'])
             nd.Pin(f'd{i}').put(node.pin['b0'])  # this is useful for autorouting the gnd path
-            if 'c1' in node.pin:
-                nd.Pin(f'c{i}').put(node.pin['c0'])
-            if 'v0' in node.pin:
-                nd.Pin(f'v{i}').put(node.pin['v0'])
+            if 'pos0' in node.pin:
+                nd.Pin(f'pos{i}').put(node.pin['pos0'])
+            if 'gnd0' in node.pin:
+                nd.Pin(f'gnd{i}').put(node.pin['gnd0'])
         nd.Pin('in').put(line.pin['in'])
         nd.Pin('out').put(line.pin['out'])
     gridsearches.append(gridsearch)
@@ -312,11 +318,11 @@ for col, tdc_column in enumerate(tdc_columns):
             d2 = detector.put(_tdc.pin['b1'], flip=True)
             route_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
             nd.Pin(f'd{i}').put(_tdc.pin['b0'])  # this is useful for autorouting the gnd path
-            # TODO: fix this for the TDC
-            if 'c0' in _tdc.pin:
-                nd.Pin(f'c{i}').put(_tdc.pin['c1'])
-            if 'v0' in _tdc.pin:
-                nd.Pin(f'v{i}').put(_tdc.pin['v0'])
+            # TODO: ground connections for the TDC
+            if 'pos1' in _tdc.pin:
+                nd.Pin(f'pos{i}').put(_tdc.pin['pos1'])
+            if 'gnd0' in _tdc.pin:
+                nd.Pin(f'gnd{i}').put(_tdc.pin['gnd0'])
         nd.Pin('in').put(line.pin['in'])
         nd.Pin('out').put(line.pin['out'])
     gridsearches.append(gridsearch)
@@ -391,47 +397,52 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
 
     pin_num = 0
     for layer in range(15):
-        a1_nems_left = autoroute_4_nems_gnd.put(layer * 450 + 8.05, 536, flop=True)
-        a2_nems_left = autoroute_4_nems_pos.put(layer * 450 - 10, 550, flop=True)
-        a1_nems_right = autoroute_4.put(layer * 450 + 178, 542)
-        a2_nems_right = autoroute_4_extended.put(layer * 450 + 178, 550)
-        a1_thermal_left = autoroute_8.put(layer * 450, 1228, flop=True, flip=True)
-        a2_thermal_left = autoroute_8_extended.put(layer * 450, 1218, flop=True, flip=True)
-        a1_thermal_right = autoroute_4.put(layer * 450 + 178, 1208, flip=True)
-        a2_thermal_right = autoroute_4_extended.put(layer * 450 + 178, 1200, flip=True)
+        autoroute_nems_gnd = autoroute_4_nems_gnd.put(layer * mesh_layer_x + 8.05, 536, flop=True)
+        autoroute_nems_pos = autoroute_4_nems_pos.put(layer * mesh_layer_x - 10, 550, flop=True)
+        autoroute_nems_cathode = autoroute_4.put(layer * mesh_layer_x + 178, 542)
+        autoroute_nems_anode = autoroute_4_extended.put(layer * mesh_layer_x + 178, 550)
+        autoroute_thermal_gnd = autoroute_8.put(layer * mesh_layer_x, 1228, flop=True, flip=True)
+        autoroute_thermal_pos = autoroute_8_extended.put(layer * mesh_layer_x, 1218, flop=True, flip=True)
+        autoroute_therm_cathode = autoroute_4.put(layer * mesh_layer_x + 178, 1208, flip=True)
+        autoroute_therm_anode = autoroute_4_extended.put(layer * mesh_layer_x + 178, 1200, flip=True)
 
-        for pin_nems, pin_thermal in zip(reversed([a2_nems_left.pin[f'p{n}'] for n in range(7)]),
-                                         reversed([a2_thermal_left.pin[f'p{n}'] for n in range(7)])):
+        for pin_nems, pin_thermal in zip(reversed([autoroute_nems_pos.pin[f'p{n}'] for n in range(7)]),
+                                         reversed([autoroute_thermal_pos.pin[f'p{n}'] for n in range(7)])):
             if pin_num < n_pads_eu[0]:
                 chip.m2_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
                 chip.m2_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8, width=8).put()
             pin_num += 1
-        for i, pins in enumerate(zip(reversed([a1_nems_left.pin[f'p{n}'] for n in range(7)]),
-                                     reversed([a1_thermal_left.pin[f'p{n}'] for n in range(7)]))):
+        for i, pins in enumerate(zip(reversed([autoroute_nems_gnd.pin[f'p{n}'] for n in range(7)]),
+                                     reversed([autoroute_thermal_gnd.pin[f'p{n}'] for n in range(7)]))):
+            pin_nems, pin_thermal = pins
+            if pin_num < n_pads_eu[0]:
+                chip.m1_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
+                chip.v1_via_4.put(pin_nems)
+                # extra thick traces to increase surface area
+                width = 8 if i <= 1 else 20  # hacky rule to avoid shorting
+                chip.m1_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=width,
+                                              width=width).put()
+                chip.v1_via_8.put(pin_thermal)
+
+                # TODO: Is this actually needed? There is no crosstalk until the m1 traces...
+                # chip.v1_via_8.put(layer * mesh_layer_x - 26.5, 1204, 90,
+                #                   array=[6, [-18.5, 0], 6, [0, -mesh_interport_w]])
+                # chip.v1_via_8.put(layer * mesh_layer_x - 26.5, 1204 - 7.5, 90,
+                #                   array=[6, [-18.5, 0], 6, [0, -mesh_interport_w]])
+            pin_num += 1 if i % 2 else 0
+        pin_num += 1
+        for i, pins in enumerate(zip([autoroute_nems_cathode.pin[f'p{n}'] for n in range(7)],
+                                     [autoroute_therm_cathode.pin[f'p{n}'] for n in range(7)])):
             pin_nems, pin_thermal = pins
             if pin_num < n_pads_eu[0]:
                 chip.m1_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
                 chip.v1_via_4.put(pin_nems)
                 chip.m1_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8, width=8).put()
                 chip.v1_via_8.put(pin_thermal)
-                chip.v1_via_8.put(layer * 450 - 26.5, 1204, 90,
-                                  array=[6, [-18.5, 0], 6, [0, -mesh_interport_w]])
-                chip.v1_via_8.put(layer * 450 - 26.5, 1204 - 7.5, 90,
-                                  array=[6, [-18.5, 0], 6, [0, -mesh_interport_w]])
             pin_num += 1 if i % 2 else 0
         pin_num += 1
-        for i, pins in enumerate(zip([a1_nems_right.pin[f'p{n}'] for n in range(7)],
-                                     [a1_thermal_right.pin[f'p{n}'] for n in range(7)])):
-            pin_nems, pin_thermal = pins
-            if pin_num < n_pads_eu[0]:
-                chip.m1_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
-                chip.v1_via_4.put(pin_nems)
-                chip.m1_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8, width=8).put()
-                chip.v1_via_8.put(pin_thermal)
-            pin_num += 1 if i % 2 else 0
-        pin_num += 1
-        for pin_nems, pin_thermal in zip([a2_nems_right.pin[f'p{n}'] for n in range(7)],
-                                         [a2_thermal_right.pin[f'p{n}'] for n in range(7)]):
+        for pin_nems, pin_thermal in zip([autoroute_nems_anode.pin[f'p{n}'] for n in range(7)],
+                                         [autoroute_therm_anode.pin[f'p{n}'] for n in range(7)]):
             if pin_num < n_pads_eu[0]:
                 chip.m2_ic.bend_strt_bend_p2p(pin_nems, eu_array_nems.pin[f'i{pin_num}'], radius=8, width=8).put()
                 chip.m2_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=8, width=8).put()
@@ -452,7 +463,6 @@ with nd.Cell('test_chiplet') as test_chiplet:
         chip.waveguide_ic.bend_strt_bend_p2p(ga.pin[f'a{2 * i + 2}'], gs.pin['in'], radius=10).put()
         detector_x.append([gs.pin[f'd{j}'].x for j in range(gridsearch_ls[i])])
         gs_list.append(gs)
-
 
     # put bond pad arrays on the left and right of the testing area
     bp_array_left = bp_array_testing.put(left_bp_x, test_bp_w)
@@ -499,11 +509,11 @@ with nd.Cell('test_chiplet') as test_chiplet:
             chip.m2_ic.bend(radius=4, angle=90).put()
             cx = nd.cp.x()
             # gnd connection
-            if f'v{i}' in gs_list[j].pin:
-                chip.m2_ic.bend_strt_bend_p2p(gs_list[j].pin[f'v{i}'], radius=8).put()
+            if f'gnd{i}' in gs_list[j].pin:
+                chip.m2_ic.bend_strt_bend_p2p(gs_list[j].pin[f'gnd{i}'], radius=8).put()
             # pos electrode connection
-            if f'c{i}' in gs_list[j].pin:
-                pin = gs_list[j].pin[f'c{i}']
+            if f'pos{i}' in gs_list[j].pin:
+                pin = gs_list[j].pin[f'pos{i}']
                 # ensures that this route will not intersect any of the current routes
                 offset = ground_wire.pin['a0'].y + 6 - pin.y
                 offset = -offset if pin.a == 180 else offset
