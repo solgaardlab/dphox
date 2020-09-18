@@ -1,5 +1,6 @@
-# dphox
-Design module for photonics (internal to Solgaard lab).
+![dphox](https://user-images.githubusercontent.com/7623867/93381618-ca48ed00-f815-11ea-980c-0fff994441a5.png)
+
+Design module for photonic simulations and tapeouts (internal to Solgaard lab).
 
 ## Installation
 

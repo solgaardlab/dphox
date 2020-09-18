@@ -15,12 +15,12 @@ AMF_STACK = {
     'cross_sections': {
         'heater_xs': [
             {
-                'layer': 115,  # heater
+                'layer': 115,    # heater
                 'growx': 0.755,  # (waveguide_w - heater_w) / 2 + 0.005
                 'growy': 0.005
             },
             {
-                'layer': 10,  # waveguide
+                'layer': 10,   # waveguide
                 'growy': 0.001
             }
         ],
@@ -31,7 +31,7 @@ AMF_STACK = {
         ],
         'via_heater_xs': [
             {
-                'layer': 120  # via_heater
+                'layer': 120   # via_heater
             },
             {
                 'layer': 125,  # mt_heater
@@ -46,18 +46,18 @@ AMF_STACK = {
         ],
         'grating_xs': [
             {
-                'layer': 11  # grating
+                'layer': 11    # grating
             }
         ],
         'waveguide_xs': [
             {
-                'layer': 10,  # waveguide
+                'layer': 10,   # waveguide
                 'growy': 0.004
             }
         ],
         'pad_xs': [
             {
-                'layer': 125  # mt_heater
+                'layer': 125   # mt_heater
             },
             {
                 'layer': 150,  # pad
@@ -67,12 +67,12 @@ AMF_STACK = {
         ],
         'trench_xs': [
             {
-                'layer': 160  # trench
+                'layer': 160   # trench
             }
         ],
         'slab_xs': [
             {
-                'layer': 12  # slab
+                'layer': 12    # slab
             }
         ]
     },
@@ -103,9 +103,194 @@ AIM_STACK = {
         'tzam': (737, 727),  # tzam
         'diam': (726, 727),  # diam, dicing channel
         'paam': (779, 727),  # metal passivation
-        'mlam': (780, 727),
+        'mlam': (780, 727),  # aluminum metal layer
         'oxide': (998, 1),  # oxide fill
         'clearout': (999, 1),  # pseudo clearout for nems devices
+    },
+    'drc': {  # design rules for AIM PDKv3.5
+        # format int (layer * 100 + dr_index): (rule str, special str, relation, float)
+        # seam
+        70201: [('width', '', '>=', 0.5)],
+        70202: [('length', '', '>=', 2)],
+        70211: [('width', 'space on wafer', '>=', 0.5)],
+        70203: [('space', '', '>=', 0.2)],
+        70204: [('area', '', '>=', 2)],
+        70205: [('space', 'to tapered waveguide', '>=', 0.13)],
+        70206: [('outside', 'seam', '>=', 0.25)],
+        # ream
+        70901: [('width', '', '>=', 0.15)],
+        70902: [('length', '', '>=', 0.6)],
+        70903: [('space', '', '>=', 0.1)],
+        70905: [('area', '', '>=', 0.09)],
+        70906: [('ring', '', '<=', 0.05)],
+        70907: [('outside', 'diam', '>=', 6)],
+        # fnam
+        73301: [('width', '', '>=', 0.15)],
+        73302: [('length', '', '>=', 0.15)],
+        73303: [('space', '', '>=', 0.1)],
+        73304: [('ring', '', '<=', 0.05)],
+        73305: [('space', 'pdam', '>=', 0.15),
+                ('space', 'ppam', '>=', 0.15),
+                ('space', 'pppam', '>=', 0.15),
+                ('space', 'ngam', '>=', 0.15),
+                ('space', 'ndam', '>=', 0.15),
+                ('space', 'nnam', '>=', 0.15),
+                ('space', 'nnnam', '>=', 0.15)],
+        # snam
+        73501: [('width', '', '>=', 0.15)],
+        73502: [('length', '', '>=', 0.15)],
+        73503: [('space', '', '>=', 0.1)],
+        73504: [('ring', '', '<=', 0.05)],
+        # ndam
+        79101: [('width', '', '>=', 0.5)],
+        79102: [('length', '', '>=', 0.8)],
+        79103: [('space', '', '>=', 0.5)],
+        79104: [('area', '', '>=', 0.4)],
+        79108: [('foreshortening', '', 'approx', 0.1)],
+        79109: [('cornerrounding', '', 'approx', 0.1)],
+        79110: [('outside', 'seam', 'approx', 0.1)],
+        # nnam
+        79201: [('width', '', '>=', 0.5)],
+        79202: [('length', '', '>=', 0.8)],
+        79203: [('space', '', '>=', 0.5)],
+        79204: [('area', '', '>=', 0.4)],
+        79208: [('foreshortening', '', 'approx', 0.1)],
+        79209: [('cornerrounding', '', 'approx', 0.1)],
+        79210: [('outside', 'seam', 'approx', 0.1)],
+        # nnnam
+        79301: [('width', '', '>=', 0.5)],
+        79302: [('length', '', '>=', 2)],
+        79303: [('space', '', '>=', 0.5)],
+        79304: [('area', '', '>=', 0.4)],
+        79308: [('foreshortening', '', 'approx', 0.1)],
+        79309: [('cornerrounding', '', 'approx', 0.1)],
+        79310: [('outside', 'seam', 'approx', 0.1)],
+        # pdam
+        79401: [('width', '', '>=', 0.5)],
+        79402: [('length', '', '>=', 0.8)],
+        79403: [('space', '', '>=', 0.5)],
+        79404: [('area', '', '>=', 0.4)],
+        79408: [('foreshortening', '', 'approx', 0.1)],
+        79409: [('cornerrounding', '', 'approx', 0.1)],
+        79410: [('outside', 'seam', 'approx', 0.1)],
+        # ppam
+        79501: [('width', '', '>=', 0.5)],
+        79502: [('length', '', '>=', 0.8)],
+        79503: [('space', '', '>=', 0.5)],
+        79504: [('area', '', '>=', 0.4)],
+        79508: [('foreshortening', '', 'approx', 0.1)],
+        79509: [('cornerrounding', '', 'approx', 0.1)],
+        79510: [('outside', 'seam', 'approx', 0.1)],
+        # pppam
+        79601: [('width', '', '>=', 0.5)],
+        79602: [('length', '', '>=', 2)],
+        79603: [('space', '', '>=', 0.5)],
+        79604: [('area', '', '>=', 0.4)],
+        79608: [('foreshortening', '', 'approx', 0.1)],
+        79609: [('cornerrounding', '', 'approx', 0.1)],
+        79610: [('outside', 'seam', 'approx', 0.1)],
+        # tram
+        71801: [('width', '', '==', 4)],
+        71802: [('length', '', '>=', 8)],
+        71811: [('length', '', '<=', 25)],
+        71803: [('space', '', '>=', 0.5)],
+        71804: [('area', '', '>=', 32)],
+        71805: [('within', 'seam', '>=', 0.25)],
+        71806: [('density', 'per 100um tile', '<=', 0.02)],
+        # ngam[
+        77601: [('width', '', '>=', 0.9)],
+        77602: [('length', '', '>=', 6)],
+        77603: [('space', '', '>=', 0.5)],
+        77604: [('area', '', '>=', 5.4)],
+        77605: [('outside', 'caam', '>=', 0.25)],
+        # esam
+        72001: [('width', '', '>=', 4.7)],
+        72002: [('length', '', '>=', 8.7)],
+        72003: [('space', '', '>=', 1.5)],
+        72004: [('area', '', '>=', 40.9)],
+        72005: [('outside', 'tram', '>=', 0.35)],
+        # cabar
+        72104: [('within', 'tram, length', '>=', 1.8)],
+        72114: [('within', 'ngam', '>=', 0.25)],
+        72105: [('area', 'diam', '<=', 0)],
+        72106: [('width', '', '==', 0.4),
+                ('length', '', '<=', 22.5),
+                ('length', '', '>=', 5.5)],
+        72107: [('within', 'tram, width', '>=', 1.25)],
+        72109: [('space', '', '>=', 0.8)],
+        72110: [('within', 'm1am', '>=', 0.06)],
+        72111: [('space', 'cbam', '>=', 2.5)],
+        # cbam
+        72201: [('width', '', '==', 0.4)],  # slightly different from actual rule
+        72203: [('space', '', '>=', 0.4)],
+        72213: [('outside', 'tram', '>=', 0.7)],
+        72204: [('within', 'seam', '>=', 0.1)],
+        72205: [('outside', 'diam', '>=', 0)],
+        72214: [('within', 'm1am', '>=', 0.04)],
+        72215: [('outside', 'esam', '>=', 0.35)],
+        72216: [('outside', 'ream', '>=', 0.1)],
+        72217: [('over', 'seam', '>=', 0)],
+        # m1am
+        71001: [('width', '', '>=', 0.48)],
+        71002: [('length', '', '>=', 0.48)],
+        71003: [('space', '', '>=', 0.48)],
+        71004: [('area', '', '>=', 0.2304)],
+        71006: [('outside', 'caam', '>=', 0.04),
+                ('outside', 'cbam', '>=', 0.04)],
+        71008: [('space', 'diam', '>=', 5)],
+        # v1am
+        71501: [('width', '', '==', 0.4)],
+        71502: [('length', '', '==', 0.4)],
+        71503: [('space', '', '>=', 0.4)],
+        # m2am
+        72501: [('width', '', '>=', 0.48)],
+        72502: [('length', '', '>=', 3.8)],
+        72503: [('space', '', '>=', 0.48)],
+        72504: [('area', '', '>=', 1.824)],
+        72505: [('outside', 'v1am', '>=', 0.1)],
+        72508: [('space', 'diam', '>=', 5)],
+        # vaam
+        77101: [('width', '', '==', 3.6)],
+        77102: [('length', '', '>=', 3.6)],
+        77103: [('space', '', '>=', 2.4)],
+        77105: [('within', 'mlam', '>=', 1.5)],
+        77106: [('within', 'm2am', '>=', 1)],
+        77107: [('space', 'v1am', '>=', 6)],
+        # mlam
+        78001: [('width', '', '>=', 1)],
+        78002: [('length', '', '>=', 4)],
+        78003: [('within', 'mlam', '>=', 1.5)],
+        78005: [('area', '', '>=', 4)],
+        # diam
+        72601: [('width', '', '>=', 100)],
+        72602: [('length', '', '>=', 1000)],
+        72603: [('space', '', '>=', 1000)],
+        # paam
+        77901: [('width', '', '==', 40)],
+        77902: [('length', '', '==', 40)],
+        77903: [('space', '', '>=', 60)],
+        77904: [('area', '', '>=', 1600)],
+        77905: [('within', 'm2am', '>=', 10)],
+        # wgkoam
+        80201: [('outside', 'ream', '>=', 0)],
+        80202: [('outside', 'seam', '>=', 0)],
+        80203: [('outside', 'ndam', '>=', 0)],
+        80204: [('outside', 'nnam', '>=', 0)],
+        80205: [('outside', 'nnnam', '>=', 0)],
+        80206: [('outside', 'pdam', '>=', 0)],
+        80207: [('outside', 'ppam', '>=', 0)],
+        80208: [('outside', 'pppam', '>=', 0)],
+        80209: [('outside', 'snam', '>=', 0)],
+        80210: [('outside', 'ppam', '>=', 0)],
+        80211: [('outside', 'pppam', '>=', 0)],
+        # metkoam
+        80301: [('outside', 'caam', '>=', 0)],
+        80302: [('outside', 'cbam', '>=', 0)],
+        80303: [('outside', 'm1am', '>=', 0)],
+        80304: [('outside', 'm2am', '>=', 0)],
+        80305: [('outside', 'mlam', '>=', 0)],
+        80306: [('outside', 'vaam', '>=', 0)],
+        80307: [('outside', 'v1am', '>=', 0)]
     },
     'zranges': {
         # 'ream': (0.11, 0.22),  # ream, ridge etch
