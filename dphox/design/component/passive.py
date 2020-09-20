@@ -3,6 +3,7 @@ from .pattern import Pattern, Path, GroupedPattern, Port
 
 from copy import deepcopy as copy
 from shapely.geometry import MultiPolygon
+import numpy as np
 
 try:
     import plotly.graph_objects as go
@@ -343,3 +344,47 @@ class AlignmentCross(Pattern):
         p = Path(line_dim[1], (0, 0)).segment(line_dim[0], "+y")
         q = Path(line_dim[1], (-line_dim[0] / 2, line_dim[0] / 2)).segment(line_dim[0], "+x")
         super(AlignmentCross, self).__init__(p, q)
+
+
+class DelayLine(Pattern):
+    def __init__(self, waveguide_width, delay_length, bend_radius, straight_length, number_bend_pairs=1):
+        # TODO(Nate): Add typing hints to parameters
+        """
+        Delay Line
+        Args:
+            delay_length: the delay line length increase over the straight length
+            bend_radius: the bend radius of turns in the squiggle delay line
+            straight_length: the camaparative straight segment this matches
+        """
+        self.waveguide_width = waveguide_width
+        self.delay_length = delay_length
+        self.bend_radius = bend_radius
+        self.straight_length = straight_length
+
+        total_path_length = straight_length + delay_length
+        if ((2 * np.pi + 4) * number_bend_pairs + np.pi - 4) * bend_radius >= delay_length:
+            raise ValueError(f"Bends alone exceed the delay length {delay_length} reduce the bend radius or the number of bend pairs")
+        segment_length = (delay_length - ((2 * np.pi + 4) * number_bend_pairs + np.pi - 4) * bend_radius) / (2 * number_bend_pairs)
+        extra_length = straight_length - 4 * bend_radius - segment_length
+        if extra_length <= 0:
+            raise ValueError(f"The delay line does not fit in the horaizontal distance of {straight_length} increase the number of bend pairs")
+        height = (4 * number_bend_pairs - 2) * bend_radius
+        p = Path(waveguide_width)
+        p.segment(length=bend_radius)
+        p.segment(length=segment_length)
+
+        for count in range(number_bend_pairs):
+            p.turn(radius=bend_radius, angle='ll')
+            p.segment(length=segment_length)
+            p.turn(radius=bend_radius, angle='rr')
+            p.segment(length=segment_length)
+        p.segment(length=bend_radius)
+        p.turn(radius=bend_radius, angle='r')
+        p.segment(length=height)
+        p.turn(radius=bend_radius, angle='l')
+        p.segment(length=extra_length)
+
+        super(DelayLine, self).__init__(p)
+        self.port['a0'] = Port(0, 0, -np.pi)
+        # self.port['b0'] = Port(self.size[0], 0) #odd bug where the starting x position is -0.22966)
+        self.port['b0'] = Port(self.bounds[2], 0)

@@ -13,6 +13,12 @@ chip = AIMNazca(
     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
 )
 
+# Please leave this so Nate can run this quickly
+# chip = AIMNazca(
+#     passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
+#     waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
+#     active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
+# )
 
 # chip params
 
@@ -179,8 +185,7 @@ pull_apart_gap = [
 
 # Motivation: reduce the waveguide width to encourage more phase shift per unit length in center
 pull_apart_taper = [
-    chip.singlemode_ps(chip.nems_ps(anchor=pull_apart_anchor, **pull_apart_taper_dict(taper_change, taper_length)
-                                    , name=f'ps_taper_{taper_change}_{taper_length}'),
+    chip.singlemode_ps(chip.nems_ps(anchor=pull_apart_anchor, **pull_apart_taper_dict(taper_change, taper_length), name=f'ps_taper_{taper_change}_{taper_length}'),
                        interport_w=test_interport_w,
                        phaseshift_l=mesh_phaseshift_l, name=f'pull_apart_taper_{taper_change}_{taper_length}')
     for taper_change in (-0.1, -0.15) for taper_length in (20, 30, 40)]
@@ -538,3 +543,5 @@ with nd.Cell('aim_layout') as aim_layout:
                        -standard_grating_interport + edge_shift_dim[1])
 
 nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+# Please leave this so Nate can run this quickly
+# nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])

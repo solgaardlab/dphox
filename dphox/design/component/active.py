@@ -102,7 +102,7 @@ class LateralNemsTDC(GroupedPattern):
             beam_taper: tapering of the lower boundary of the fin
             boundary_taper: tapering of the upper boundary of the fin
             end_bend_dim: If specified, places an additional end bend (see DC)
-            pad_dim: If specified, silicon anchor/handle xy size followed by the pad gap
+            pad_dim: If specified, silicon gnd pad xy size followed by connector dimensions (distance to guide, width)
             use_radius: use radius (see DC)
         """
         self.waveguide_w = waveguide_w
@@ -150,17 +150,17 @@ class LateralNemsTDC(GroupedPattern):
         if pad_dim is not None:
             brim_l, brim_taper = get_linear_adiabatic(min_width=waveguide_w, max_width=1, aggressive=True)
             brim_taper = cubic_taper(brim_taper[1])
-            gnd_contact_dim = (2, 0.5)
+            gnd_contact_dim = pad_dim[2:]
 
             if not bend_dim[1] > 2 * bend_dim[0] + 2 * brim_l:
                 raise ValueError(
                     f'Not enough room in s-bend to ground waveguide segment of length'
                     f'{bend_dim[1] - 2 * bend_dim[0]} need at least {2 * brim_l}')
 
-            if not (pad_dim[0] + (waveguide_w / 2 + brim_taper[2] / 2 + gnd_contact_dim[0])) < bend_dim[0]:
+            if not (pad_dim[0] + (waveguide_w / 2 + np.sum(brim_taper) / 2 + gnd_contact_dim[0])) < bend_dim[0]:
                 raise ValueError(
                     f'Not enough room in s-bend to ground waveguide with bend_dim[0] of {bend_dim[0]}'
-                    f'need at least {(pad_dim[0] + (waveguide_w / 2 + brim_taper[2] / 2 + gnd_contact_dim[0]))}')
+                    f'need at least {(pad_dim[0] + (waveguide_w / 2 + np.sum(brim_taper) / 2 + gnd_contact_dim[0]))}')
 
             rib_brim, gnd_connections, pads = [], [], []
             dx_brim = bend_dim[0]
@@ -248,7 +248,10 @@ class NemsAnchor(GroupedPattern):
                                        copy(straight).halign(connector, left=False, opposite=False).valign(
                                            copy(connector).translate(connector.size[0], connector.size[1]), ),
                                        copy(straight).halign(connector).valign(
-                                           copy(connector).translate(connector.size[0], connector.size[1]), ))
+                                           copy(connector).translate(connector.size[0], connector.size[1]), ),
+                                       copy(straight).align(connector).valign(
+                                           copy(connector).translate(connector.size[0], connector.size[1]), )
+                                       )
         if include_fin_dummy:
             # this is the mirror image dummy for mechanics
             patterns.append(Box(fin_spring_dim).align((connector.center[0], connector.bounds[3])))

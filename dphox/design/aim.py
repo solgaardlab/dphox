@@ -56,12 +56,11 @@ class AIMNazca:
 
     def nems_tdc(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
                  interaction_l: float = 100, dc_gap_w: float = 0.2, beam_gap_w: float = 0.15,
-                 bend_dim: Dim2 = (10, 24.66), pad_dim: Dim3 = (5, 5, 30), anchor: nd.Cell = None,
+                 bend_dim: Dim2 = (10, 24.66), pad_dim: Dim4 = (5, 5, 2, 0.5), anchor: nd.Cell = None,
                  use_radius: bool = True, clearout_box_dim: Dim2 = (100, 2.5), dc_taper_ls: Tuple[float, ...] = None,
                  dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5,
                  dope_grow: float = 0.25, dope_expand: float = 0.1,
                  diff_ps: Optional[nd.Cell] = None, name: str = 'nems_tdc') -> nd.Cell:
-        # TODO(Nate): Use pad_dim which is a dead param to define ground connector
         c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
                            interaction_l=interaction_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
                            bend_dim=bend_dim, pad_dim=pad_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
@@ -253,21 +252,50 @@ class AIMNazca:
                 nd.Pin('gnd1').put(p.pin['gnd1'])
         return cell
 
+    def mzi_arms(self, lower_arm: Union[List[nd.Cell], List[float]] = None, upper_arm: Union[List[nd.Cell], List[float]] = None, interport_w: float = 50, bare_arm_length: float = 50, name: str = 'mzi_arm'):
+        with nd.Cell(name) as cell:
+            l_device = self.waveguide_ic.strt(lower_arm[0]).put() if isinstance(lower_arm[0], (float, int)) else lower_arm[0].put()
+            nd.Pin('a0').put(l_device.pin['a0'])
+            for lower_device in lower_arm[1:]:
+                l_device = self.waveguide_ic.strt(lower_device).put() if isinstance(lower_device, (float, int)) else lower_device.put()
+
+            u_device = self.waveguide_ic.strt(upper_arm[0]).put(0, interport_w, flip=True) if isinstance(upper_arm[0], (float, int)) else upper_arm[0].put(0, interport_w, flip=True)
+            nd.Pin('a1').put(u_device.pin['a0'])
+            for upper_device in upper_arm[1:]:
+                u_device = self.waveguide_ic.strt(upper_device).put(flip=True) if isinstance(upper_device, (float, int)) else upper_device.put(flip=True)
+
+            lx, ly, la = l_device.pin['b0'].xya()
+            ux, uy, ua = u_device.pin['b0'].xya()
+            fill_length = abs(lx - ux)
+            if ux > lx:
+                fill_pin = l_device.pin['b0']
+                wg_filler = self.waveguide_ic.strt(fill_length).put(fill_pin)
+                nd.Pin('b0').put(wg_filler.pin['b0'])
+                nd.Pin('b1').put(u_device.pin['b0'])
+            elif ux < lx:
+                fill_pin = u_device.pin['b0']
+                wg_filler = self.waveguide_ic.strt(fill_length).put(fill_pin)
+                nd.Pin('b0').put(l_device.pin['b0'])
+                nd.Pin('b1').put(wg_filler.pin['b0'])
+            else:
+                nd.Pin('b0').put(l_device.pin['b0'])
+                nd.Pin('b1').put(u_device.pin['b0'])
+
+        return cell
+
     def singlemode_ps_ext_gnd(self, ps: nd.Cell, gnd_wg_l: float, interport_w: float, phaseshift_l: float,
                               top: bool = True, name: str = 'nems_singlemode_ps_ext_gnd'):
-        # TODO(Nate): Figure out if gnds should be on both arms base on testing
-        # TODO(Nate): use single instance of gnd_wg, and use nazca's flip in the put method to suppress warnings,
-        #               gnd_wg could be default-None arg to singlemode_ps instead of separate method?
         with nd.Cell(name) as cell:
-            gnd_ll = self.gnd_wg(length=gnd_wg_l, flip=False).put()
+            gnd_wg = self.gnd_wg(length=gnd_wg_l, flip=False)
+            gnd_ll = gnd_wg.put()
             pl = ps.put() if top else self.waveguide_ic.strt(phaseshift_l - 2 * gnd_wg_l).put()
-            gnd_lr = self.gnd_wg(length=gnd_wg_l, flip=False).put()
+            gnd_lr = gnd_wg.put()
             nd.Pin('a0').put(gnd_ll.pin['a0'])
             nd.Pin('b0').put(gnd_lr.pin['b0'])
 
-            gnd_ul = self.gnd_wg(length=gnd_wg_l, flip=True).put(0, interport_w)
+            gnd_ul = gnd_wg.put(0, interport_w, flip=True)
             pu = self.waveguide_ic.strt(phaseshift_l - 2 * gnd_wg_l).put() if top else ps.put()
-            gnd_ur = self.gnd_wg(length=gnd_wg_l, flip=True).put()
+            gnd_ur = gnd_wg.put(flip=True)
             nd.Pin('a1').put(gnd_ul.pin['a0'])
             nd.Pin('b1').put(gnd_ur.pin['b0'])
 
@@ -662,6 +690,11 @@ class AIMNazca:
             layer_to_zrange=self.stack['zranges'], process_extrusion=self.stack['process_extrusion'])
         for layer, mesh in trimeshes.items():
             mesh.export('{}_{}.stl'.format(cell.cell_name, layer))
+
+    def delay_line(self, waveguide_width=0.48, delay_length=200, bend_radius=5, straight_length=100, number_bend_pairs=1):
+        c = DelayLine(waveguide_width=waveguide_width, delay_length=delay_length, bend_radius=bend_radius, straight_length=straight_length, number_bend_pairs=number_bend_pairs)
+        device = Multilayer([(c, 'seam')])
+        return device.nazca_cell('delay_line')
 
 
 def _mzi_angle(waveguide_w: float, gap_w: float, interport_w: float, radius: float):
