@@ -73,21 +73,23 @@ via_y = -770
 
 dc = chip.custom_dc(bend_dim=(dc_radius, test_bend_dim))[0]
 mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
-tap = chip.bidirectional_tap(10, mesh_bend=True)
+tap_detector = chip.bidirectional_tap(10, mesh_bend=True)
 pull_apart_anchor = chip.nems_anchor()
 pull_in_anchor = chip.nems_anchor(shuttle_dim=(40, 5), fin_spring_dim=(50, 0.15),
                                   pos_electrode_dim=None, neg_electrode_dim=None)
 tdc_anchor = chip.nems_anchor(shuttle_dim=(test_tdc_interaction_l, 5),
                               pos_electrode_dim=None, neg_electrode_dim=None)
 tdc = chip.nems_tdc(anchor=tdc_anchor)
-ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap, sep))
+ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap_detector, sep))
 ps_no_anchor = chip.nems_ps()
 alignment_mark = chip.alignment_mark()
 gnd_wg = chip.gnd_wg()
+grating = chip.pdk_cells['cl_band_vertical_coupler_si']
+detector = chip.pdk_cells['cl_band_photodetector_digital']
 
 # Mesh generation
 
-thermal_ps = chip.thermal_ps((tap, sep))
+thermal_ps = chip.thermal_ps((tap_detector, sep))
 dc_dummy = chip.waveguide(mesh_dc.pin['b0'].x - mesh_dc.pin['a0'].x)
 mzi_node_nems = chip.mzi_node(chip.double_ps(ps, mesh_interport_w, name='nems_double_ps'), mesh_dc)
 mzi_node_thermal = chip.mzi_node(chip.double_ps(thermal_ps, mesh_interport_w, name='thermal_double_ps'), mesh_dc)
@@ -293,6 +295,7 @@ def route_detector(p1, n2, n1, p2):
     chip.m2_ic.bend(8, -90).put(p2)
     chip.m2_ic.strt(33).put()
 
+# test structure grid
 
 for col, ps_columns in enumerate(ps_columns):
     with nd.Cell(f'gridsearch_{col}') as gridsearch:
@@ -300,7 +303,7 @@ for col, ps_columns in enumerate(ps_columns):
         for i, ps in enumerate(ps_columns):
             # all structures for a tap line should be specified here
             node = chip.mzi_node(ps, dc, include_input_ps=False,
-                                 detector=chip.pdk_cells['cl_band_photodetector_digital'],
+                                 detector=detector,
                                  name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
             route_detector(node.pin['p1'], node.pin['n2'], node.pin['n1'], node.pin['p2'])
             nd.Pin(f'd{i}').put(node.pin['b0'])  # this is useful for autorouting the gnd path
@@ -318,7 +321,6 @@ for col, tdc_column in enumerate(tdc_columns):
         for i, tdc in enumerate(tdc_column):
             # all structures for a tap line should be specified here
             _tdc = tdc.put(line.pin[f'a{2 * i + 1}'])
-            detector = chip.pdk_cells['cl_band_photodetector_digital']
             d1 = detector.put(_tdc.pin['b0'])
             d2 = detector.put(_tdc.pin['b1'], flip=True)
             route_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
@@ -331,6 +333,29 @@ for col, tdc_column in enumerate(tdc_columns):
         nd.Pin('in').put(line.pin['in'])
         nd.Pin('out').put(line.pin['out'])
     gridsearches.append(gridsearch)
+
+# test structures between the meshes
+
+middle_mesh_pull_apart = [
+    chip.mzi_node(chip.singlemode_ps(ps, interport_w=mesh_interport_w,
+                                     phaseshift_l=mesh_phaseshift_l), dc, include_input_ps=False,
+                  detector=chip.pdk_cells['cl_band_photodetector_digital'],
+                  name=f'meshtest_mzi_{ps.name}') for ps in (chip.nems_ps(anchor=pull_apart_anchor),
+                                                         chip.nems_ps(anchor=pull_apart_anchor,
+                                                                      **pull_apart_taper_dict(-0.05, 30)))
+]
+middle_mesh_pull_in = [
+    chip.mzi_node(chip.singlemode_ps_ext_gnd(ps, gnd_wg_l=gnd_length, interport_w=mesh_interport_w,
+                                     phaseshift_l=pull_in_phaseshift_l + 2 * gnd_length), dc, include_input_ps=False,
+                  detector=chip.pdk_cells['cl_band_photodetector_digital'],
+                  name=f'meshtest_mzi_{ps.name}') for ps in (chip.nems_ps(anchor=pull_in_anchor,
+                                                                          **pull_in_dict(pull_in_phaseshift_l)),
+                                                             chip.nems_ps(anchor=pull_in_anchor,
+                                                                          **pull_in_dict(pull_in_phaseshift_l,
+                                                                                         -0.05, 20)))
+]
+middle_mesh_tdc = [chip.nems_tdc(anchor=pull_apart_anchor), chip.nems_tdc(anchor=tdc_anchor),
+                   chip.nems_tdc(anchor=pull_apart_anchor, **taper_dict_tdc(-0.2, 40))]
 
 # gnd pad (testing side)
 with nd.Cell('gnd_pad') as gnd_pad:
@@ -350,9 +375,41 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
     input_interposer = interposer.put(thermal.pin['a4'])
     output_interposer = interposer.put(thermal.pin['b4'], flip=True)
     mzi_node_thermal_detector.put(input_interposer.pin['a6'])
-    mdc = mesh_dc.put(output_interposer.pin['a6'])
+
+    # mesh DC test
+    strt = chip.waveguide_ic.strt(200).put(output_interposer.pin['a5'])
+    mdc = mesh_dc.put(strt.pin['b0'])
+    detector.put(mdc.pin['b0'])
+    detector.put(mdc.pin['b1'], flip=True)
+
+    tdc.put(output_interposer.pin['a7'])
+
+    # mesh tap test
+    test_tap = tap_detector.put(output_interposer.pin['a6'].x - 40,
+                                output_interposer.pin['a6'].y, flip=False)
+    detector.put(test_tap.pin['a0'])
+
     mzi_node_nems_detector.put(input_interposer.pin['a7'], flip=True)
     alignment_mark.put(-500, 0)
+
+    # mid-mesh test structures
+    num_ps = len(middle_mesh_pull_apart + middle_mesh_pull_in)
+    for i, test_structure in enumerate(middle_mesh_pull_apart + middle_mesh_pull_in + middle_mesh_tdc):
+        tdc_shift = 40 * (i >= num_ps)
+        ts = test_structure.put(1325 + tdc_shift + mesh_layer_x * i, output_interposer.pin['a8'].y + 20)
+        chip.waveguide_ic.strt(tdc_shift).put(ts.pin['a1'])
+        chip.waveguide_ic.bend(radius=7, angle=-90).put()
+        chip.waveguide_ic.strt(5).put()
+        bend = chip.waveguide_ic.bend(radius=7, angle=-90).put()
+        grating.put(bend.pin['b0'].x, bend.pin['b0'].y, -90)
+        chip.waveguide_ic.strt(7 + tdc_shift).put(ts.pin['a0'])
+        chip.waveguide_ic.bend(radius=7, angle=-90).put()
+        chip.waveguide_ic.strt(113).put()
+        chip.waveguide_ic.bend(radius=7, angle=-90).put()
+        bend = chip.waveguide_ic.strt(7).put()
+        grating.put(bend.pin['b0'].x, bend.pin['b0'].y, -90)
+        detector.put(ts.pin['b0'])
+        detector.put(ts.pin['b1'], flip=True)
 
     # routing code for the meshes
     bp_array_nems = bp_array.put(-180, -40)
@@ -428,12 +485,6 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
                 chip.m1_ic.bend_strt_bend_p2p(pin_thermal, eu_array_thermal.pin[f'i{pin_num}'], radius=width,
                                               width=width).put()
                 chip.v1_via_8.put(pin_thermal)
-
-                # TODO: Is this actually needed? There is no crosstalk until the m1 traces...
-                # chip.v1_via_8.put(layer * mesh_layer_x - 26.5, 1204, 90,
-                #                   array=[6, [-18.5, 0], 6, [0, -mesh_interport_w]])
-                # chip.v1_via_8.put(layer * mesh_layer_x - 26.5, 1204 - 7.5, 90,
-                #                   array=[6, [-18.5, 0], 6, [0, -mesh_interport_w]])
             pin_num += 1 if i % 2 else 0
         pin_num += 1
         for i, pins in enumerate(zip([autoroute_nems_cathode.pin[f'p{n}'] for n in range(7)],

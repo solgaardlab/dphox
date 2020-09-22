@@ -377,86 +377,66 @@ class LateralNemsPSFull(Multilayer):
         super(LateralNemsPSFull, self).__init__([(full_ps, ridge), (ps.rib_brim, rib)] + vias + dopes)
 
 
-# class NemsMillerNode(GroupedPattern):
-#     def __init__(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
-#                  gap_w: float, bend_radius: float, bend_extension: float, lr_nanofin_w: float,
-#                  ud_nanofin_w: float, lr_gap_w: float, ud_gap_w: float, lr_pad_dim: Optional[Dim2] = None,
-#                  ud_pad_dim: Optional[Dim2] = None, lr_connector_dim: Optional[Dim2] = None,
-#                  ud_connector_dim: Optional[Dim2] = None, shift: Tuple[float, float] = (0, 0)):
-#         self.waveguide_w = waveguide_w
-#         self.upper_interaction_l = upper_interaction_l
-#         self.lower_interaction_l = lower_interaction_l
-#         self.bend_radius = bend_radius
-#         self.bend_extension = bend_extension
-#         self.lr_nanofin_w = lr_nanofin_w
-#         self.ud_nanofin_w = ud_nanofin_w
-#         self.lr_pad_dim = lr_pad_dim
-#         self.ud_pad_dim = ud_pad_dim
-#         self.lr_connector_dim = lr_connector_dim
-#         self.ud_connector_dim = ud_connector_dim
-#         self.gap_w = gap_w
-#
-#         connectors, pads = [], []
-#
-#         bend_height = 2 * bend_radius + bend_extension
-#         interport_distance = waveguide_w + 2 * bend_height + gap_w
-#
-#         if not upper_interaction_l <= lower_interaction_l:
-#             raise ValueError("Require upper_interaction_l <= lower_interaction_l by convention.")
-#
-#         lower_path = Path(waveguide_w).dc((bend_radius, bend_height), lower_interaction_l, use_radius=True)
-#         upper_path = Path(waveguide_w).dc((bend_radius, bend_height), upper_interaction_l,
-#                                           (lower_interaction_l - upper_interaction_l) / 2,
-#                                           inverted=True, use_radius=True)
-#         upper_path.translate(dx=0, dy=interport_distance)
-#
-#         dc = Pattern(lower_path, upper_path)
-#
-#         nanofin_y = ud_nanofin_w / 2 + gap_w / 2 + waveguide_w + ud_gap_w
-#         nanofins = [Box((lower_interaction_l, ud_nanofin_w)).center_align(dc).translate(dx=0, dy=-nanofin_y)]
-#         pad_y = ud_connector_dim[1] + ud_pad_dim[1] / 2
-#         pads += [Box(ud_pad_dim).center_align(nanofins[0]).translate(dy=-pad_y)]
-#         connector = Box(ud_connector_dim).center_align(pads[0])
-#         connectors += [copy(connector).vert_align(pads[0], bottom=True, opposite=True).horz_align(pads[0]),
-#                        copy(connector).vert_align(pads[0], bottom=True, opposite=True).horz_align(pads[0], left=False)]
-#
-#         nanofin_x = lr_nanofin_w / 2 + lr_gap_w + upper_interaction_l / 2 + bend_radius + waveguide_w / 2
-#         pad_x = lr_connector_dim[0] + lr_pad_dim[0] / 2
-#         nanofin_y = bend_radius + waveguide_w + gap_w / 2 + bend_extension / 2
-#
-#         nanofins += [Box((lr_nanofin_w, bend_extension)).center_align(dc).translate(dx=-nanofin_x, dy=nanofin_y),
-#                      Box((lr_nanofin_w, bend_extension)).center_align(dc).translate(dx=nanofin_x, dy=nanofin_y)]
-#         pads += [Box(lr_pad_dim).center_align(nanofins[1]).translate(dx=-pad_x, dy=0),
-#                  Box(lr_pad_dim).center_align(nanofins[2]).translate(dx=pad_x, dy=0)]
-#         connector = Box(lr_connector_dim).center_align(pads[1])
-#         connectors += [copy(connector).horz_align(pads[1], left=True, opposite=True).vert_align(pads[1]),
-#                        copy(connector).horz_align(pads[1], left=True, opposite=True).vert_align(pads[1], bottom=False)]
-#         connector = Box(lr_connector_dim).center_align(pads[2])
-#         connectors += [copy(connector).horz_align(pads[2], left=False, opposite=True).vert_align(pads[2]),
-#                        copy(connector).horz_align(pads[2], left=False, opposite=True).vert_align(pads[2], bottom=False)]
-#
-#         super(NemsMillerNode, self).__init__(*([dc] + nanofins + connectors + pads), shift=shift)
-#         self.dc, self.connectors, self.nanofins, self.pads = dc, connectors, nanofins, pads
-#
-#     @property
-#     def input_ports(self) -> np.ndarray:
-#         bend_height = 2 * self.bend_radius + self.bend_extension
-#         return np.asarray(((0, 0), (0, self.waveguide_w + 2 * bend_height + self.gap_w)))
-#
-#     @property
-#     def output_ports(self) -> np.ndarray:
-#         # TODO(sunil): change this to correct method
-#         return self.input_ports + np.asarray((self.size[0], 0))
-#
-#     def multilayer(self, waveguide_layer: str='seam', metal_stack_layers: Tuple[str, ...] = ('m1am', 'm2am'), via_stack_layers: Tuple[str, ...] = ('cbam', 'v1am'),
-#                    clearout_layer: str, clearout_etch_stop_layer: str, contact_box_dim: Dim2, clearout_box_dim: Dim2,
-#                    doping_stack_layer: Optional[str] = None,
-#                    clearout_etch_stop_grow: float = 0, via_shrink: float = 1, doping_grow: float = 0.25) -> Multilayer:
-#         return multilayer(self, self.pads, ((self.center[0], self.pads[1].center[1]),),
-#                           waveguide_layer, metal_stack_layers,
-#                           via_stack_layers, clearout_layer, clearout_etch_stop_layer, contact_box_dim,
-#                           clearout_box_dim, doping_stack_layer, clearout_etch_stop_grow, via_shrink, doping_grow)
+class NemsMillerNode(GroupedPattern):
+    def __init__(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
+                 gap_w: float, bend_radius: float, bend_extension: float, lr_nanofin_w: float,
+                 ud_nanofin_w: float, lr_gap_w: float, ud_gap_w: float, lr_pad_dim: Optional[Dim2] = None,
+                 ud_pad_dim: Optional[Dim2] = None, lr_connector_dim: Optional[Dim2] = None,
+                 ud_connector_dim: Optional[Dim2] = None):
+        self.waveguide_w = waveguide_w
+        self.upper_interaction_l = upper_interaction_l
+        self.lower_interaction_l = lower_interaction_l
+        self.bend_radius = bend_radius
+        self.bend_extension = bend_extension
+        self.lr_nanofin_w = lr_nanofin_w
+        self.ud_nanofin_w = ud_nanofin_w
+        self.lr_pad_dim = lr_pad_dim
+        self.ud_pad_dim = ud_pad_dim
+        self.lr_connector_dim = lr_connector_dim
+        self.ud_connector_dim = ud_connector_dim
+        self.gap_w = gap_w
 
+        connectors, pads = [], []
+
+        bend_height = 2 * bend_radius + bend_extension
+        interport_distance = waveguide_w + 2 * bend_height + gap_w
+
+        if not upper_interaction_l <= lower_interaction_l:
+            raise ValueError("Require upper_interaction_l <= lower_interaction_l by convention.")
+
+        lower_path = Path(waveguide_w).dc((bend_radius, bend_height), lower_interaction_l, use_radius=True)
+        upper_path = Path(waveguide_w).dc((bend_radius, bend_height), upper_interaction_l,
+                                          (lower_interaction_l - upper_interaction_l) / 2,
+                                          inverted=True, use_radius=True)
+        upper_path.translate(dx=0, dy=interport_distance)
+
+        dc = Pattern(lower_path, upper_path)
+
+        nanofin_y = ud_nanofin_w / 2 + gap_w / 2 + waveguide_w + ud_gap_w
+        nanofins = [Box((lower_interaction_l, ud_nanofin_w)).align(dc).translate(dx=0, dy=-nanofin_y)]
+        pad_y = ud_connector_dim[1] + ud_pad_dim[1] / 2
+        pads += [Box(ud_pad_dim).align(nanofins[0]).translate(dy=-pad_y)]
+        connector = Box(ud_connector_dim).align(pads[0])
+        connectors += [copy(connector).valign(pads[0], bottom=True, opposite=True).halign(pads[0]),
+                       copy(connector).valign(pads[0], bottom=True, opposite=True).halign(pads[0], left=False)]
+
+        nanofin_x = lr_nanofin_w / 2 + lr_gap_w + upper_interaction_l / 2 + bend_radius + waveguide_w / 2
+        pad_x = lr_connector_dim[0] + lr_pad_dim[0] / 2
+        nanofin_y = bend_radius + waveguide_w + gap_w / 2 + bend_extension / 2
+
+        nanofins += [Box((lr_nanofin_w, bend_extension)).align(dc).translate(dx=-nanofin_x, dy=nanofin_y),
+                     Box((lr_nanofin_w, bend_extension)).align(dc).translate(dx=nanofin_x, dy=nanofin_y)]
+        pads += [Box(lr_pad_dim).align(nanofins[1]).translate(dx=-pad_x, dy=0),
+                 Box(lr_pad_dim).align(nanofins[2]).translate(dx=pad_x, dy=0)]
+        connector = Box(lr_connector_dim).align(pads[1])
+        connectors += [copy(connector).halign(pads[1], left=True, opposite=True).valign(pads[1]),
+                       copy(connector).halign(pads[1], left=True, opposite=True).valign(pads[1], bottom=False)]
+        connector = Box(lr_connector_dim).align(pads[2])
+        connectors += [copy(connector).halign(pads[2], left=False, opposite=True).valign(pads[2]),
+                       copy(connector).halign(pads[2], left=False, opposite=True).valign(pads[2], bottom=False)]
+
+        super(NemsMillerNode, self).__init__(*([dc] + nanofins + connectors + pads))
+        self.dc, self.connectors, self.nanofins, self.pads = dc, connectors, nanofins, pads
 
 # class RingResonator(Pattern):
 #     def __init__(self, waveguide_w: float, taper_l: float = 0,

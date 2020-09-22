@@ -252,7 +252,34 @@ class AIMNazca:
                 nd.Pin('gnd1').put(p.pin['gnd1'])
         return cell
 
-    def mzi_arms(self, lower_arm: Union[List[nd.Cell], List[float]] = None, upper_arm: Union[List[nd.Cell], List[float]] = None, interport_w: float = 50, bare_arm_length: float = 50, name: str = 'mzi_arm'):
+    def singlemode_ps_ext_gnd(self, ps: nd.Cell, gnd_wg_l: float, interport_w: float, phaseshift_l: float,
+                              top: bool = True, name: str = 'nems_singlemode_ps_ext_gnd'):
+        with nd.Cell(name) as cell:
+            gnd_wg = self.gnd_wg(length=gnd_wg_l, flip=False)
+            gnd_ll = gnd_wg.put()
+            pl = ps.put() if top else self.waveguide_ic.strt(phaseshift_l - 2 * gnd_wg_l).put()
+            gnd_lr = gnd_wg.put()
+            nd.Pin('a0').put(gnd_ll.pin['a0'])
+            nd.Pin('b0').put(gnd_lr.pin['b0'])
+
+            gnd_ul = gnd_wg.put(0, interport_w, flip=True)
+            pu = self.waveguide_ic.strt(phaseshift_l - 2 * gnd_wg_l).put() if top else ps.put()
+            gnd_ur = gnd_wg.put(flip=True)
+            nd.Pin('a1').put(gnd_ul.pin['a0'])
+            nd.Pin('b1').put(gnd_ur.pin['b0'])
+
+            p = pl if top else pu
+            if 'pos0' in p.pin:  # equivalent to "raising pins" but not all phase shifters have these pins...
+                nd.Pin('pos0').put(p.pin['pos0'])
+                nd.Pin('pos1').put(p.pin['pos1'])
+            if 'gnd0' in p.pin:
+                nd.Pin('gnd0').put(p.pin['gnd0'])
+                nd.Pin('gnd1').put(p.pin['gnd1'])
+        return cell
+
+    def mzi_arms(self, lower_arm: List[Union[nd.Cell, float]] = None,
+                 upper_arm: List[Union[nd.Cell, float]] = None, interport_w: float = 50,
+                 name: str = 'mzi_arm'):
         with nd.Cell(name) as cell:
             l_device = self.waveguide_ic.strt(lower_arm[0]).put() if isinstance(lower_arm[0], (float, int)) else lower_arm[0].put()
             nd.Pin('a0').put(l_device.pin['a0'])
@@ -281,31 +308,6 @@ class AIMNazca:
                 nd.Pin('b0').put(l_device.pin['b0'])
                 nd.Pin('b1').put(u_device.pin['b0'])
 
-        return cell
-
-    def singlemode_ps_ext_gnd(self, ps: nd.Cell, gnd_wg_l: float, interport_w: float, phaseshift_l: float,
-                              top: bool = True, name: str = 'nems_singlemode_ps_ext_gnd'):
-        with nd.Cell(name) as cell:
-            gnd_wg = self.gnd_wg(length=gnd_wg_l, flip=False)
-            gnd_ll = gnd_wg.put()
-            pl = ps.put() if top else self.waveguide_ic.strt(phaseshift_l - 2 * gnd_wg_l).put()
-            gnd_lr = gnd_wg.put()
-            nd.Pin('a0').put(gnd_ll.pin['a0'])
-            nd.Pin('b0').put(gnd_lr.pin['b0'])
-
-            gnd_ul = gnd_wg.put(0, interport_w, flip=True)
-            pu = self.waveguide_ic.strt(phaseshift_l - 2 * gnd_wg_l).put() if top else ps.put()
-            gnd_ur = gnd_wg.put(flip=True)
-            nd.Pin('a1').put(gnd_ul.pin['a0'])
-            nd.Pin('b1').put(gnd_ur.pin['b0'])
-
-            p = pl if top else pu
-            if 'pos0' in p.pin:  # equivalent to "raising pins" but not all phase shifters have these pins...
-                nd.Pin('pos0').put(p.pin['pos0'])
-                nd.Pin('pos1').put(p.pin['pos1'])
-            if 'gnd0' in p.pin:
-                nd.Pin('gnd0').put(p.pin['gnd0'])
-                nd.Pin('gnd1').put(p.pin['gnd1'])
         return cell
 
     def thermal_ps(self, tap_sep: Optional[Tuple[nd.Cell, float]] = None):
