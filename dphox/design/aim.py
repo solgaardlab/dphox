@@ -281,15 +281,20 @@ class AIMNazca:
                  upper_arm: List[Union[nd.Cell, float]] = None, interport_w: float = 50,
                  name: str = 'mzi_arm'):
         with nd.Cell(name) as cell:
+            pins_to_raise = ['pos0', 'pos1', 'gnd0', 'gnd1']
             l_device = self.waveguide_ic.strt(lower_arm[0]).put() if isinstance(lower_arm[0], (float, int)) else lower_arm[0].put()
+            l_device.raise_pins(pins_to_raise)
             nd.Pin('a0').put(l_device.pin['a0'])
             for lower_device in lower_arm[1:]:
                 l_device = self.waveguide_ic.strt(lower_device).put() if isinstance(lower_device, (float, int)) else lower_device.put()
+                l_device.raise_pins(pins_to_raise)
 
             u_device = self.waveguide_ic.strt(upper_arm[0]).put(0, interport_w, flip=True) if isinstance(upper_arm[0], (float, int)) else upper_arm[0].put(0, interport_w, flip=True)
+            u_device.raise_pins(pins_to_raise)
             nd.Pin('a1').put(u_device.pin['a0'])
             for upper_device in upper_arm[1:]:
                 u_device = self.waveguide_ic.strt(upper_device).put(flip=True) if isinstance(upper_device, (float, int)) else upper_device.put(flip=True)
+                u_device.raise_pins(pins_to_raise)
 
             lx, ly, la = l_device.pin['b0'].xya()
             ux, uy, ua = u_device.pin['b0'].xya()
@@ -307,6 +312,13 @@ class AIMNazca:
             else:
                 nd.Pin('b0').put(l_device.pin['b0'])
                 nd.Pin('b1').put(u_device.pin['b0'])
+
+            # if 'pos0' in p.pin:  # equivalent to "raising pins" but not all phase shifters have these pins...
+            #     nd.Pin('pos0').put(p.pin['pos0'])
+            #     nd.Pin('pos1').put(p.pin['pos1'])
+            # if 'gnd0' in p.pin:
+            #     nd.Pin('gnd0').put(p.pin['gnd0'])
+            #     nd.Pin('gnd1').put(p.pin['gnd1'])
 
         return cell
 
@@ -693,7 +705,7 @@ class AIMNazca:
         for layer, mesh in trimeshes.items():
             mesh.export('{}_{}.stl'.format(cell.cell_name, layer))
 
-    def delay_line(self, waveguide_width=0.48, delay_length=200, bend_radius=5, straight_length=100, number_bend_pairs=1):
+    def delay_line(self, waveguide_width=0.48, delay_length=50, bend_radius=5, straight_length=25, number_bend_pairs=1):
         c = DelayLine(waveguide_width=waveguide_width, delay_length=delay_length, bend_radius=bend_radius, straight_length=straight_length, number_bend_pairs=number_bend_pairs)
         device = Multilayer([(c, 'seam')])
         return device.nazca_cell('delay_line')

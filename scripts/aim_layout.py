@@ -88,7 +88,8 @@ gnd_wg = chip.gnd_wg()
 grating = chip.pdk_cells['cl_band_vertical_coupler_si']
 detector = chip.pdk_cells['cl_band_photodetector_digital']
 
-delay_line = chip.delay_line()
+delay_line_50 = chip.delay_line()
+delay_line_200 = chip.delay_line(delay_length=250, straight_length=125)
 
 # Mesh generation
 
@@ -182,10 +183,17 @@ Pull-apart phase shifter or PSV3
 '''
 
 # Motivation: modify the gap of the pull-apart phase shifter
+# pull_apart_gap = [
+#     chip.singlemode_ps(chip.nems_ps(gap_w=gap_w, anchor=pull_apart_anchor, name=f'ps_gap_{gap_w}'),
+#                        interport_w=test_interport_w,
+#                        phaseshift_l=mesh_phaseshift_l, name=f'pull_apart_gap_{gap_w}')
+#     for gap_w in (0.1, 0.15, 0.2, 0.25)]
+
 pull_apart_gap = [
-    chip.singlemode_ps(chip.nems_ps(gap_w=gap_w, anchor=pull_apart_anchor, name=f'ps_gap_{gap_w}'),
-                       interport_w=test_interport_w,
-                       phaseshift_l=mesh_phaseshift_l, name=f'pull_apart_gap_{gap_w}')
+    chip.mzi_arms([delay_line_50, chip.nems_ps(gap_w=gap_w, anchor=pull_apart_anchor, name=f'ps_gap_{gap_w}')],
+                  [delay_line_200],
+                  interport_w=test_interport_w,
+                  name=f'pull_apart_gap_{gap_w}')
     for gap_w in (0.1, 0.15, 0.2, 0.25)]
 
 # Motivation: reduce the waveguide width to encourage more phase shift per unit length in center
@@ -593,7 +601,7 @@ with nd.Cell('test_chiplet') as test_chiplet:
             cx = nd.cp.x()
             # gnd connection
             if f'gnd{i}' in gs_list[j].pin:
-                chip.m2_ic.bend_strt_bend_p2p(gs_list[j].pin[f'gnd{i}'], radius=8).put()
+                chip.m2_ic.bend_strt_bend_p2p(gs_list[j].pin[f'gnd{i}'], radius=8).put()  # for anchor gnd pin
             # pos electrode connection
             if f'pos{i}' in gs_list[j].pin:
                 pin = gs_list[j].pin[f'pos{i}']
