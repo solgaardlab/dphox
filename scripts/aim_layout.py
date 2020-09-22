@@ -51,7 +51,9 @@ test_bend_dim = test_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
 test_tdc_interport_w = 50
 test_tdc_interaction_l = 100
 pull_in_phaseshift_l = 50
+test_tdc_radius = 6
 test_tdc_bend_dim = test_tdc_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
+print(test_tdc_bend_dim)
 mesh_interport_w = 50
 mesh_phaseshift_l = 100
 detector_route_loop = (20, 30, 40)  # height, length, relative starting x for loops around detectors
@@ -80,8 +82,8 @@ pull_in_anchor = chip.nems_anchor(shuttle_dim=(40, 5), fin_spring_dim=(50, 0.15)
                                   pos_electrode_dim=None, neg_electrode_dim=None)
 tdc_anchor = chip.nems_anchor(shuttle_dim=(test_tdc_interaction_l, 5),
                               pos_electrode_dim=None, neg_electrode_dim=None)
-tdc = chip.nems_tdc(anchor=tdc_anchor)
-ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap_detector, sep))
+tdc = chip.nems_tdc(anchor=tdc_anchor, bend_dim=(test_tdc_radius, test_tdc_bend_dim))
+ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap, sep))
 ps_no_anchor = chip.nems_ps()
 alignment_mark = chip.alignment_mark()
 gnd_wg = chip.gnd_wg()
