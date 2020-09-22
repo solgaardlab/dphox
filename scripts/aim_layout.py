@@ -7,18 +7,18 @@ from dphox.design.component import cubic_taper
 from datetime import date
 from tqdm import tqdm
 
-chip = AIMNazca(
-    passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
-    waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
-    active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
-)
+# chip = AIMNazca(
+#     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
+#     waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
+#     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
+# )
 
 # Please leave this so Nate can run this quickly
-# chip = AIMNazca(
-#     passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
-#     waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
-#     active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
-# )
+chip = AIMNazca(
+    passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
+    waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
+    active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
+)
 
 # chip params
 
@@ -70,6 +70,7 @@ test_bp_w = 212
 via_y = -770
 
 # Basic components
+# TODO(Nate): Double check the defaults of these parameters
 
 dc = chip.custom_dc(bend_dim=(dc_radius, test_bend_dim))[0]
 mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
@@ -86,6 +87,8 @@ alignment_mark = chip.alignment_mark()
 gnd_wg = chip.gnd_wg()
 grating = chip.pdk_cells['cl_band_vertical_coupler_si']
 detector = chip.pdk_cells['cl_band_photodetector_digital']
+
+delay_line = chip.delay_line()
 
 # Mesh generation
 
@@ -342,12 +345,12 @@ middle_mesh_pull_apart = [
     chip.mzi_node(chip.singlemode_ps(ps, interport_w=mesh_interport_w,
                                      phaseshift_l=mesh_phaseshift_l), dc, include_input_ps=False,
                   name=f'meshtest_mzi_{ps.name}') for ps in (chip.nems_ps(anchor=pull_apart_anchor),
-                                                         chip.nems_ps(anchor=pull_apart_anchor,
-                                                                      **pull_apart_taper_dict(-0.05, 30)))
+                                                             chip.nems_ps(anchor=pull_apart_anchor,
+                                                                          **pull_apart_taper_dict(-0.05, 30)))
 ]
 middle_mesh_pull_in = [
     chip.mzi_node(chip.singlemode_ps_ext_gnd(ps, gnd_wg_l=gnd_length, interport_w=mesh_interport_w,
-                                     phaseshift_l=pull_in_phaseshift_l + 2 * gnd_length), dc, include_input_ps=False,
+                                             phaseshift_l=pull_in_phaseshift_l + 2 * gnd_length), dc, include_input_ps=False,
                   name=f'meshtest_mzi_{ps.name}') for ps in (chip.nems_ps(anchor=pull_in_anchor,
                                                                           **pull_in_dict(pull_in_phaseshift_l)),
                                                              chip.nems_ps(anchor=pull_in_anchor,
@@ -358,6 +361,28 @@ middle_mesh_tdc = [chip.nems_tdc(anchor=pull_apart_anchor), chip.nems_tdc(anchor
                    chip.nems_tdc(anchor=pull_apart_anchor, **taper_dict_tdc(-0.2, 40))]
 
 middle_mesh_test_structures = middle_mesh_pull_apart + middle_mesh_pull_in + middle_mesh_tdc
+# TODO(Nate): Here insert a new column into gridsearch listing
+
+# for col, tdc_column in enumerate(tdc_columns):
+#     with nd.Cell(f'gridsearch_{col + len(ps_columns)}') as gridsearch:
+#         line = testing_tap_line_tdc.put()
+#         for i, tdc in enumerate(tdc_column):
+#             # all structures for a tap line should be specified here
+#             _tdc = tdc.put(line.pin[f'a{2 * i + 1}'])
+#             detector = chip.pdk_cells['cl_band_photodetector_digital']
+#             d1 = detector.put(_tdc.pin['b0'])
+#             d2 = detector.put(_tdc.pin['b1'], flip=True)
+#             route_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
+#             nd.Pin(f'd{i}').put(_tdc.pin['b0'])  # this is useful for autorouting the gnd path
+#             # TODO: ground connections for the TDC
+#             if 'pos1' in _tdc.pin:
+#                 nd.Pin(f'pos{i}').put(_tdc.pin['pos1'])
+#             if 'gnd0' in _tdc.pin:
+#                 nd.Pin(f'gnd{i}').put(_tdc.pin['gnd0'])
+#         nd.Pin('in').put(line.pin['in'])
+#         nd.Pin('out').put(line.pin['out'])
+#     gridsearches.append(gridsearch)
+
 
 # gnd pad (testing side)
 with nd.Cell('gnd_pad') as gnd_pad:
@@ -552,7 +577,6 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         pin_num += 1
 
 
-
 # Test chiplet layout
 with nd.Cell('test_chiplet') as test_chiplet:
     # place test taplines down at non-overlapping locations
@@ -641,6 +665,6 @@ with nd.Cell('aim_layout') as aim_layout:
     chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
                        -standard_grating_interport + edge_shift_dim[1])
 
-nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+# nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly
-# nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])

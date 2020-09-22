@@ -146,7 +146,6 @@ class LateralNemsTDC(GroupedPattern):
         patterns = [dc] + nanofins + connectors + pads
 
         # TODO(Nate): make the brim connector to ground standard for 220nm, rework the taper helpers
-        # TODO(Nate): remove hard coded connector length
         if pad_dim is not None:
             brim_l, brim_taper = get_linear_adiabatic(min_width=waveguide_w, max_width=1, aggressive=True)
             brim_taper = cubic_taper(brim_taper[1])
