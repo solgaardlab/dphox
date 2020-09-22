@@ -155,7 +155,7 @@ class LateralNemsTDC(GroupedPattern):
             if not bend_dim[1] > 2 * bend_dim[0] + 2 * brim_l:
                 raise ValueError(
                     f'Not enough room in s-bend to ground waveguide segment of length'
-                    f'{bend_dim[1] - 2 * bend_dim[0]} need at least {2 * brim_l}')
+                    f'{bend_dim[1] - 2 * bend_dim[0]} need at least {2 * brim_l + gnd_contact_dim[-1]}')
 
             if not (pad_dim[0] + (waveguide_w / 2 + np.sum(brim_taper) / 2 + gnd_contact_dim[0])) < bend_dim[0]:
                 raise ValueError(
@@ -171,20 +171,20 @@ class LateralNemsTDC(GroupedPattern):
                 for y in (min_y + dy_brim, max_y - dy_brim):
                     flip_y = not flip_y
                     rib_brim.append(Waveguide(waveguide_w, taper_ls=(brim_l,), taper_params=(brim_taper,),
-                                              length=2 * brim_l, rotate_angle=np.pi / 2).translate(dx=x,
-                                                                                                   dy=y - brim_l))
+                                              length=2 * brim_l + gnd_contact_dim[-1], rotate_angle=np.pi / 2).translate(dx=x,
+                                                                                                                         dy=y - brim_l))
                     if flip_x:
                         gnd_connections.append(
                             Box(gnd_contact_dim[:2]).translate(dx=x + waveguide_w / 2,
-                                                               dy=y - gnd_contact_dim[1] / 2))
+                                                               dy=y))
                     else:
                         gnd_connections.append(
                             Box(gnd_contact_dim[:2]).translate(dx=x - waveguide_w / 2 - gnd_contact_dim[0],
-                                                               dy=y - gnd_contact_dim[1] / 2))
+                                                               dy=y))
                     pads.append(
-                        Box(pad_dim[:2]).valign(rib_brim[-1], bottom=flip_y).halign(gnd_connections[-1],
-                                                                                    left=flip_x,
-                                                                                    opposite=True))
+                        Box(pad_dim[:2]).align(rib_brim[-1]).halign(gnd_connections[-1],
+                                                                    left=flip_x,
+                                                                    opposite=True))
                 flip_x = not flip_x
             rib_brim = [Pattern(poly) for brim in rib_brim for poly in (brim.pattern - dc.pattern)]
             patterns += gnd_connections + rib_brim + pads
