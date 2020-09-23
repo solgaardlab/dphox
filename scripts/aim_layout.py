@@ -390,10 +390,26 @@ for col, tdc_column in enumerate(tdc_columns):
             autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
             nd.Pin(f'd{i}').put(_tdc.pin['b0'])  # this is useful for autorouting the gnd path
             # TODO: ground connections for the TDC
+            gnd_l, gnd_u = None, None
+            for pin in _tdc.pin.keys():
+                if pin.split('_')[0] == 'gnd0' and len(pin.split('_')) > 1:
+                    if pin.split('_')[1] == 'l':
+                        if gnd_l is not None:
+                            chip.m2_ic.strt_p2p(_tdc.pin[gnd_l], _tdc.pin[pin]).put()
+                        gnd_l = pin
+                    if pin.split('_')[1] == 'u':
+                        if gnd_u is not None:
+                            chip.m2_ic.strt_p2p(_tdc.pin[gnd_u], _tdc.pin[pin]).put()
+                        gnd_u = pin
+                    gnd_pin = pin
+            chip.m2_ic.ubend_p2p(_tdc.pin['gnd0_u_0'], _tdc.pin['gnd0_l_0'], radius=10).put()
+
             if 'pos1' in _tdc.pin:
                 nd.Pin(f'pos{i}').put(_tdc.pin['pos1'])
             if 'gnd0' in _tdc.pin:
                 nd.Pin(f'gnd{i}').put(_tdc.pin['gnd0'])
+            elif 'gnd0_u_1' in _tdc.pin:
+                nd.Pin(f'gnd{i}').put(_tdc.pin['gnd0_u_1'])
         nd.Pin('in').put(line.pin['in'])
         nd.Pin('out').put(line.pin['out'])
     gridsearches.append(gridsearch)

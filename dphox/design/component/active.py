@@ -196,6 +196,12 @@ class LateralNemsTDC(GroupedPattern):
         center = np.asarray(self.center)
         self.port['t0'] = Port(*(center + dy))
         self.port['t1'] = Port(*(center - dy))
+        gnd_labels = ['gnd0_l_0', 'gnd0_u_0', 'gnd0_l_1', 'gnd0_u_1']
+        angle = 0
+        for gnd_label, pad in zip(gnd_labels, pads):
+            center = pad.center
+            self.port[gnd_label] = Port(*(center), a=angle)
+            angle += np.pi
 
 
 class NemsAnchor(GroupedPattern):

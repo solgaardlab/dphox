@@ -83,6 +83,7 @@ class AIMNazca:
                 nd.Pin('b0').put(tdc.pin['b0'])
                 nd.Pin('a1').put(tdc.pin['a1'])
                 nd.Pin('b1').put(tdc.pin['b1'])
+                tdc.raise_pins(['gnd0_l_0', 'gnd0_u_0', 'gnd0_l_1', 'gnd0_u_1'])
         return self.tdc_node(diff_ps, cell) if diff_ps is not None else cell
 
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 100,
