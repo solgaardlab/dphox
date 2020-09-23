@@ -203,7 +203,7 @@ class NemsAnchor(GroupedPattern):
     def __init__(self, fin_spring_dim: Dim2, shuttle_dim: Dim2, top_spring_dim: Dim2 = None,
                  straight_connector: Optional[Dim2] = None, loop_connector: Optional[Dim3] = None,
                  pos_electrode_dim: Optional[Dim3] = None, neg_electrode_dim: Optional[Dim2] = None,
-                 include_fin_dummy: bool = False, attach_comb: bool = False, tooth_dim: Dim3 = (5, 1, 0.15)):
+                 include_fin_dummy: bool = False, attach_comb: bool = False, tooth_dim: Dim3 = (0.3, 3, 0.15)):
         """NEMS anchor
 
         Args:
@@ -270,16 +270,19 @@ class NemsAnchor(GroupedPattern):
                 patterns.extend([top_spring, bottom_spring])
                 springs.extend([top_spring, bottom_spring])
                 if attach_comb:
-                    dx_teeth = tooth_dim[2] + tooth_dim[1]
-                    num_teeth = int((pos_electrode_dim[0] - tooth_dim[1]) // (2 * dx_teeth))
+                    dx_teeth = tooth_dim[2] + tooth_dim[0]
+                    num_teeth = int((min(pos_electrode_dim[0], shuttle_dim[0]) - tooth_dim[1]) // (2 * dx_teeth))
                     if num_teeth <= 0:
                         raise ValueError('Electrode dim is too small to hold comb teeth.')
                     tooth = Box(tooth_dim[:2])
-                    comb = GroupedPattern(
-                        GroupedPattern(*[copy(tooth).translate(dx_teeth * 2 * n) for n in range(num_teeth)]),
-                        GroupedPattern(*[copy(tooth).translate(dx_teeth * (2 * n + 1)) for n in range(num_teeth)])
-                    )
-                    comb.align(pos_electrode).valign(pos_electrode)
+                    upper_comb = GroupedPattern(*[copy(tooth).translate(dx_teeth * 2 * n)
+                                                  for n in range(num_teeth)])
+                    lower_comb = GroupedPattern(*[copy(tooth).translate(dx_teeth * (2 * n + 1))
+                                                  for n in range(num_teeth - 1)])
+                    upper_comb.align(pos_electrode).valign(pos_electrode, opposite=True, bottom=False)
+                    lower_comb.align(shuttle).valign(shuttle, opposite=True)
+                    comb = GroupedPattern(upper_comb, lower_comb)
+                    patterns.append(comb)
             else:
                 if attach_comb:
                     raise AttributeError('Must specify pos_electrode_dim if attach_comb is True')
