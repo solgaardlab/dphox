@@ -100,7 +100,7 @@ class LateralNemsTDC(GroupedPattern):
             dc_taper_ls: DC taper lengths
             dc_taper: tapering of the boundary of the directional coupler
             beam_taper: tapering of the lower boundary of the fin
-            boundary_taper: tapering of the upper boundary of the fin
+            boundary_taper: tapering of the upper boundary of the fin (currently not implemented)
             end_bend_dim: If specified, places an additional end bend (see DC)
             pad_dim: If specified, silicon gnd pad xy size followed by connector dimensions (distance to guide, width)
             use_radius: use radius (see DC)
@@ -116,7 +116,7 @@ class LateralNemsTDC(GroupedPattern):
         dc = DC(bend_dim=bend_dim, waveguide_w=waveguide_w, gap_w=dc_gap_w,
                 coupler_boundary_taper_ls=dc_taper_ls, coupler_boundary_taper=dc_taper,
                 interaction_l=interaction_l, end_bend_dim=end_bend_dim, use_radius=use_radius)
-        connectors, pads, tethers = [], [], []
+        connectors, pads, gnd_connections, rib_brim = [], [], [], []
 
         nanofin_y = nanofin_w / 2 + dc_gap_w / 2 + waveguide_w + beam_gap_w
         nanofin = Box((interaction_l, nanofin_w)).align(dc)
@@ -203,7 +203,7 @@ class NemsAnchor(GroupedPattern):
     def __init__(self, fin_spring_dim: Dim2, shuttle_dim: Dim2, top_spring_dim: Dim2 = None,
                  straight_connector: Optional[Dim2] = None, loop_connector: Optional[Dim3] = None,
                  pos_electrode_dim: Optional[Dim3] = None, neg_electrode_dim: Optional[Dim2] = None,
-                 include_fin_dummy: bool = False):
+                 include_fin_dummy: bool = False, attach_comb: bool = False, tooth_dim: Dim3 = (5, 1, 0.15)):
         """NEMS anchor
 
         Args:
@@ -215,6 +215,8 @@ class NemsAnchor(GroupedPattern):
             pos_electrode_dim: positive electrode dimension
             neg_electrode_dim: negative electrode dimension
             include_fin_dummy: include fin dummy for for mechanical support
+            attach_comb: attach a comb drive to the shuttle (only if pos_electrode_dim specified!)
+            tooth_dim: (length, width, inter-tooth gap)
         """
         self.fin_spring_dim = fin_spring_dim
         self.top_spring_dim = top_spring_dim
@@ -228,6 +230,7 @@ class NemsAnchor(GroupedPattern):
         top_spring_dim = fin_spring_dim if not top_spring_dim else top_spring_dim
         connector = Box(shuttle_dim).translate()
         shuttle = copy(connector)
+        comb = None
         if loop_connector is not None and straight_connector is None:
             loop = Pattern(Path(fin_spring_dim[1]).rotate(np.pi).turn(
                 loop_connector[1], -np.pi, final_width=loop_connector[2], tolerance=0.001).segment(
@@ -266,7 +269,20 @@ class NemsAnchor(GroupedPattern):
                 pads.append(pos_electrode)
                 patterns.extend([top_spring, bottom_spring])
                 springs.extend([top_spring, bottom_spring])
+                if attach_comb:
+                    dx_teeth = tooth_dim[2] + tooth_dim[1]
+                    num_teeth = int((pos_electrode_dim[0] - tooth_dim[1]) // (2 * dx_teeth))
+                    if num_teeth <= 0:
+                        raise ValueError('Electrode dim is too small to hold comb teeth.')
+                    tooth = Box(tooth_dim[:2])
+                    comb = GroupedPattern(
+                        GroupedPattern(*[copy(tooth).translate(dx_teeth * 2 * n) for n in range(num_teeth)]),
+                        GroupedPattern(*[copy(tooth).translate(dx_teeth * (2 * n + 1)) for n in range(num_teeth)])
+                    )
+                    comb.align(pos_electrode).valign(pos_electrode)
             else:
+                if attach_comb:
+                    raise AttributeError('Must specify pos_electrode_dim if attach_comb is True')
                 pads.append(shuttle)
             if neg_electrode_dim is not None:
                 # moving alignment to account for bottom spring
@@ -283,6 +299,7 @@ class NemsAnchor(GroupedPattern):
         self.pads = [pad.translate(*shift) for pad in pads]
         self.springs = [s.translate(*shift) for s in springs]
         self.shuttle = shuttle.translate(*shift) if pos_electrode_dim is not None else shuttle
+        self.comb = comb.translate(*shift) if comb is not None else comb
         for idx, pad in enumerate(self.pads):
             self.port[f'c{idx}'] = Port(*pad.center, -np.pi)
             self.port[f'd{idx}'] = Port(*pad.center)

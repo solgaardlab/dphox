@@ -191,7 +191,7 @@ class Interposer(Pattern):
     def __init__(self, waveguide_w: float, n: int, period: float, radius: float,
                  trombone_radius: Optional[float] = None,
                  final_period: Optional[float] = None, self_coupling_extension_dim: Optional[Dim2] = None,
-                 horiz_dist: float = 0, num_trombones: int = 1, shift: Dim2 = (0, 0)):
+                 horiz_dist: float = 0, num_trombones: int = 1):
         """
 
         Args:
@@ -363,11 +363,16 @@ class DelayLine(Pattern):
 
         total_path_length = straight_length + delay_length
         if ((2 * np.pi + 4) * number_bend_pairs + np.pi - 4) * bend_radius >= delay_length:
-            raise ValueError(f"Bends alone exceed the delay length {delay_length} reduce the bend radius or the number of bend pairs")
-        segment_length = (delay_length - ((2 * np.pi + 4) * number_bend_pairs + np.pi - 4) * bend_radius) / (2 * number_bend_pairs)
+            raise ValueError(
+                f"Bends alone exceed the delay length {delay_length}"
+                f"reduce the bend radius or the number of bend pairs")
+        segment_length = (delay_length - ((2 * np.pi + 4) * number_bend_pairs + np.pi - 4) * bend_radius) / (
+                    2 * number_bend_pairs)
         extra_length = straight_length - 4 * bend_radius - segment_length
         if extra_length <= 0:
-            raise ValueError(f"The delay line does not fit in the horaizontal distance of {straight_length} increase the number of bend pairs")
+            raise ValueError(
+                f"The delay line does not fit in the horaizontal distance of"
+                f"{straight_length} increase the number of bend pairs")
         height = (4 * number_bend_pairs - 2) * bend_radius
         p = Path(waveguide_width)
         p.segment(length=bend_radius)

@@ -183,6 +183,7 @@ class AIMNazca:
                     mt_ic.strt(connector_y, width).put()
                     output = mt_ic.strt(m * period, width).put()
                     nd.Pin(f'a{int(route_num)}').put(start.pin['a0'])
+                    nd.Pin(f'b{int(route_num)}').put(start.pin['b0'].x, start.pin['b0'].y, 180)
                     nd.Pin(f'p{int(route_num)}', pin=output.pin['b0']).put()
                     route_num += 1
             nd.put_stub()
