@@ -58,7 +58,7 @@ mesh_phaseshift_l = 100
 detector_route_loop = (20, 30, 40)  # height, length, relative starting x for loops around detectors
 tapline_x_start = 600
 # x for the 8 taplines, numpy gives errors for some reason, so need to use raw python
-tapline_x = [tapline_x_start + x for x in [0, 400, 700, 1000, 1400, 1800, 2100, 2400]]
+tapline_x = [tapline_x_start + x for x in [0, 400, 700, 1000, 1400, 1800, 2100, 2400]]  # TODO(Nate): update this spacing based final array
 tapline_y = 162  # y for the taplines
 grating_array_xy = (600, 125)
 
@@ -280,6 +280,120 @@ pull_in_taper_tdc = [
 # Motivation: attempt pull-in phase shifter idea with modifying fin width / phase shift per unit length
 pull_in_fin_tdc = [chip.nems_tdc(anchor=tdc_anchor, nanofin_w=nanofin_w) for nanofin_w in (0.1, 0.2)]
 
+
+# Motivation: Test sructures necessary for reference meaurements
+# TODO(Nate): Split into short and long references devices
+
+delay_arms = chip.mzi_arms([delay_line_50, gnd_wg],
+                           [delay_line_200, gnd_wg],
+                           interport_w=test_interport_w,
+                           name='bare_mzi_arms')
+with nd.Cell(name='ref_dc') as ref_dc:
+    dc_r = dc.put()
+    d = detector.put(dc_r.pin['b1'], flip=True)
+    nd.Pin('p1').put(d.pin['p'])
+    nd.Pin('n1').put(d.pin['n'])
+    d = detector.put(dc_r.pin['b0'])
+    nd.Pin('p2').put(d.pin['p'])
+    nd.Pin('n2').put(d.pin['n'])
+    dc_r.raise_pins(['a0', 'a1', 'b0', 'b1'])
+
+# TODO(Nate): Compress this into a few lines
+with nd.Cell(name='bends_1_1') as bend_exp_1_1:
+    first_dc = dc.put()
+    mzi_arms = chip.mzi_arms([delay_line_50, ],
+                             [delay_line_50, ],
+                             interport_w=test_interport_w,
+                             name='bare_mzi_arms').put(first_dc.pin['b0'])
+    nd.Pin('a0').put(first_dc.pin['a0'])
+    nd.Pin('a1').put(first_dc.pin['a1'])
+
+    d = detector.put(mzi_arms.pin['b1'], flip=True)
+    nd.Pin('p1').put(d.pin['p'])
+    nd.Pin('n1').put(d.pin['n'])
+    d = detector.put(mzi_arms.pin['b0'])
+    nd.Pin('p2').put(d.pin['p'])
+    nd.Pin('n2').put(d.pin['n'])
+
+    mzi_arms.raise_pins(['b0', 'b1'])
+
+with nd.Cell(name='bends_1_2') as bend_exp_1_2:
+    first_dc = dc.put()
+    mzi_arms = chip.mzi_arms([delay_line_50, delay_line_50, ],
+                             [delay_line_50, ],
+                             interport_w=test_interport_w,
+                             name='bare_mzi_arms').put(first_dc.pin['b0'])
+    nd.Pin('a0').put(first_dc.pin['a0'])
+    nd.Pin('a1').put(first_dc.pin['a1'])
+
+    d = detector.put(mzi_arms.pin['b1'], flip=True)
+    nd.Pin('p1').put(d.pin['p'])
+    nd.Pin('n1').put(d.pin['n'])
+    d = detector.put(mzi_arms.pin['b0'])
+    nd.Pin('p2').put(d.pin['p'])
+    nd.Pin('n2').put(d.pin['n'])
+
+    mzi_arms.raise_pins(['b0', 'b1'])
+
+with nd.Cell(name='bends_1_3') as bend_exp_1_3:
+    first_dc = dc.put()
+    mzi_arms = chip.mzi_arms([delay_line_50, delay_line_50, delay_line_50, ],
+                             [delay_line_50, ],
+                             interport_w=test_interport_w,
+                             name='bare_mzi_arms').put(first_dc.pin['b0'])
+    nd.Pin('a0').put(first_dc.pin['a0'])
+    nd.Pin('a1').put(first_dc.pin['a1'])
+
+    d = detector.put(mzi_arms.pin['b1'], flip=True)
+    nd.Pin('p1').put(d.pin['p'])
+    nd.Pin('n1').put(d.pin['n'])
+    d = detector.put(mzi_arms.pin['b0'])
+    nd.Pin('p2').put(d.pin['p'])
+    nd.Pin('n2').put(d.pin['n'])
+
+    mzi_arms.raise_pins(['b0', 'b1'])
+
+reference_devices = [
+    ref_dc,
+    chip.mzi_node_test(delay_arms,
+                       dc, include_input_ps=False,
+                       detector=detector,
+                       name='bare_mzi'),
+    bend_exp_1_1,
+    ref_dc,
+    chip.mzi_node_test(delay_arms,
+                       dc, include_input_ps=False,
+                       detector=detector,
+                       name='bare_mzi'),
+    bend_exp_1_2,
+    ref_dc,
+    chip.mzi_node_test(delay_arms,
+                       dc, include_input_ps=False,
+                       detector=detector,
+                       name='bare_mzi'),
+    bend_exp_1_3,
+    ref_dc,
+    chip.mzi_node_test(delay_arms,
+                       dc, include_input_ps=False,
+                       detector=detector,
+                       name='bare_mzi'),
+    bend_exp_1_1,
+    ref_dc,
+    chip.mzi_node_test(delay_arms,
+                       dc, include_input_ps=False,
+                       detector=detector,
+                       name='bare_mzi'),
+    bend_exp_1_2,
+    ref_dc,
+    chip.mzi_node_test(delay_arms,
+                       dc, include_input_ps=False,
+                       detector=detector,
+                       name='bare_mzi'),
+
+
+]
+
+
 # testing tap lines
 testing_tap_line = chip.tap_line(n_test)
 testing_tap_line_tdc = chip.tap_line(n_test, inter_wg_dist=200)
@@ -296,10 +410,14 @@ tdc_columns = [
     pull_in_gap_tdc + pull_in_taper_tdc + pull_in_fin_tdc
 ]
 
+# make sure there are 17 structures per column
+vip_columns = [reference_devices]
+
 gridsearches = []
 
+# TODO(Nate): Match this to the fill of the test array
 # Number of test structures in each tap line, comment this out when not needed (when all are n_test)
-gridsearch_ls = [len(ps_columns[0]), len(ps_columns[1]), len(tdc_columns[0]), len(tdc_columns[1])] * 2
+gridsearch_ls = [len(ps_columns[0]), len(ps_columns[1]), len(tdc_columns[0]), len(tdc_columns[1]), len(vip_columns[0])]
 
 
 def route_detector(p1, n2, n1, p2):
@@ -413,6 +531,27 @@ for col, tdc_column in enumerate(tdc_columns):
         nd.Pin('out').put(line.pin['out'])
     gridsearches.append(gridsearch)
 
+
+# TODO(Nate): Here insert VIP Test column into gridsearch listing
+
+for col, vip_column in enumerate(vip_columns):
+    with nd.Cell(f'gridsearch_{col + len(vip_columns)}') as gridsearch:
+        line = testing_tap_line.put()
+        for i, vip in enumerate(vip_column):
+            # all structures for a tap line should be specified here
+            _vip = vip.put(line.pin[f'a{2 * i + 1}'])
+            if bool(set(['p1', 'n2', 'n1', 'p2']) & set(_vip.pin)):
+                route_detector(_vip.pin['p1'], _vip.pin['n2'], _vip.pin['n1'], _vip.pin['p2'])
+            nd.Pin(f'd{i}').put(_vip.pin['b0'])  # this is useful for autorouting the gnd path
+            # # TODO: ground connections for the TDC
+            # if 'pos1' in _tdc.pin:
+            #     nd.Pin(f'pos{i}').put(_tdc.pin['pos1'])
+            # if 'gnd0' in _tdc.pin:
+            #     nd.Pin(f'gnd{i}').put(_tdc.pin['gnd0'])
+        nd.Pin('in').put(line.pin['in'])
+        nd.Pin('out').put(line.pin['out'])
+    gridsearches.append(gridsearch)
+
 # test structures between the meshes
 
 middle_mesh_pull_apart = [
@@ -435,28 +574,6 @@ middle_mesh_pull_in = [
 ]
 middle_mesh_tdc = [chip.nems_tdc(anchor=pull_apart_anchor), chip.nems_tdc(anchor=tdc_anchor),
                    chip.nems_tdc(anchor=pull_apart_anchor, **taper_dict_tdc(-0.2, 40))]
-
-# TODO(Nate): Here insert a new column into gridsearch listing
-
-# for col, tdc_column in enumerate(tdc_columns):
-#     with nd.Cell(f'gridsearch_{col + len(ps_columns)}') as gridsearch:
-#         line = testing_tap_line_tdc.put()
-#         for i, tdc in enumerate(tdc_column):
-#             # all structures for a tap line should be specified here
-#             _tdc = tdc.put(line.pin[f'a{2 * i + 1}'])
-#             detector = chip.pdk_cells['cl_band_photodetector_digital']
-#             d1 = detector.put(_tdc.pin['b0'])
-#             d2 = detector.put(_tdc.pin['b1'], flip=True)
-#             route_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
-#             nd.Pin(f'd{i}').put(_tdc.pin['b0'])  # this is useful for autorouting the gnd path
-#             # TODO: ground connections for the TDC
-#             if 'pos1' in _tdc.pin:
-#                 nd.Pin(f'pos{i}').put(_tdc.pin['pos1'])
-#             if 'gnd0' in _tdc.pin:
-#                 nd.Pin(f'gnd{i}').put(_tdc.pin['gnd0'])
-#         nd.Pin('in').put(line.pin['in'])
-#         nd.Pin('out').put(line.pin['out'])
-#     gridsearches.append(gridsearch)
 
 
 # gnd pad (testing side)
@@ -611,7 +728,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
 with nd.Cell('test_chiplet') as test_chiplet:
     # place test taplines down at non-overlapping locations
     detector_x = []
-    test_structures = gridsearches + gridsearches  # TODO: change this once all 8 columns are added
+    test_structures = gridsearches  # TODO: change this once all 8 columns are added
     ga = grating_array.put(*grating_array_xy, -90)
     gs_list = []
     for i, item in enumerate(zip(tapline_x, test_structures)):
