@@ -326,10 +326,52 @@ for col, ps_columns in enumerate(ps_columns):
             node = chip.mzi_node_test(ps, dc, include_input_ps=False,
                                       detector=detector,
                                       name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
+            # mzi_node_test tracks multiple gnd and pos lines in the upper and lower arms
+
             route_detector(node.pin['p1'], node.pin['n2'], node.pin['n1'], node.pin['p2'])
             nd.Pin(f'd{i}').put(node.pin['b0'])  # this is useful for autorouting the gnd path
+            # TODO(Nate): need a subroutine to connect then and give the device a gnd0 and pos0 node
+            gnd_l, gnd_u, pos_l, pos_u = None, None, None, None,
+            for pin in node.pin.keys():
+                if pin.split('_')[0] == 'gnd0':
+                    if pin.split('_')[1] == 'l':
+                        if gnd_l is not None:
+                            chip.m2_ic.bend_strt_bend_p2p(node.pin[gnd_l], node.pin[pin], radius=8).put()
+                        gnd_l = pin
+                    if pin.split('_')[1] == 'u':
+                        if gnd_u is not None:
+                            chip.m2_ic.bend_strt_bend_p2p(node.pin[gnd_u], node.pin[pin], radius=8).put()
+                        gnd_u = pin
+                    gnd_pin = pin
+                if pin.split('_')[0] == 'pos0':
+                    if pin.split('_')[1] == 'l':
+                        if pos_l is not None:
+                            chip.m2_ic.bend_strt_bend_p2p(node.pin[pos_l], node.pin[pin], radius=8).put()
+                        pos_l = pin
+                    if pin.split('_')[1] == 'u':
+                        if pos_u is not None:
+                            chip.m2_ic.bend_strt_bend_p2p(node.pin[pos_u], node.pin[pin], radius=8).put()
+                        pos_u = pin
+                    pos_pin = pin
+
+            if (gnd_u is not None) and (gnd_l is not None):
+                chip.m2_ic.bend_strt_bend_p2p(node.pin[gnd_u], node.pin[gnd_l], radius=8).put()
+                gnd_pin = gnd_u
+                nd.Pin(f'gnd{i}').put(node.pin[gnd_pin])
+            elif(gnd_u is not None) or (gnd_l is not None):
+                gnd_pin = gnd_u if gnd_u is not None else gnd_l
+                nd.Pin(f'gnd{i}').put(node.pin[gnd_pin])
+
+            if (pos_u is not None) and (pos_l is not None):
+                chip.m2_ic.bend_strt_bend_p2p(node.pin[pos_u], node.pin[pos_l], radius=8).put()
+                pos_pin = pos_u
+                nd.Pin(f'pos{i}').put(node.pin[pos_pin])
+            elif(pos_u is not None) or (pos_l is not None):
+                pos_pin = pos_u if pos_u is not None else pos_l
+                nd.Pin(f'pos{i}').put(node.pin[pos_pin])
+
             if 'pos0' in node.pin:
-                nd.Pin(f'pos{i}').put(node.pin['pos0'])
+                nd.Pin(f'pos{i}').put(node.pin['pos0'])  # hard coded special case that I know about the array elements
             if 'gnd0' in node.pin:
                 nd.Pin(f'gnd{i}').put(node.pin['gnd0'])
         nd.Pin('in').put(line.pin['in'])
