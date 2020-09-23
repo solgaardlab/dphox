@@ -447,7 +447,7 @@ for col, ps_columns in enumerate(ps_columns):
                                       name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
             # mzi_node_test tracks multiple gnd and pos lines in the upper and lower arms
 
-            autoroute_detector(node.pin['p1'], node.pin['n2'], node.pin['n1'], node.pin['p2'])
+            autoroute_node_detector(node.pin['p1'], node.pin['n2'], node.pin['n1'], node.pin['p2'])
             nd.Pin(f'd{i}').put(node.pin['b0'])  # this is useful for autorouting the gnd path
             # TODO(Nate): need a subroutine to connect then and give the device a gnd0 and pos0 node
             gnd_l, gnd_u, pos_l, pos_u = None, None, None, None,
@@ -542,7 +542,7 @@ for col, vip_column in enumerate(vip_columns):
             # all structures for a tap line should be specified here
             _vip = vip.put(line.pin[f'a{2 * i + 1}'])
             if bool(set(['p1', 'n2', 'n1', 'p2']) & set(_vip.pin)):
-                route_detector(_vip.pin['p1'], _vip.pin['n2'], _vip.pin['n1'], _vip.pin['p2'])
+                autoroute_node_detector(_vip.pin['p1'], _vip.pin['n2'], _vip.pin['n1'], _vip.pin['p2'])
             nd.Pin(f'd{i}').put(_vip.pin['b0'])  # this is useful for autorouting the gnd path
             # # TODO: ground connections for the TDC
             # if 'pos1' in _tdc.pin:
