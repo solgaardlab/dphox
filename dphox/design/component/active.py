@@ -332,8 +332,8 @@ class GndWaveguide(Pattern):
         self.wg, self.rib_brim, self.pads = [wg], rib_brim, [pad]
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['b0'] = Port(length, 0)
-        self.port['c0'] = Port(*pad.center, -np.pi)
-        self.port['d0'] = Port(*pad.center)
+        self.port['gnd1'] = Port(*pad.center, -np.pi)
+        self.port['gnd0'] = Port(*pad.center)
 
 
 class MemsMonitorCoupler(Pattern):

@@ -83,7 +83,7 @@ pull_in_anchor = chip.nems_anchor(shuttle_dim=(40, 5), fin_spring_dim=(50, 0.15)
 tdc_anchor = chip.nems_anchor(shuttle_dim=(test_tdc_interaction_l, 5),
                               pos_electrode_dim=None, neg_electrode_dim=None)
 tdc = chip.nems_tdc(anchor=tdc_anchor, bend_dim=(test_tdc_radius, test_tdc_bend_dim))
-ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap, sep))
+ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap_detector, sep))
 ps_no_anchor = chip.nems_ps()
 alignment_mark = chip.alignment_mark()
 gnd_wg = chip.gnd_wg()
@@ -91,7 +91,7 @@ grating = chip.pdk_cells['cl_band_vertical_coupler_si']
 detector = chip.pdk_cells['cl_band_photodetector_digital']
 
 delay_line_50 = chip.delay_line()
-delay_line_200 = chip.delay_line(delay_length=250, straight_length=125)
+delay_line_200 = chip.delay_line(delay_length=200, straight_length=100)
 
 # Mesh generation
 
@@ -200,17 +200,18 @@ pull_apart_gap = [
 
 # Motivation: reduce the waveguide width to encourage more phase shift per unit length in center
 pull_apart_taper = [
-    chip.singlemode_ps(chip.nems_ps(anchor=pull_apart_anchor, **pull_apart_taper_dict(taper_change, taper_length), name=f'ps_taper_{taper_change}_{taper_length}'),
-                       interport_w=test_interport_w,
-                       phaseshift_l=mesh_phaseshift_l, name=f'pull_apart_taper_{taper_change}_{taper_length}')
+    chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_apart_anchor, **pull_apart_taper_dict(taper_change, taper_length), name=f'ps_taper_{taper_change}_{taper_length}')],
+                  [delay_line_200],
+                  interport_w=test_interport_w,
+                  name=f'pull_apart_taper_{taper_change}_{taper_length}')
     for taper_change in (-0.1, -0.15) for taper_length in (20, 30, 40)]
 
 # Motivation: modify fin width to change stiffness / phase shift per unit length
 pull_apart_fin = [
-    chip.singlemode_ps(chip.nems_ps(anchor=pull_apart_anchor,
-                                    nanofin_w=nanofin_w, name=f'ps_fin_{nanofin_w}'),
-                       interport_w=test_interport_w,
-                       phaseshift_l=mesh_phaseshift_l, name=f'pull_apart_fin_{nanofin_w}')
+    chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_apart_anchor, nanofin_w=nanofin_w, name=f'ps_fin_{nanofin_w}')],
+                  [delay_line_200],
+                  interport_w=test_interport_w,
+                  name=f'pull_apart_fin_{nanofin_w}')
     for nanofin_w in (0.15, 0.2, 0.25)]
 
 '''
@@ -220,33 +221,39 @@ Pull-in phase shifter or PSV1
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length
 
+# gnd_wg
+
 pull_in_gap = [
-    chip.singlemode_ps_ext_gnd(chip.nems_ps(anchor=pull_in_anchor, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
-                                            name=f'ps_gap_{gap_w}'), gnd_length,
-                               interport_w=test_interport_w,
-                               phaseshift_l=pull_in_phaseshift_l + 2 * gnd_length, name=f'pull_in_gap_{gap_w}')
+    chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_in_anchor, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
+                                               name=f'ps_gap_{gap_w}'), 25, gnd_wg],
+                  [delay_line_200, gnd_wg],
+                  interport_w=test_interport_w,
+                  name=f'pull_in_gap_{gap_w}')
     for gap_w in (0.1, 0.15, 0.2)]
 
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length. To increase pull-in, phase shift length is made shorter.
 pull_in_taper = [
-    chip.singlemode_ps_ext_gnd(chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict(pull_in_phaseshift_l,
-                                                                                  taper_change, taper_length),
-                                            name=f'ps_taper_{taper_change}_{taper_length}'), gnd_length,
-                               interport_w=test_interport_w,
-                               phaseshift_l=pull_in_phaseshift_l + 2 * gnd_length,
-                               name=f'pull_in_taper_{taper_change}_{taper_length}')
+    chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict(pull_in_phaseshift_l,
+                                                                                     taper_change, taper_length),
+                                               name=f'ps_taper_{taper_change}_{taper_length}'), 25, gnd_wg],
+                  [delay_line_200, gnd_wg],
+                  interport_w=test_interport_w,
+                  name=f'pull_in_taper_{taper_change}_{taper_length}')
     for taper_change in (-0.1, -0.15) for taper_length in (10, 20)]
 
 # Motivation: attempt pull-in phase shifter idea with modifying fin width / phase shift per unit length
 pull_in_fin = [
-    chip.singlemode_ps_ext_gnd(
-        chip.nems_ps(anchor=pull_in_anchor, nanofin_w=nanofin_w, **pull_in_dict(pull_in_phaseshift_l),
-                     name=f'ps_fin_{nanofin_w}'), gnd_length,
-        interport_w=test_interport_w,
-        phaseshift_l=pull_in_phaseshift_l + 2 * gnd_length, name=f'pull_in_fin_{nanofin_w}')
+    chip.mzi_arms([delay_line_50,
+                   chip.nems_ps(anchor=pull_in_anchor, nanofin_w=nanofin_w, **pull_in_dict(pull_in_phaseshift_l),
+                                name=f'ps_fin_{nanofin_w}'), 25, gnd_wg],
+                  [delay_line_200, gnd_wg],
+                  interport_w=test_interport_w,
+                  name=f'pull_in_fin_{nanofin_w}')
     for nanofin_w in (0.15, 0.2)]
 
+
+# TODO(Nate): Fix TDC misalginment
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length
 pull_apart_gap_tdc = [chip.nems_tdc(anchor=pull_apart_anchor, dc_gap_w=gap_w) for gap_w in (0.1, 0.15, 0.2)]
