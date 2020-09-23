@@ -287,28 +287,28 @@ class AIMNazca:
             i_l = 0
             l_device = self.waveguide_ic.strt(lower_arm[0]).put() if isinstance(lower_arm[0], (float, int)) else lower_arm[0].put()
             if bool(set(pins_to_raise) & set(l_device.pin)):  # using this to sqush nazca yelling
-                lower_pins = [f'pos0_l{i_l}', f'pos1_l{i_l}', f'gnd0_l{i_l}', f'gnd1_l{i_l}']
+                lower_pins = [f'pos0_l_{i_l}', f'pos1_l_{i_l}', f'gnd0_l_{i_l}', f'gnd1_l_{i_l}']
                 l_device.raise_pins(pins_to_raise, lower_pins)
                 i_l += 1
             nd.Pin('a0').put(l_device.pin['a0'])
             for lower_device in lower_arm[1:]:
                 l_device = self.waveguide_ic.strt(lower_device).put() if isinstance(lower_device, (float, int)) else lower_device.put()
                 if bool(set(pins_to_raise) & set(l_device.pin)):
-                    lower_pins = [f'pos0_l{i_l}', f'pos1_l{i_l}', f'gnd0_l{i_l}', f'gnd1_l{i_l}']
+                    lower_pins = [f'pos0_l_{i_l}', f'pos1_l_{i_l}', f'gnd0_l_{i_l}', f'gnd1_l_{i_l}']
                     l_device.raise_pins(pins_to_raise, lower_pins)
                     i_l += 1
 
             i_u = 0
             u_device = self.waveguide_ic.strt(upper_arm[0]).put(0, interport_w, flip=True) if isinstance(upper_arm[0], (float, int)) else upper_arm[0].put(0, interport_w, flip=True)
             if bool(set(pins_to_raise) & set(u_device.pin)):
-                upper_pins = [f'pos0_u{i_u}', f'pos1_u{i_u}', f'gnd0_u{i_u}', f'gnd1_u{i_u}']
+                upper_pins = [f'pos0_u_{i_u}', f'pos1_u_{i_u}', f'gnd0_u_{i_u}', f'gnd1_u_{i_u}']
                 u_device.raise_pins(pins_to_raise, upper_pins)
                 i_u += 1
             nd.Pin('a1').put(u_device.pin['a0'])
             for upper_device in upper_arm[1:]:
                 u_device = self.waveguide_ic.strt(upper_device).put(flip=True) if isinstance(upper_device, (float, int)) else upper_device.put(flip=True)
                 if bool(set(pins_to_raise) & set(u_device.pin)):
-                    upper_pins = [f'pos0_u{i_u}', f'pos1_u{i_u}', f'gnd0_u{i_u}', f'gnd1_u{i_u}']
+                    upper_pins = [f'pos0_u_{i_u}', f'pos1_u_{i_u}', f'gnd0_u_{i_u}', f'gnd1_u_{i_u}']
                     u_device.raise_pins(pins_to_raise, upper_pins)
                     i_u += 1
 
@@ -615,8 +615,11 @@ class AIMNazca:
                     internal_ps = mzi_arms.put(upper_sampler.pin['b0'])
             else:
                 internal_ps = mzi_arms.put(first_dc.pin['b0'])
-            print(internal_ps.pin.keys())
-            # internal_gnd_pins = [key if key.split('d')[0] == 'gn' for key in internal_ps.pin.keys()]  # creates a list of the multiple gnds
+
+            internal_gnd_pins = [key for key in internal_ps.pin.keys() if key.split('d')[0] == 'gn']  # creates a list of the multiple gnds
+            internal_pos_pins = [key for key in internal_ps.pin.keys() if key.split('s')[0] == 'po']  # creates a list of the multiple pos
+            internal_ps.raise_pins(internal_gnd_pins + internal_pos_pins)
+
             if 'gnd0' in internal_ps.pin:
                 nd.Pin('gnd0').put(internal_ps.pin['gnd0'])
                 nd.Pin('gnd1').put(internal_ps.pin['gnd1'])
