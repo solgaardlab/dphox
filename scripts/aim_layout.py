@@ -51,9 +51,8 @@ test_bend_dim = test_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
 test_tdc_interport_w = 50
 test_tdc_interaction_l = 100
 pull_in_phaseshift_l = 50
-test_tdc_radius = 6
+test_tdc_radius = 10
 test_tdc_bend_dim = test_tdc_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
-print(test_tdc_bend_dim)
 mesh_interport_w = 50
 mesh_phaseshift_l = 100
 detector_route_loop = (20, 30, 40)  # height, length, relative starting x for loops around detectors
@@ -253,10 +252,11 @@ pull_in_fin = [
     for nanofin_w in (0.15, 0.2)]
 
 
-# TODO(Nate): Fix TDC misalginment
+# TODO(Nate): Update/Fix TDC misalginment
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length
-pull_apart_gap_tdc = [chip.nems_tdc(anchor=pull_apart_anchor, dc_gap_w=gap_w) for gap_w in (0.1, 0.15, 0.2)]
+
+pull_apart_gap_tdc = [chip.nems_tdc(anchor=pull_apart_anchor, dc_gap_w=gap_w, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - gap_w / 2 - waveguide_w / 2)) for gap_w in (0.1, 0.15, 0.2)]
 
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length
@@ -269,7 +269,7 @@ pull_apart_fin_tdc = [chip.nems_tdc(anchor=pull_apart_anchor, nanofin_w=nanofin_
 
 # Motivation: attempt pull-in TDC with varying gap to adjust pull-in voltage (for better or worse...)
 # and phase shift length
-pull_in_gap_tdc = [chip.nems_tdc(anchor=tdc_anchor, dc_gap_w=gap_w) for gap_w in (0.1, 0.15, 0.2)]
+pull_in_gap_tdc = [chip.nems_tdc(anchor=tdc_anchor, dc_gap_w=gap_w, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - gap_w / 2 - waveguide_w / 2)) for gap_w in (0.1, 0.15, 0.2)]
 
 # Motivation: attempt pull-in TDC with tapering to reduce the beat length of the TDC
 pull_in_taper_tdc = [
