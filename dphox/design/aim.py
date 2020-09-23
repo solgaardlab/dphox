@@ -408,6 +408,7 @@ class AIMNazca:
                         self.va_via.put(nd.cp.x(), nd.cp.y(), 90)
                         self.m2_ic.strt(6, width=8).put(x_loc, j * pitch[1], 270)
                         self.va_via.put()
+                        # TODO(Nate): Add M1 connections for routing
                     nd.Pin(f'u{i},{j}').put(pad.pin['a0'])
                     nd.Pin(f'd{i},{j}').put(pad.pin['b0'])
                     if use_labels:
@@ -427,7 +428,7 @@ class AIMNazca:
                     (-w / 2, -a), (-a, -w / 2), (a, -w / 2), (w / 2, -a)]
 
         pitch = pitch if isinstance(pitch, tuple) else (pitch, pitch)
-        with nd.Cell(name=f'bond_pad_array_{n_pads}_{pitch}') as bond_pad_array:
+        with nd.Cell(name=f'eutectic_pad_array_{n_pads}_{pitch}') as bond_pad_array:
             pads = [
                 nd.Polygon(oct(width), layer=AIM_STACK['layers']['m1am']),  # m1am
                 nd.Polygon(nd.geom.box(0.4, 0.4), layer=AIM_STACK['layers']['v1am']),  # v1am
@@ -445,6 +446,7 @@ class AIMNazca:
                         nd.Pin(f'i{i}').put(i * pitch[0], j * pitch[1], 90)
                 if strip:
                     self.m2_ic.strt_p2p(bond_pad_array.pin[f'o{i}'], bond_pad_array.pin[f'i{i}'], width=width).put()
+                    self.m1_ic.strt_p2p(bond_pad_array.pin[f'o{i}'], bond_pad_array.pin[f'i{i}'], width=width).put()  # adding m1 to bring resistance down
             nd.put_stub()
         return bond_pad_array
 

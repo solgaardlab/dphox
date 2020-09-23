@@ -626,7 +626,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         pin_x = eu_array_nems.pin[f'o{idx}'].x
         closest = (0, 0)
         closest_dist = np.inf
-        for i, j in itertools.product(range(70), range(3)):
+    for i, j in itertools.product(range(70), range(3)):
             dist = np.abs(bp_array_nems.pin[f'u{i},{j}'].x - pin_x)
             if dist < closest_dist and (i, j) not in used_connections:
                 closest = (i, j)
@@ -639,6 +639,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         chip.m2_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
 
     # TODO: incomplete... fill out these ranges and do routing
+    # TODO: M2 and M1 are flipped in varibale names around eu_bp_
     eu_bp_port_blocks_m2 = [(7, 10), (11, 14), (30, 33), (34, 37)]
 
     pin_num = 0
