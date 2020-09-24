@@ -2,23 +2,25 @@ import itertools
 
 import nazca as nd
 import numpy as np
+from typing import Optional
+
 from dphox.design.aim import AIMNazca
 from dphox.design.component import cubic_taper
 from datetime import date
 from tqdm import tqdm
 
-# chip = AIMNazca(
-#     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
-#     waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
-#     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
-# )
+chip = AIMNazca(
+    passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
+    waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
+    active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
+)
 
 # Please leave this so Nate can run this quickly
-chip = AIMNazca(
-    passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
-    waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
-    active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
-)
+# chip = AIMNazca(
+#     passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
+#     waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
+#     active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
+# )
 
 # chip params
 
@@ -77,15 +79,18 @@ dc = chip.custom_dc(bend_dim=(dc_radius, test_bend_dim))[0]
 mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
 tap_detector = chip.bidirectional_tap(10, mesh_bend=True)
 pull_apart_anchor = chip.nems_anchor()
+pull_apart_anchor_comb = chip.nems_anchor(attach_comb=True)
 pull_in_anchor = chip.nems_anchor(shuttle_dim=(40, 5), fin_spring_dim=(50, 0.15),
                                   pos_electrode_dim=None, neg_electrode_dim=None)
 tdc_anchor = chip.nems_anchor(shuttle_dim=(test_tdc_interaction_l, 5),
                               pos_electrode_dim=None, neg_electrode_dim=None)
 tdc = chip.nems_tdc(anchor=tdc_anchor, bend_dim=(test_tdc_radius, test_tdc_bend_dim))
+gnd_wg = chip.gnd_wg()
+gnd_wg_pull_apart = chip.gnd_wg(wg_taper=(0, -0.08), symmetric=True)
 ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap_detector, sep))
 ps_no_anchor = chip.nems_ps()
 alignment_mark = chip.alignment_mark()
-gnd_wg = chip.gnd_wg()
+
 grating = chip.pdk_cells['cl_band_vertical_coupler_si']
 detector = chip.pdk_cells['cl_band_photodetector_digital']
 
@@ -145,31 +150,25 @@ autoroute_8_extended = chip.autoroute_turn(7, level=2, turn_radius=8, connector_
 
 def pull_apart_taper_dict(taper_change: float, taper_length: float):
     return dict(
-        taper_ls=(2, 0.15, 0.2, 0.15, 2, taper_length),
-        gap_taper=(
-            (0.66 + 2 * 0.63,), (0, -1 * (.30 + 2 * 0.63),), (0,), (0, (.30 + 2 * 0.63),),
-            cubic_taper(-0.74 - 2 * 0.63), cubic_taper(taper_change)),
-        wg_taper=((0,), (0,), (0,), (0,), cubic_taper(-0.08), cubic_taper(taper_change)),
-        boundary_taper=(
-            (0.66 + 2 * 0.63,), (0,), (0,), (0,), cubic_taper(-0.74 - 2 * 0.63), (0,)),
-        rib_brim_taper=(
-            cubic_taper(2 * .66), (0,), (0,), (0,), cubic_taper(-0.74 * 2),
-            cubic_taper(taper_change))
+        taper_l=taper_length,
+        gap_taper=cubic_taper(taper_change),
+        wg_taper=cubic_taper(taper_change)
     )
 
 
-def pull_in_dict(phaseshift_l: float = 100, taper_change: float = None, taper_length: float = None):
+def pull_in_dict(phaseshift_l: float = 100, taper_change: float = None, taper_length: float = None,
+                 clearout_dim: Optional[float] = None):
     # TODO: modify this to taper the pull-in fin adiabatically using rib_brim_taper
+    clearout_dim = (phaseshift_l - 10, 3) if clearout_dim is None else clearout_dim
     if taper_change is None or taper_length is None:
         return dict(
-            phaseshift_l=phaseshift_l, clearout_box_dim=(phaseshift_l - 10, 3),
-            taper_ls=(0,), gap_taper=None, wg_taper=None, boundary_taper=None, rib_brim_taper=None
+            phaseshift_l=phaseshift_l, clearout_box_dim=clearout_dim
         )
     else:
         return dict(
-            phaseshift_l=phaseshift_l, clearout_box_dim=(phaseshift_l - 10, 3),
-            taper_ls=(taper_length,), gap_taper=(cubic_taper(taper_change),),
-            wg_taper=(cubic_taper(taper_change),), boundary_taper=((0,),), rib_brim_taper=None
+            phaseshift_l=phaseshift_l, clearout_box_dim=clearout_dim,
+            taper_l=taper_length, gap_taper=cubic_taper(taper_change),
+            wg_taper=cubic_taper(taper_change)
         )
 
 
@@ -214,9 +213,6 @@ Pull-in phase shifter or PSV1
 
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length
-
-# gnd_wg
-
 pull_in_gap = [
     chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_in_anchor, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
                                                name=f'ps_gap_{gap_w}'), 25, gnd_wg],
@@ -226,7 +222,7 @@ pull_in_gap = [
     for gap_w in (0.1, 0.15, 0.2)]
 
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
-# and phase shift length. To increase pull-in, phase shift length is made shorter.
+# and phase shift length. To increase pull-in voltage, phase shift length is made shorter.
 pull_in_taper = [
     chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict(pull_in_phaseshift_l,
                                                                                      taper_change, taper_length),
@@ -268,7 +264,8 @@ pull_in_gap_tdc = [chip.nems_tdc(anchor=tdc_anchor, dc_gap_w=gap_w, bend_dim=(te
 
 # Motivation: attempt pull-in TDC with tapering to reduce the beat length of the TDC
 pull_in_taper_tdc = [
-    chip.nems_tdc(anchor=tdc_anchor, **taper_dict_tdc(taper_change, taper_length))
+    chip.nems_tdc(anchor=tdc_anchor, **taper_dict_tdc(taper_change, taper_length),
+                  name=f'pull_in_tdc_taper_{taper_change}_{taper_length}')
     for taper_change in (-0.2, -0.3) for taper_length in (20, 40)
 ]
 
@@ -384,8 +381,6 @@ reference_devices = [
                        dc, include_input_ps=False,
                        detector=detector,
                        name='bare_mzi'),
-
-
 ]
 
 
@@ -1006,6 +1001,6 @@ with nd.Cell('aim_layout') as aim_layout:
     chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
                        -standard_grating_interport + edge_shift_dim[1])
 
-# nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly
-nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+# nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])

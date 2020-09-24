@@ -4,12 +4,12 @@ import gdspy as gy
 import nazca as nd
 from copy import deepcopy as copy
 from shapely.vectorized import contains
-from shapely.geometry import Polygon, MultiPolygon, GeometryCollection, CAP_STYLE
+from shapely.geometry import Polygon, MultiPolygon, GeometryCollection
 from shapely.ops import cascaded_union
-from shapely.affinity import translate
+from shapely.affinity import translate, rotate
 from descartes import PolygonPatch
 import trimesh
-from trimesh import creation, visual
+from trimesh import creation
 
 try:
     import plotly.graph_objects as go
@@ -287,6 +287,21 @@ class Pattern:
         self.polys = new_polys
         return self
 
+    def rotate(self, angle: float, origin: str = 'center') -> "Pattern":
+        """Runs Shapely's rotate operation on the geometry
+
+        Args:
+            angle: rotation angle
+            origin: origin of rotation
+
+        Returns:
+            Rotated pattern
+
+        """
+        self.pattern = rotate(self.pattern, angle, origin)
+        self.polys = [poly for poly in self.pattern]
+        return self
+
     @property
     def copy(self) -> "Pattern":
         return copy(self)
@@ -396,7 +411,7 @@ def pattern_recover(polygon_or_collection):
     return Pattern(collection)
 
 
-def cubic_taper(change_w, off: bool = True):
+def cubic_taper(change_w, off: bool = False) -> Tuple[float, ...]:
     if off:
         return 0, change_w  # quick hack to change to linear taper
     else:
