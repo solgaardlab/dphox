@@ -184,11 +184,6 @@ Pull-apart phase shifter or PSV3
 '''
 
 # Motivation: modify the gap of the pull-apart phase shifter
-# pull_apart_gap = [
-#     chip.singlemode_ps(chip.nems_ps(gap_w=gap_w, anchor=pull_apart_anchor, name=f'ps_gap_{gap_w}'),
-#                        interport_w=test_interport_w,
-#                        phaseshift_l=mesh_phaseshift_l, name=f'pull_apart_gap_{gap_w}')
-#     for gap_w in (0.1, 0.15, 0.2, 0.25)]
 
 pull_apart_gap = [
     chip.mzi_arms([delay_line_50, chip.nems_ps(gap_w=gap_w, anchor=pull_apart_anchor, name=f'ps_gap_{gap_w}')],
@@ -555,12 +550,6 @@ for col, vip_column in enumerate(vip_columns):
 # test structures between the meshes
 
 
-# chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_in_anchor, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
-#                                                name=f'ps_gap_{gap_w}'), 25, gnd_wg],
-#                   [delay_line_200, gnd_wg],
-#                   interport_w=test_interport_w,
-#                   name=f'pull_in_gap_{gap_w}')
-
 middle_mesh_pull_apart = [
     chip.mzi_node(chip.singlemode_ps(ps, interport_w=mesh_interport_w,
                                      phaseshift_l=mesh_phaseshift_l), dc, include_input_ps=False,
@@ -568,15 +557,6 @@ middle_mesh_pull_apart = [
                                                              chip.nems_ps(anchor=pull_apart_anchor,
                                                                           **pull_apart_taper_dict(-0.05, 30)))
 ]
-# middle_mesh_pull_in = [
-#     chip.mzi_node(chip.singlemode_ps_ext_gnd(ps, gnd_wg_l=gnd_length, interport_w=mesh_interport_w,
-#                                              phaseshift_l=pull_in_phaseshift_l + 2 * gnd_length), dc, include_input_ps=False,
-#                   name=f'meshtest_mzi_{ps.name}') for ps in (chip.nems_ps(anchor=pull_in_anchor,
-#                                                                           **pull_in_dict(pull_in_phaseshift_l)),
-#                                                              chip.nems_ps(anchor=pull_in_anchor,
-#                                                                           **pull_in_dict(pull_in_phaseshift_l,
-#                                                                                          -0.05, 20)))
-# ]
 
 
 middle_mesh_pull_in = [

@@ -329,14 +329,6 @@ class AIMNazca:
             else:
                 nd.Pin('b0').put(l_device.pin['b0'])
                 nd.Pin('b1').put(u_device.pin['b0'])
-
-            # if 'pos0' in p.pin:  # equivalent to "raising pins" but not all phase shifters have these pins...
-            #     nd.Pin('pos0').put(p.pin['pos0'])
-            #     nd.Pin('pos1').put(p.pin['pos1'])
-            # if 'gnd0' in p.pin:
-            #     nd.Pin('gnd0').put(p.pin['gnd0'])
-            #     nd.Pin('gnd1').put(p.pin['gnd1'])
-
         return cell
 
     def thermal_ps(self, tap_sep: Optional[Tuple[nd.Cell, float]] = None):
