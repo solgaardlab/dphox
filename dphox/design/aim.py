@@ -86,33 +86,23 @@ class AIMNazca:
                 tdc.raise_pins(['gnd0_l_0', 'gnd0_u_0', 'gnd0_l_1', 'gnd0_u_1'])
         return self.tdc_node(diff_ps, cell) if diff_ps is not None else cell
 
-    def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 100,
+    def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 90,
                 gap_w: float = 0.15, pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (90, 13.8),
                 clearout_etch_stop_grow: float = 0.5, num_taper_evaluations: int = 100,
                 anchor: Optional[nd.Cell] = None, tap_sep: Optional[Tuple[nd.Cell, float]] = None,
-                name: str = 'nems_ps', taper_ls=(2, 0.15, 0.2, 0.15, 2),
-                gap_taper=((0.66 + 2 * 0.63,), (0, -1 * (.30 + 2 * 0.63),), (0,), (0, (.30 + 2 * 0.63),), cubic_taper(-0.74 - 2 * 0.63)),
-                wg_taper=((0,), (0,), (0,), (0,), cubic_taper(-0.08)),
-                boundary_taper=((0.66 + 2 * 0.63,), (0,), (0,), (0,), cubic_taper(-0.74 - 2 * 0.63)),
-                rib_brim_taper=(cubic_taper(2 * .66), (0,), (0,), (0,), cubic_taper(-0.74 * 2))) -> nd.Cell:
-        # TODO(nate):The tapers should depend on whether an anchor is present
-        # taper_ls = (2, 0.15,0.2,0.15, 2)
-        # wg_taper = ((0,), (0,), (0,), (0,), get_cubic_taper(-0.08))
-        # gap_taper = ((0.66 + 2*0.63, ), (0,-1*(.30+ 2*0.63),), (0,), (0,(.30+ 2*0.63),), get_cubic_taper(-0.74 -2*0.63))
-        # boundary_taper = ((0.66 + 2*0.63,), (0,), (0,), (0,), get_cubic_taper(-0.74 -2*0.63))
-        # rib_brim_taper = (get_cubic_taper(2*.66), (0,), (0,), (0,), get_cubic_taper(-0.74*2))
-
+                gnd_wg: Optional[nd.Cell] = None, taper_l: float = 0, end_ls: Tuple[float, ...] = (5,),
+                gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
+                boundary_taper: Optional[Tuple[float, ...]] = None,
+                end_taper: Optional[Tuple[float, ...]] = ((0, -0.08),), name: str = 'nems_ps') -> nd.Cell:
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
                           num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
-                          gap_taper=gap_taper, wg_taper=wg_taper,
-                          taper_ls=taper_ls,
-                          boundary_taper=boundary_taper,
-                          rib_brim_taper=rib_brim_taper)
+                          gap_taper=gap_taper, wg_taper=wg_taper, end_ls=end_ls, end_taper=end_taper,
+                          taper_l=taper_l, boundary_taper=boundary_taper)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
         clearout = c.clearout_box(clearout_layer='clearout', clearout_etch_stop_layer='snam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
-        ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
-        device = Multilayer([(c, 'seam')] + pad_to_layer + clearout + ridge_etch)
+        # ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
+        device = Multilayer([(c, 'seam')] + pad_to_layer + clearout)
         if anchor is None:
             return device.nazca_cell(name)
         with nd.Cell(name) as cell:
@@ -286,28 +276,32 @@ class AIMNazca:
             pins_to_raise = ['pos0', 'pos1', 'gnd0', 'gnd1']
 
             i_l = 0
-            l_device = self.waveguide_ic.strt(lower_arm[0]).put() if isinstance(lower_arm[0], (float, int)) else lower_arm[0].put()
+            l_device = self.waveguide_ic.strt(lower_arm[0]).put() if isinstance(lower_arm[0], (float, int)) else \
+            lower_arm[0].put()
             if bool(set(pins_to_raise) & set(l_device.pin)):  # using this to sqush nazca yelling
                 lower_pins = [f'pos0_l_{i_l}', f'pos1_l_{i_l}', f'gnd0_l_{i_l}', f'gnd1_l_{i_l}']
                 l_device.raise_pins(pins_to_raise, lower_pins)
                 i_l += 1
             nd.Pin('a0').put(l_device.pin['a0'])
             for lower_device in lower_arm[1:]:
-                l_device = self.waveguide_ic.strt(lower_device).put() if isinstance(lower_device, (float, int)) else lower_device.put()
+                l_device = self.waveguide_ic.strt(lower_device).put() if isinstance(lower_device, (
+                float, int)) else lower_device.put()
                 if bool(set(pins_to_raise) & set(l_device.pin)):
                     lower_pins = [f'pos0_l_{i_l}', f'pos1_l_{i_l}', f'gnd0_l_{i_l}', f'gnd1_l_{i_l}']
                     l_device.raise_pins(pins_to_raise, lower_pins)
                     i_l += 1
 
             i_u = 0
-            u_device = self.waveguide_ic.strt(upper_arm[0]).put(0, interport_w, flip=True) if isinstance(upper_arm[0], (float, int)) else upper_arm[0].put(0, interport_w, flip=True)
+            u_device = self.waveguide_ic.strt(upper_arm[0]).put(0, interport_w, flip=True) if isinstance(upper_arm[0], (
+            float, int)) else upper_arm[0].put(0, interport_w, flip=True)
             if bool(set(pins_to_raise) & set(u_device.pin)):
                 upper_pins = [f'pos0_u_{i_u}', f'pos1_u_{i_u}', f'gnd0_u_{i_u}', f'gnd1_u_{i_u}']
                 u_device.raise_pins(pins_to_raise, upper_pins)
                 i_u += 1
             nd.Pin('a1').put(u_device.pin['a0'])
             for upper_device in upper_arm[1:]:
-                u_device = self.waveguide_ic.strt(upper_device).put(flip=True) if isinstance(upper_device, (float, int)) else upper_device.put(flip=True)
+                u_device = self.waveguide_ic.strt(upper_device).put(flip=True) if isinstance(upper_device, (
+                float, int)) else upper_device.put(flip=True)
                 if bool(set(pins_to_raise) & set(u_device.pin)):
                     upper_pins = [f'pos0_u_{i_u}', f'pos1_u_{i_u}', f'gnd0_u_{i_u}', f'gnd1_u_{i_u}']
                     u_device.raise_pins(pins_to_raise, upper_pins)
@@ -438,7 +432,8 @@ class AIMNazca:
                         nd.Pin(f'i{i}').put(i * pitch[0], j * pitch[1], 90)
                 if strip:
                     self.m2_ic.strt_p2p(bond_pad_array.pin[f'o{i}'], bond_pad_array.pin[f'i{i}'], width=width).put()
-                    self.m1_ic.strt_p2p(bond_pad_array.pin[f'o{i}'], bond_pad_array.pin[f'i{i}'], width=width).put()  # adding m1 to bring resistance down
+                    self.m1_ic.strt_p2p(bond_pad_array.pin[f'o{i}'], bond_pad_array.pin[f'i{i}'],
+                                        width=width).put()  # adding m1 to bring resistance down
             nd.put_stub()
         return bond_pad_array
 
@@ -587,7 +582,8 @@ class AIMNazca:
 
     def mzi_node_test(self, mzi_arms: nd.Cell, dc: nd.Cell, tap_internal: Optional[nd.Cell] = None,
                       tap_external: Optional[nd.Cell] = None, name: Optional[str] = 'test_mzi',
-                      include_input_ps: bool = False, grating: Optional[nd.Cell] = None, detector: Optional[nd.Cell] = None,
+                      include_input_ps: bool = False, grating: Optional[nd.Cell] = None,
+                      detector: Optional[nd.Cell] = None,
                       detector_loopback_params: Dim2 = None, sep: float = 0):
         with nd.Cell(name=name) as node:
             if include_input_ps:
@@ -611,8 +607,10 @@ class AIMNazca:
             else:
                 internal_ps = mzi_arms.put(first_dc.pin['b0'])
 
-            internal_gnd_pins = [key for key in internal_ps.pin.keys() if key.split('d')[0] == 'gn']  # creates a list of the multiple gnds
-            internal_pos_pins = [key for key in internal_ps.pin.keys() if key.split('s')[0] == 'po']  # creates a list of the multiple pos
+            internal_gnd_pins = [key for key in internal_ps.pin.keys() if
+                                 key.split('d')[0] == 'gn']  # creates a list of the multiple gnds
+            internal_pos_pins = [key for key in internal_ps.pin.keys() if
+                                 key.split('s')[0] == 'po']  # creates a list of the multiple pos
             internal_ps.raise_pins(internal_gnd_pins + internal_pos_pins)
 
             if 'gnd0' in internal_ps.pin:
@@ -786,7 +784,8 @@ class AIMNazca:
             mesh.export('{}_{}.stl'.format(cell.cell_name, layer))
 
     def delay_line(self, waveguide_width=0.48, delay_length=50, bend_radius=5, straight_length=25, number_bend_pairs=1):
-        c = DelayLine(waveguide_width=waveguide_width, delay_length=delay_length, bend_radius=bend_radius, straight_length=straight_length, number_bend_pairs=number_bend_pairs)
+        c = DelayLine(waveguide_width=waveguide_width, delay_length=delay_length, bend_radius=bend_radius,
+                      straight_length=straight_length, number_bend_pairs=number_bend_pairs)
         device = Multilayer([(c, 'seam')])
         return device.nazca_cell('delay_line')
 

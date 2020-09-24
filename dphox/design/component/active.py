@@ -13,71 +13,69 @@ except ImportError:
 
 class LateralNemsPS(GroupedPattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float,
-                 gap_w: float, taper_ls: Tuple[float, ...], num_taper_evaluations: int = 100,
-                 pad_dim: Optional[Dim3] = None, gap_taper: Optional[Tuple[Tuple[float, ...]]] = None,
-                 wg_taper: Optional[Tuple[Tuple[float, ...]]] = None,
-                 boundary_taper: Optional[Tuple[Tuple[float, ...]]] = None,
-                 rib_brim_taper: Optional[Tuple[Tuple[float, ...]]] = None):
+                 gap_w: float, taper_l: float, end_ls: Tuple[float] = (0,),
+                 num_taper_evaluations: int = 100, pad_dim: Optional[Dim3] = None,
+                 gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
+                 boundary_taper: Optional[Tuple[float, ...]] = None,
+                 end_taper: Optional[Tuple[Tuple[float, ...]]] = None):
         """NEMS single-mode phase shifter
         Args:
             waveguide_w: waveguide width
             nanofin_w: nanofin width (initial, before tapering)
             phaseshift_l: phase shift length
             gap_w: gap width (initial, before tapering)
-            taper_ls:  array of taper lengths
+            taper_l: taper length
+            end_ls: end waveguide lengths
             num_taper_evaluations: number of taper evaluations (see gdspy)
             pad_dim: silicon handle xy size followed by distance between pad and fin to actuate
             gap_taper: gap taper polynomial params (recommend same as wg_taper)
             wg_taper: wg taper polynomial params (recommend same as gap_taper)
-            rib_brim_taper: rib brim taper (for gnd contact to pad)
+            end_taper: end taper for the transition into the phase shifter region
         """
         self.waveguide_w = waveguide_w
         self.nanofin_w = nanofin_w
         self.phaseshift_l = phaseshift_l
         self.gap_w = gap_w
-        self.taper_ls = taper_ls
+        self.taper_l = taper_l
+        self.end_ls = end_ls
+        self.end_taper = end_taper
         self.num_taper_evaluations = num_taper_evaluations
         self.pad_dim = pad_dim
         self.gap_taper = gap_taper
         self.wg_taper = wg_taper
         self.boundary_taper = boundary_taper
-        self.rib_brim_taper = rib_brim_taper
 
-        if not phaseshift_l >= 2 * np.sum(taper_ls):
+        if not phaseshift_l >= 2 * taper_l:
             raise ValueError(
-                f'Require interaction_l >= 2 * np.sum(taper_ls) but got {phaseshift_l} < {2 * np.sum(taper_ls)}')
+                f'Require interaction_l >= 2 * taper_l but got {phaseshift_l} < {2 * taper_l}')
 
         boundary_taper = wg_taper if boundary_taper is None else boundary_taper
 
+        wg_taper = (wg_taper,) if end_taper is None else (*end_taper, wg_taper)
         box_w = nanofin_w * 2 + gap_w * 2 + waveguide_w
-        wg = Waveguide(waveguide_w, taper_ls=taper_ls, taper_params=wg_taper, length=phaseshift_l,
+        wg = Waveguide(waveguide_w, taper_ls=(*end_ls, taper_l), taper_params=wg_taper, length=phaseshift_l + 2 * np.sum(end_ls),
                        num_taper_evaluations=num_taper_evaluations)
-        boundary = Waveguide(box_w, taper_params=boundary_taper, taper_ls=taper_ls, length=phaseshift_l,
-                             num_taper_evaluations=num_taper_evaluations).pattern
-        gap_path = Waveguide(waveguide_w + gap_w * 2, taper_params=gap_taper, taper_ls=taper_ls, length=phaseshift_l,
-                             num_taper_evaluations=num_taper_evaluations).pattern
+        boundary = Waveguide(box_w, taper_ls=(taper_l,), taper_params=(boundary_taper,), length=phaseshift_l,
+                             num_taper_evaluations=num_taper_evaluations).align(wg).pattern
+        gap_path = Waveguide(waveguide_w + gap_w * 2, taper_params=(gap_taper,), taper_ls=(taper_l,), length=phaseshift_l,
+                             num_taper_evaluations=num_taper_evaluations).align(wg).pattern
         nanofins = [Pattern(poly) for poly in (boundary - gap_path)]
-
-        if rib_brim_taper is not None:
-            rib_brim = Waveguide(waveguide_w, taper_ls=taper_ls, taper_params=rib_brim_taper, length=phaseshift_l,
-                                 num_taper_evaluations=num_taper_evaluations)
-            rib_brim = [Pattern(poly) for poly in (rib_brim.pattern - wg.pattern)]
-        else:
-            rib_brim = []
 
         pads, anchors = [], []
         if pad_dim is not None:
             pad = Box(pad_dim[:2]).align(wg)
             pad_y = nanofin_w + pad_dim[2] + pad_dim[1] / 2
             pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
-        super(LateralNemsPS, self).__init__(*([wg] + nanofins + pads + anchors + rib_brim), call_union=False)
-        self.waveguide, self.anchors, self.pads, self.nanofins, self.rib_brim = wg, anchors, pads, nanofins, rib_brim
+        super(LateralNemsPS, self).__init__(*([wg] + nanofins + pads + anchors), call_union=False)
+        self.waveguide, self.anchors, self.pads, self.nanofins = wg, anchors, pads, nanofins
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['b0'] = Port(self.phaseshift_l, 0)
-        self.port['t0'] = Port(*(center + dy))
-        self.port['t1'] = Port(*(center - dy))
+        self.port['ps0'] = Port(gap_path.bounds[0], 0, -np.pi)
+        self.port['ps1'] = Port(gap_path.bounds[1], 0)
+        self.port['fin0'] = Port(*(center + dy))
+        self.port['fin1'] = Port(*(center - dy))
 
 
 class LateralNemsTDC(GroupedPattern):
@@ -131,7 +129,8 @@ class LateralNemsTDC(GroupedPattern):
         else:
             box_w = (nanofin_w + beam_gap_w + waveguide_w) * 2 + dc_gap_w
             gap_taper_wg_w = (beam_gap_w + waveguide_w) * 2 + dc_gap_w
-            nanofin_box = Box((interaction_l, box_w)).align(dc).pattern
+            # nanofin_box = Box((interaction_l, box_w)).align(dc).pattern
+            nanofin_box = Waveguide(box_w, interaction_l, dc_taper_ls, boundary_taper).align(dc).pattern
             gap_taper_wg = Waveguide(gap_taper_wg_w, interaction_l, dc_taper_ls, beam_taper).align(dc).pattern
             nanofins = [Pattern(poly) for poly in (nanofin_box - gap_taper_wg)]
 
@@ -315,17 +314,33 @@ class NemsAnchor(GroupedPattern):
 
 class GndWaveguide(Pattern):
     def __init__(self, waveguide_w: float, length: float, gnd_contact_dim: Optional[Dim2],
-                 rib_brim_w: float, gnd_connector_dim: Optional[Dim2], flip=False):
+                 rib_brim_w: float, gnd_connector_dim: Optional[Dim2], flip: bool=False,
+                 wg_taper: Optional[Tuple[float]] = None, symmetric_taper: bool = False):
+        """Grounded waveguide, typically required for photonic MEMS, consisting of a rib brim
+        around an (optionally) tapered waveguide.
+
+        Args:
+            waveguide_w:
+            length:
+            gnd_contact_dim:
+            rib_brim_w:
+            gnd_connector_dim:
+            flip:
+            wg_taper:
+            symmetric_taper:
+        """
         self.waveguide_w = waveguide_w
         self.rib_brim_w = rib_brim_w
         self.length = length
         self.gnd_contact_dim = gnd_contact_dim
         self.gnd_connector_dim = gnd_connector_dim
 
+        # TODO(): remove the hidden hardcoding
         brim_l, brim_taper = get_linear_adiabatic(min_width=waveguide_w, max_width=rib_brim_w, aggressive=True)
         brim_taper = cubic_taper(brim_taper[1])
 
-        wg = Waveguide(waveguide_w=waveguide_w, length=length)
+        wg = Waveguide(waveguide_w=waveguide_w, length=length, taper_ls=(length,), taper_params=(wg_taper,),
+                       symmetric=symmetric_taper)
         rib_brim = Waveguide(waveguide_w=waveguide_w, length=2 * brim_l, taper_ls=(brim_l,),
                              taper_params=(brim_taper,)).align(wg)
         gnd_connection = Box(gnd_connector_dim).align(wg).valign(wg, bottom=not flip, opposite=True)

@@ -297,7 +297,7 @@ class Waveguide(Pattern):
 
         if taper_params is not None:
             for taper_l, taper_param in zip(taper_ls, taper_params):
-                if taper_l > 0:
+                if taper_l > 0 and taper_param is not None:
                     p.polynomial_taper(taper_l, taper_param, num_taper_evaluations)
         if symmetric:
             if not length >= 2 * np.sum(taper_ls):
@@ -306,7 +306,7 @@ class Waveguide(Pattern):
             if taper_params is not None:
                 p.segment(length - 2 * np.sum(taper_ls))
                 for taper_l, taper_param in zip(reversed(taper_ls), reversed(taper_params)):
-                    if taper_l > 0:
+                    if taper_l > 0 and taper_param is not None:
                         p.polynomial_taper(taper_l, taper_param, num_taper_evaluations, inverted=True)
             else:
                 p.segment(length)
