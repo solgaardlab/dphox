@@ -412,9 +412,9 @@ class AIMNazca:
                     nd.Pin(f'u{i},{j}').put(pad.pin['a0'])
                     nd.Pin(f'd{i},{j}').put(pad.pin['b0'])
                     if use_labels:
-                        x = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='cc',
+                        x = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='rc',
                                     layer='seam', height=pad_dim[0] / 2)
-                        y = nd.text(text=f'{j + 1 if labels is None else labels[i]}', align='cc',
+                        y = nd.text(text=f'{j + 1 if labels is None else labels[i]}', align='rc',
                                     layer='seam', height=pad_dim[0] / 2)
                         y.put(x_loc, -pad_l / 2 + j * pitch[1])
                         x.put(x_loc, 0.27 * pad_l + j * pitch[1])
