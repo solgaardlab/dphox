@@ -411,7 +411,7 @@ def pattern_recover(polygon_or_collection):
     return Pattern(collection)
 
 
-def cubic_taper(change_w, off: bool = True) -> Tuple[float, ...]:
+def cubic_taper(change_w, off: bool = False) -> Tuple[float, ...]:
     if off:
         return 0, change_w  # quick hack to change to linear taper
     else:

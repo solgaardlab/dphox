@@ -13,7 +13,7 @@ except ImportError:
 
 class LateralNemsPS(GroupedPattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float,
-                 gap_w: float, taper_l: float, gnd_connector: Optional[Dim3],
+                 gap_w: float, taper_l: float, fin_adiabatic_bend_dim: Dim2, gnd_connector: Optional[Dim3] = None,
                  end_ls: Tuple[float] = (0,), num_taper_evaluations: int = 100, pad_dim: Optional[Dim3] = None,
                  gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
                  boundary_taper: Optional[Tuple[float, ...]] = None,
@@ -24,6 +24,8 @@ class LateralNemsPS(GroupedPattern):
             nanofin_w: nanofin width (initial, before tapering)
             phaseshift_l: phase shift length
             gap_w: gap width (initial, before tapering)
+            gnd_connector: tuple of the form (rib_brim_w, connectorx, connectory)
+            fin_adiabatic_bend_dim: adiabatic fin bending
             taper_l: taper length
             end_ls: end waveguide lengths
             num_taper_evaluations: number of taper evaluations (see gdspy)
@@ -31,7 +33,6 @@ class LateralNemsPS(GroupedPattern):
             gap_taper: gap taper polynomial params (recommend same as wg_taper)
             wg_taper: wg taper polynomial params (recommend same as gap_taper)
             end_taper: end taper for the transition into the phase shifter region
-            gnd_connector: tuple of the form (rib_brim_w, connectorx, connectory)
         """
         self.waveguide_w = waveguide_w
         self.nanofin_w = nanofin_w
@@ -61,25 +62,14 @@ class LateralNemsPS(GroupedPattern):
         gap_path = Waveguide(waveguide_w + gap_w * 2, taper_params=(gap_taper,), taper_ls=(taper_l,), length=phaseshift_l,
                              num_taper_evaluations=num_taper_evaluations).align(wg).pattern
 
-        # TODO(): fix possible bug in symmetric that makes this not work when symmetric is True
-        rib_brim = Waveguide(waveguide_w=waveguide_w, length=end_ls[-1], taper_ls=(end_ls[-1] / 2, end_ls[-1] / 2),
-                             taper_params=(cubic_taper(gnd_connector[0] - waveguide_w), cubic_taper(waveguide_w - gnd_connector[0])),
-                             symmetric=False
-                             ).align(wg).halign(np.sum(end_ls), left=False, opposite=True)
-
-        rib_brims = [copy(rib_brim), copy(rib_brim).translate(phaseshift_l + rib_brim.size[0])]
-
-        gnd_connection = GroupedPattern(
-            Box(gnd_connector[1:]).align(rib_brims[0]).valign(rib_brim, bottom=True, opposite=True),
-            Box(gnd_connector[1:]).align(rib_brims[0]).valign(rib_brim, bottom=False, opposite=True),
-            Box(gnd_connector[1:]).align(rib_brims[1]).valign(rib_brim, bottom=True, opposite=True),
-            Box(gnd_connector[1:]).align(rib_brims[1]).valign(rib_brim, bottom=False, opposite=True)
-        )
-
-        rib_brim = GroupedPattern(*rib_brims)
-        rib_brim = [Pattern(poly) for poly in rib_brim.pattern - wg.pattern]
-
         nanofins = [Pattern(poly) for poly in (boundary - gap_path)]
+        nanofin_adiabatic = Pattern(Path(nanofin_w).sbend(fin_adiabatic_bend_dim))
+        nanofin_ends = [
+            nanofin_adiabatic.copy.translate(nanofins[0].bounds[2], nanofins[0].center[1]),
+            nanofin_adiabatic.copy.flip().translate(nanofins[1].bounds[2], nanofins[1].center[1]),
+            nanofin_adiabatic.copy.flip(horiz=True).translate(nanofins[0].bounds[0], nanofins[0].center[1]),
+            nanofin_adiabatic.copy.flip(horiz=True).flip().translate(nanofins[1].bounds[0], nanofins[1].center[1])
+        ]
 
         pads, anchors = [], []
         if pad_dim is not None:
@@ -87,8 +77,32 @@ class LateralNemsPS(GroupedPattern):
             pad_y = nanofin_w + pad_dim[2] + pad_dim[1] / 2
             pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
 
-        super(LateralNemsPS, self).__init__(*([wg] + nanofins + pads + anchors + rib_brim + [gnd_connection]),
-                                            call_union=False)
+        patterns = [wg] + nanofins + nanofin_ends + pads + anchors
+
+        rib_brim = None
+
+        if gnd_connector is not None:
+            final_width = waveguide_w + np.sum([np.sum(t) for t in end_taper])
+            rib_brim = Waveguide(waveguide_w=waveguide_w, length=end_ls[-1], taper_ls=(end_ls[-1] / 2, end_ls[-1] / 2),
+                                 taper_params=(cubic_taper(gnd_connector[0] - waveguide_w),
+                                               cubic_taper(final_width - gnd_connector[0])),
+                                 symmetric=False
+                                 ).align(wg).halign(np.sum(end_ls), left=False, opposite=True)
+
+            rib_brims = [copy(rib_brim), copy(rib_brim).translate(phaseshift_l + rib_brim.size[0])]
+
+            gnd_connection = GroupedPattern(
+                Box(gnd_connector[1:]).align(rib_brims[0]).valign(rib_brim, bottom=True, opposite=True),
+                Box(gnd_connector[1:]).align(rib_brims[0]).valign(rib_brim, bottom=False, opposite=True),
+                Box(gnd_connector[1:]).align(rib_brims[1]).valign(rib_brim, bottom=True, opposite=True),
+                Box(gnd_connector[1:]).align(rib_brims[1]).valign(rib_brim, bottom=False, opposite=True)
+            )
+
+            rib_brim = GroupedPattern(*rib_brims)
+            rib_brim = [Pattern(poly) for poly in rib_brim.pattern - wg.pattern]
+            patterns.extend(rib_brim + [gnd_connection])
+
+        super(LateralNemsPS, self).__init__(*patterns, call_union=False)
         self.waveguide, self.anchors, self.pads, self.nanofins, self.rib_brim = wg, anchors, pads, nanofins, rib_brim
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)

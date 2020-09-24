@@ -92,10 +92,11 @@ class AIMNazca:
                 anchor: Optional[nd.Cell] = None, tap_sep: Optional[Tuple[nd.Cell, float]] = None,
                 gnd_connector: Optional[Dim3] = (2, 0.2, 1), taper_l: float = 0, end_ls: Tuple[float, ...] = (5,),
                 gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
-                boundary_taper: Optional[Tuple[float, ...]] = None,
+                boundary_taper: Optional[Tuple[float, ...]] = None, fin_adiabatic_bend_dim: Optional[Dim2] = (3, 1),
                 end_taper: Optional[Tuple[float, ...]] = ((0, -0.08),), name: str = 'nems_ps') -> nd.Cell:
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
                           num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
+                          fin_adiabatic_bend_dim=fin_adiabatic_bend_dim,
                           gap_taper=gap_taper, wg_taper=wg_taper, end_ls=end_ls, end_taper=end_taper,
                           taper_l=taper_l, boundary_taper=boundary_taper, gnd_connector=gnd_connector)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
