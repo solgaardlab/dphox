@@ -4,12 +4,12 @@ import gdspy as gy
 import nazca as nd
 from copy import deepcopy as copy
 from shapely.vectorized import contains
-from shapely.geometry import Polygon, MultiPolygon, GeometryCollection, CAP_STYLE
+from shapely.geometry import Polygon, MultiPolygon, GeometryCollection
 from shapely.ops import cascaded_union
-from shapely.affinity import translate
+from shapely.affinity import translate, rotate
 from descartes import PolygonPatch
 import trimesh
-from trimesh import creation, visual
+from trimesh import creation
 
 try:
     import plotly.graph_objects as go
@@ -285,6 +285,21 @@ class Pattern:
             new_points = np.stack((-points[0], points[1])) if horiz else np.stack((points[0], -points[1]))
             new_polys.append(Polygon(new_points.T))
         self.polys = new_polys
+        return self
+
+    def rotate(self, angle: float, origin: str = 'center') -> "Pattern":
+        """Runs Shapely's rotate operation on the geometry
+
+        Args:
+            angle: rotation angle
+            origin: origin of rotation
+
+        Returns:
+            Rotated pattern
+
+        """
+        self.pattern = rotate(self.pattern, angle, origin)
+        self.polys = [poly for poly in self.pattern]
         return self
 
     @property
