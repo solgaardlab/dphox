@@ -266,7 +266,7 @@ class Interposer(Pattern):
 
 class Waveguide(Pattern):
     def __init__(self, waveguide_w: float, length: float, taper_ls: Tuple[float, ...] = 0,
-                 taper_params: Tuple[Tuple[float, ...]] = None,
+                 taper_params: Tuple[Tuple[float, ...], ...] = None,
                  slot_dim: Optional[Dim2] = None, slot_taper_ls: Tuple[float, ...] = 0,
                  slot_taper_params: Tuple[Tuple[float, ...]] = None,
                  num_taper_evaluations: int = 100, symmetric: bool = True, rotate_angle: float = None):
@@ -302,7 +302,7 @@ class Waveguide(Pattern):
         if symmetric:
             if not length >= 2 * np.sum(taper_ls):
                 raise ValueError(
-                    f'Require interaction_l >= 2 * np.sum(taper_ls) but got {length} < {2 * np.sum(taper_ls)}')
+                    f'Require length >= 2 * np.sum(taper_ls) but got {length} < {2 * np.sum(taper_ls)}')
             if taper_params is not None:
                 p.segment(length - 2 * np.sum(taper_ls))
                 for taper_l, taper_param in zip(reversed(taper_ls), reversed(taper_params)):
@@ -312,7 +312,7 @@ class Waveguide(Pattern):
                 p.segment(length)
         else:
             if not length >= np.sum(taper_ls):
-                raise ValueError(f'Require interaction_l >= np.sum(taper_ls) but got {length} < {np.sum(taper_ls)}')
+                raise ValueError(f'Require length >= np.sum(taper_ls) but got {length} < {np.sum(taper_ls)}')
             p.segment(length - np.sum(taper_ls))
 
         if rotate_angle is not None:
