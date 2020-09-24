@@ -9,18 +9,18 @@ from dphox.design.component import cubic_taper
 from datetime import date
 from tqdm import tqdm
 
-# chip = AIMNazca(
-#     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
-#     waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
-#     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
-# )
+chip = AIMNazca(
+    passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
+    waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
+    active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
+)
 
 # Please leave this so Nate can run this quickly
-chip = AIMNazca(
-    passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
-    waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
-    active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
-)
+# chip = AIMNazca(
+#     passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
+#     waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
+#     active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
+# )
 
 # chip params
 
@@ -87,7 +87,7 @@ tdc_anchor = chip.nems_anchor(shuttle_dim=(test_tdc_interaction_l, 5),
 tdc = chip.nems_tdc(anchor=tdc_anchor, bend_dim=(test_tdc_radius, test_tdc_bend_dim))
 gnd_wg = chip.gnd_wg()
 gnd_wg_pull_apart = chip.gnd_wg(wg_taper=(0, -0.08), symmetric=True)
-ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap_detector, sep), gnd_wg=gnd_wg_pull_apart)
+ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap_detector, sep))
 ps_no_anchor = chip.nems_ps()
 alignment_mark = chip.alignment_mark()
 
@@ -150,33 +150,25 @@ autoroute_8_extended = chip.autoroute_turn(7, level=2, turn_radius=8, connector_
 
 def pull_apart_taper_dict(taper_change: float, taper_length: float):
     return dict(
-        taper_ls=(2, 0.15, 0.2, 0.15, 2, taper_length),
-        gap_taper=(
-            (0.66 + 2 * 0.63,), (0, -1 * (.30 + 2 * 0.63),), (0,), (0, (.30 + 2 * 0.63),),
-            cubic_taper(-0.74 - 2 * 0.63), cubic_taper(taper_change)),
-        wg_taper=((0,), (0,), (0,), (0,), cubic_taper(-0.08), cubic_taper(taper_change)),
-        boundary_taper=(
-            (0.66 + 2 * 0.63,), (0,), (0,), (0,), cubic_taper(-0.74 - 2 * 0.63), (0,)),
-        rib_brim_taper=(
-            cubic_taper(2 * .66), (0,), (0,), (0,), cubic_taper(-0.74 * 2),
-            cubic_taper(taper_change))
+        taper_l=taper_length,
+        gap_taper=cubic_taper(taper_change),
+        wg_taper=cubic_taper(taper_change)
     )
 
 
-def pull_in_dict(phaseshift_l: float = 100,
-                 clearout_dim: Optional[float] = None, taper_change: float = None, taper_length: float = None):
+def pull_in_dict(phaseshift_l: float = 100, taper_change: float = None, taper_length: float = None,
+                 clearout_dim: Optional[float] = None):
     # TODO: modify this to taper the pull-in fin adiabatically using rib_brim_taper
     clearout_dim = (phaseshift_l - 10, 3) if clearout_dim is None else clearout_dim
     if taper_change is None or taper_length is None:
         return dict(
-            phaseshift_l=phaseshift_l, clearout_box_dim=clearout_dim,
-            taper_ls=(0,), gap_taper=None, wg_taper=None, boundary_taper=None, rib_brim_taper=None
+            phaseshift_l=phaseshift_l, clearout_box_dim=clearout_dim
         )
     else:
         return dict(
             phaseshift_l=phaseshift_l, clearout_box_dim=clearout_dim,
-            taper_ls=(taper_length,), gap_taper=(cubic_taper(taper_change),),
-            wg_taper=(cubic_taper(taper_change),), boundary_taper=((0,),), rib_brim_taper=None
+            taper_l=taper_length, gap_taper=cubic_taper(taper_change),
+            wg_taper=cubic_taper(taper_change)
         )
 
 
@@ -1009,6 +1001,6 @@ with nd.Cell('aim_layout') as aim_layout:
     chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
                        -standard_grating_interport + edge_shift_dim[1])
 
-# nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly
-nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+# nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])

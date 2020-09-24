@@ -90,28 +90,25 @@ class AIMNazca:
                 gap_w: float = 0.15, pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (90, 13.8),
                 clearout_etch_stop_grow: float = 0.5, num_taper_evaluations: int = 100,
                 anchor: Optional[nd.Cell] = None, tap_sep: Optional[Tuple[nd.Cell, float]] = None,
-                gnd_wg: Optional[nd.Cell] = None, taper_l: float = 0, end_ls: Tuple[float, ...] = (5,),
+                gnd_connector: Optional[Dim3] = (2, 0.2, 1), taper_l: float = 0, end_ls: Tuple[float, ...] = (5,),
                 gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
                 boundary_taper: Optional[Tuple[float, ...]] = None,
                 end_taper: Optional[Tuple[float, ...]] = ((0, -0.08),), name: str = 'nems_ps') -> nd.Cell:
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
                           num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
                           gap_taper=gap_taper, wg_taper=wg_taper, end_ls=end_ls, end_taper=end_taper,
-                          taper_l=taper_l, boundary_taper=boundary_taper)
+                          taper_l=taper_l, boundary_taper=boundary_taper, gnd_connector=gnd_connector)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
         clearout = c.clearout_box(clearout_layer='clearout', clearout_etch_stop_layer='snam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
-        # ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
-        device = Multilayer([(c, 'seam')] + pad_to_layer + clearout)
+        ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
+        device = Multilayer([(c, 'seam')] + pad_to_layer + clearout + ridge_etch)
         if anchor is None:
             return device.nazca_cell(name)
         with nd.Cell(name) as cell:
             ps = device.nazca_cell('ps').put()
             top_anchor = anchor.put(ps.pin['fin0'])
             bottom_anchor = anchor.put(ps.pin['fin1'], flip=True)
-            if gnd_wg is not None:
-                gnd_wg.put(ps.pin['ps0'])
-                gnd_wg.put(ps.pin['ps1'])
             self.metal_box(top_anchor, bottom_anchor, phaseshift_l)
             nd.Pin('a0').put(ps.pin['a0'])
             if tap_sep is not None:
@@ -123,7 +120,7 @@ class AIMNazca:
                 nd.Pin('b0').put(ps.pin['b0'])
         return cell
 
-    def metal_box(self, top_anchor: nd.Instance, bottom_anchor: nd.Instance, length: float, extra_length: float = 4):
+    def metal_box(self, top_anchor: nd.Instance, bottom_anchor: nd.Instance, length: float, extra_length: float = 15):
         has_c1 = 'c1' in top_anchor.pin
         m2_radius = (top_anchor.pin['c0'].y - bottom_anchor.pin['c0'].y) / 2
         self.m2_ic.strt(length / 2 + extra_length * has_c1).put(top_anchor.pin['c0'])
