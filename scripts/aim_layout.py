@@ -90,7 +90,12 @@ gnd_wg_pull_apart = chip.gnd_wg(wg_taper=(0, -0.08), symmetric=True)
 ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap_detector, sep))
 ps_no_anchor = chip.nems_ps()
 alignment_mark = chip.alignment_mark()
+<<<<<<< HEAD
 
+=======
+alignment_mark_small = chip.alignment_mark((50, 5))
+gnd_wg = chip.gnd_wg()
+>>>>>>> wip: adjusted nems ps and anchor based on sims, adjusted amarks
 grating = chip.pdk_cells['cl_band_vertical_coupler_si']
 detector = chip.pdk_cells['cl_band_photodetector_digital']
 
@@ -686,7 +691,21 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         # TODO: Add M1 layer to thermal gnd blocks to push down resistance
         # chip.v1_via_4.put()
 
-    # TODO:In mesh test Structure BP routing
+    # TODO:In mesh test Structure BP routing, MANUALLY ROUTE Last Part BEFORE HANDING OFF
+    '''
+    Full Test pin list:
+    20, 21, 23, 24
+    43, 44, 46, 47
+    69, 89, 90
+    92, 112, 113
+    115, 135, 136
+    138, 158, 159
+    161, 181, 182
+    184, 204, 205
+    207, 227, 228
+    319, 320
+    342, 343
+    '''
     # TODO(someone not Nate): double check the remapped mesh connections
     eu_bp_port_tests_m1 = [
         (20, 22), (23, 25),      # test MZI # moved to test routing
@@ -720,19 +739,22 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         i, j = closest
         chip.v1_via_8.put(bp_array_nems.pin[f'u{i},{j}'])
         chip.m1_ic.strt(100 * (2 - j), width=8).put(bp_array_nems.pin[f'u{i},{j}'])
-        chip.m1_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
-        chip.v1_via_8.put()
+        # chip.m1_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
+        # chip.v1_via_8.put()
 
         chip.v1_via_8.put(bp_array_thermal.pin[f'u{i},{j}'])
         chip.m1_ic.strt(100 * (2 - j), width=8).put(bp_array_thermal.pin[f'u{i},{j}'])
-        chip.m1_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
-        chip.v1_via_8.put()
+        # chip.m1_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
+        # chip.v1_via_8.put()
 
     pin_num = 0
     num_ps_middle_mesh = len(middle_mesh_pull_apart + middle_mesh_pull_in)
 
     mzi_node_nems_detector.put(input_interposer.pin['a7'], flip=True)
     alignment_mark.put(-500, 0)  # TODO(Nate): add more alignment marks
+    alignment_mark.put(7000, 0)
+    alignment_mark.put(7000, 1700)
+    alignment_mark.put(-500, 1700)
 
     for layer in range(15):
         # autoroute
@@ -932,7 +954,11 @@ with nd.Cell('test_chiplet') as test_chiplet:
     bp_array_left = bp_array_testing.put(left_bp_x, test_bp_w)
     bp_array_right = bp_array_testing.put(right_bp_x, test_bp_w)
 
-    alignment_mark.put(300, 0)
+    # alignment_mark.put(300, 0)
+    alignment_mark_small.put(150, 0)
+    alignment_mark_small.put(150, 1770)
+    alignment_mark_small.put(3120, 1770)
+    alignment_mark_small.put(3120, 0)
 
     # place ground bus
     gnd_pad.put(-15, test_pad_y)
