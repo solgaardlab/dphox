@@ -7,18 +7,18 @@ from dphox.design.component import cubic_taper
 from datetime import date
 from tqdm import tqdm
 
-chip = AIMNazca(
-    passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
-    waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
-    active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
-)
+# chip = AIMNazca(
+#     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
+#     waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
+#     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
+# )
 
 # Please leave this so Nate can run this quickly
-# chip = AIMNazca(
-#     passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
-#     waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
-#     active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
-# )
+chip = AIMNazca(
+    passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
+    waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
+    active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
+)
 
 # chip params
 
@@ -51,13 +51,14 @@ test_bend_dim = test_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
 test_tdc_interport_w = 50
 test_tdc_interaction_l = 100
 pull_in_phaseshift_l = 50
+test_tdc_radius = 10
 test_tdc_bend_dim = test_tdc_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
 mesh_interport_w = 50
 mesh_phaseshift_l = 100
 detector_route_loop = (20, 30, 40)  # height, length, relative starting x for loops around detectors
 tapline_x_start = 600
 # x for the 8 taplines, numpy gives errors for some reason, so need to use raw python
-tapline_x = [tapline_x_start + x for x in [0, 400, 700, 1000, 1400, 1800, 2100, 2400]]
+tapline_x = [tapline_x_start + x for x in [0, 400, 700, 1000, 1400, 1800, 2100, 2400]]  # TODO(Nate): update this spacing based final array
 tapline_y = 162  # y for the taplines
 grating_array_xy = (600, 125)
 
@@ -70,6 +71,7 @@ test_bp_w = 212
 via_y = -770
 
 # Basic components
+# TODO(Nate): Double check the defaults of these parameters
 
 dc = chip.custom_dc(bend_dim=(dc_radius, test_bend_dim))[0]
 mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
@@ -79,13 +81,16 @@ pull_in_anchor = chip.nems_anchor(shuttle_dim=(40, 5), fin_spring_dim=(50, 0.15)
                                   pos_electrode_dim=None, neg_electrode_dim=None)
 tdc_anchor = chip.nems_anchor(shuttle_dim=(test_tdc_interaction_l, 5),
                               pos_electrode_dim=None, neg_electrode_dim=None)
-tdc = chip.nems_tdc(anchor=tdc_anchor)
+tdc = chip.nems_tdc(anchor=tdc_anchor, bend_dim=(test_tdc_radius, test_tdc_bend_dim))
 ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap_detector, sep))
 ps_no_anchor = chip.nems_ps()
 alignment_mark = chip.alignment_mark()
 gnd_wg = chip.gnd_wg()
 grating = chip.pdk_cells['cl_band_vertical_coupler_si']
 detector = chip.pdk_cells['cl_band_photodetector_digital']
+
+delay_line_50 = chip.delay_line()
+delay_line_200 = chip.delay_line(delay_length=200, straight_length=100)
 
 # Mesh generation
 
@@ -179,25 +184,28 @@ Pull-apart phase shifter or PSV3
 '''
 
 # Motivation: modify the gap of the pull-apart phase shifter
+
 pull_apart_gap = [
-    chip.singlemode_ps(chip.nems_ps(gap_w=gap_w, anchor=pull_apart_anchor, name=f'ps_gap_{gap_w}'),
-                       interport_w=test_interport_w,
-                       phaseshift_l=mesh_phaseshift_l, name=f'pull_apart_gap_{gap_w}')
+    chip.mzi_arms([delay_line_50, chip.nems_ps(gap_w=gap_w, anchor=pull_apart_anchor, name=f'ps_gap_{gap_w}')],
+                  [delay_line_200],
+                  interport_w=test_interport_w,
+                  name=f'pull_apart_gap_{gap_w}')
     for gap_w in (0.1, 0.15, 0.2, 0.25)]
 
 # Motivation: reduce the waveguide width to encourage more phase shift per unit length in center
 pull_apart_taper = [
-    chip.singlemode_ps(chip.nems_ps(anchor=pull_apart_anchor, **pull_apart_taper_dict(taper_change, taper_length), name=f'ps_taper_{taper_change}_{taper_length}'),
-                       interport_w=test_interport_w,
-                       phaseshift_l=mesh_phaseshift_l, name=f'pull_apart_taper_{taper_change}_{taper_length}')
+    chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_apart_anchor, **pull_apart_taper_dict(taper_change, taper_length), name=f'ps_taper_{taper_change}_{taper_length}')],
+                  [delay_line_200],
+                  interport_w=test_interport_w,
+                  name=f'pull_apart_taper_{taper_change}_{taper_length}')
     for taper_change in (-0.1, -0.15) for taper_length in (20, 30, 40)]
 
 # Motivation: modify fin width to change stiffness / phase shift per unit length
 pull_apart_fin = [
-    chip.singlemode_ps(chip.nems_ps(anchor=pull_apart_anchor,
-                                    nanofin_w=nanofin_w, name=f'ps_fin_{nanofin_w}'),
-                       interport_w=test_interport_w,
-                       phaseshift_l=mesh_phaseshift_l, name=f'pull_apart_fin_{nanofin_w}')
+    chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_apart_anchor, nanofin_w=nanofin_w, name=f'ps_fin_{nanofin_w}')],
+                  [delay_line_200],
+                  interport_w=test_interport_w,
+                  name=f'pull_apart_fin_{nanofin_w}')
     for nanofin_w in (0.15, 0.2, 0.25)]
 
 '''
@@ -207,36 +215,43 @@ Pull-in phase shifter or PSV1
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length
 
+# gnd_wg
+
 pull_in_gap = [
-    chip.singlemode_ps_ext_gnd(chip.nems_ps(anchor=pull_in_anchor, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
-                                            name=f'ps_gap_{gap_w}'), gnd_length,
-                               interport_w=test_interport_w,
-                               phaseshift_l=pull_in_phaseshift_l + 2 * gnd_length, name=f'pull_in_gap_{gap_w}')
+    chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_in_anchor, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
+                                               name=f'ps_gap_{gap_w}'), 25, gnd_wg],
+                  [delay_line_200, gnd_wg],
+                  interport_w=test_interport_w,
+                  name=f'pull_in_gap_{gap_w}')
     for gap_w in (0.1, 0.15, 0.2)]
 
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length. To increase pull-in, phase shift length is made shorter.
 pull_in_taper = [
-    chip.singlemode_ps_ext_gnd(chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict(pull_in_phaseshift_l,
-                                                                                  taper_change, taper_length),
-                                            name=f'ps_taper_{taper_change}_{taper_length}'), gnd_length,
-                               interport_w=test_interport_w,
-                               phaseshift_l=pull_in_phaseshift_l + 2 * gnd_length,
-                               name=f'pull_in_taper_{taper_change}_{taper_length}')
+    chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict(pull_in_phaseshift_l,
+                                                                                     taper_change, taper_length),
+                                               name=f'ps_taper_{taper_change}_{taper_length}'), 25, gnd_wg],
+                  [delay_line_200, gnd_wg],
+                  interport_w=test_interport_w,
+                  name=f'pull_in_taper_{taper_change}_{taper_length}')
     for taper_change in (-0.1, -0.15) for taper_length in (10, 20)]
 
 # Motivation: attempt pull-in phase shifter idea with modifying fin width / phase shift per unit length
 pull_in_fin = [
-    chip.singlemode_ps_ext_gnd(
-        chip.nems_ps(anchor=pull_in_anchor, nanofin_w=nanofin_w, **pull_in_dict(pull_in_phaseshift_l),
-                     name=f'ps_fin_{nanofin_w}'), gnd_length,
-        interport_w=test_interport_w,
-        phaseshift_l=pull_in_phaseshift_l + 2 * gnd_length, name=f'pull_in_fin_{nanofin_w}')
+    chip.mzi_arms([delay_line_50,
+                   chip.nems_ps(anchor=pull_in_anchor, nanofin_w=nanofin_w, **pull_in_dict(pull_in_phaseshift_l),
+                                name=f'ps_fin_{nanofin_w}'), 25, gnd_wg],
+                  [delay_line_200, gnd_wg],
+                  interport_w=test_interport_w,
+                  name=f'pull_in_fin_{nanofin_w}')
     for nanofin_w in (0.15, 0.2)]
 
+
+# TODO(Nate): Update/Fix TDC misalginment
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length
-pull_apart_gap_tdc = [chip.nems_tdc(anchor=pull_apart_anchor, dc_gap_w=gap_w) for gap_w in (0.1, 0.15, 0.2)]
+
+pull_apart_gap_tdc = [chip.nems_tdc(anchor=pull_apart_anchor, dc_gap_w=gap_w, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - gap_w / 2 - waveguide_w / 2)) for gap_w in (0.1, 0.15, 0.2)]
 
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length
@@ -249,7 +264,7 @@ pull_apart_fin_tdc = [chip.nems_tdc(anchor=pull_apart_anchor, nanofin_w=nanofin_
 
 # Motivation: attempt pull-in TDC with varying gap to adjust pull-in voltage (for better or worse...)
 # and phase shift length
-pull_in_gap_tdc = [chip.nems_tdc(anchor=tdc_anchor, dc_gap_w=gap_w) for gap_w in (0.1, 0.15, 0.2)]
+pull_in_gap_tdc = [chip.nems_tdc(anchor=tdc_anchor, dc_gap_w=gap_w, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - gap_w / 2 - waveguide_w / 2)) for gap_w in (0.1, 0.15, 0.2)]
 
 # Motivation: attempt pull-in TDC with tapering to reduce the beat length of the TDC
 pull_in_taper_tdc = [
@@ -259,6 +274,120 @@ pull_in_taper_tdc = [
 
 # Motivation: attempt pull-in phase shifter idea with modifying fin width / phase shift per unit length
 pull_in_fin_tdc = [chip.nems_tdc(anchor=tdc_anchor, nanofin_w=nanofin_w) for nanofin_w in (0.1, 0.2)]
+
+
+# Motivation: Test sructures necessary for reference meaurements
+# TODO(Nate): Split into short and long references devices
+
+delay_arms = chip.mzi_arms([delay_line_50, gnd_wg],
+                           [delay_line_200, gnd_wg],
+                           interport_w=test_interport_w,
+                           name='bare_mzi_arms')
+with nd.Cell(name='ref_dc') as ref_dc:
+    dc_r = dc.put()
+    d = detector.put(dc_r.pin['b1'], flip=True)
+    nd.Pin('p1').put(d.pin['p'])
+    nd.Pin('n1').put(d.pin['n'])
+    d = detector.put(dc_r.pin['b0'])
+    nd.Pin('p2').put(d.pin['p'])
+    nd.Pin('n2').put(d.pin['n'])
+    dc_r.raise_pins(['a0', 'a1', 'b0', 'b1'])
+
+# TODO(Nate): Compress this into a few lines
+with nd.Cell(name='bends_1_1') as bend_exp_1_1:
+    first_dc = dc.put()
+    mzi_arms = chip.mzi_arms([delay_line_50, ],
+                             [delay_line_50, ],
+                             interport_w=test_interport_w,
+                             name='bare_mzi_arms').put(first_dc.pin['b0'])
+    nd.Pin('a0').put(first_dc.pin['a0'])
+    nd.Pin('a1').put(first_dc.pin['a1'])
+
+    d = detector.put(mzi_arms.pin['b1'], flip=True)
+    nd.Pin('p1').put(d.pin['p'])
+    nd.Pin('n1').put(d.pin['n'])
+    d = detector.put(mzi_arms.pin['b0'])
+    nd.Pin('p2').put(d.pin['p'])
+    nd.Pin('n2').put(d.pin['n'])
+
+    mzi_arms.raise_pins(['b0', 'b1'])
+
+with nd.Cell(name='bends_1_2') as bend_exp_1_2:
+    first_dc = dc.put()
+    mzi_arms = chip.mzi_arms([delay_line_50, delay_line_50, ],
+                             [delay_line_50, ],
+                             interport_w=test_interport_w,
+                             name='bare_mzi_arms').put(first_dc.pin['b0'])
+    nd.Pin('a0').put(first_dc.pin['a0'])
+    nd.Pin('a1').put(first_dc.pin['a1'])
+
+    d = detector.put(mzi_arms.pin['b1'], flip=True)
+    nd.Pin('p1').put(d.pin['p'])
+    nd.Pin('n1').put(d.pin['n'])
+    d = detector.put(mzi_arms.pin['b0'])
+    nd.Pin('p2').put(d.pin['p'])
+    nd.Pin('n2').put(d.pin['n'])
+
+    mzi_arms.raise_pins(['b0', 'b1'])
+
+with nd.Cell(name='bends_1_3') as bend_exp_1_3:
+    first_dc = dc.put()
+    mzi_arms = chip.mzi_arms([delay_line_50, delay_line_50, delay_line_50, ],
+                             [delay_line_50, ],
+                             interport_w=test_interport_w,
+                             name='bare_mzi_arms').put(first_dc.pin['b0'])
+    nd.Pin('a0').put(first_dc.pin['a0'])
+    nd.Pin('a1').put(first_dc.pin['a1'])
+
+    d = detector.put(mzi_arms.pin['b1'], flip=True)
+    nd.Pin('p1').put(d.pin['p'])
+    nd.Pin('n1').put(d.pin['n'])
+    d = detector.put(mzi_arms.pin['b0'])
+    nd.Pin('p2').put(d.pin['p'])
+    nd.Pin('n2').put(d.pin['n'])
+
+    mzi_arms.raise_pins(['b0', 'b1'])
+
+reference_devices = [
+    ref_dc,
+    chip.mzi_node_test(delay_arms,
+                       dc, include_input_ps=False,
+                       detector=detector,
+                       name='bare_mzi'),
+    bend_exp_1_1,
+    ref_dc,
+    chip.mzi_node_test(delay_arms,
+                       dc, include_input_ps=False,
+                       detector=detector,
+                       name='bare_mzi'),
+    bend_exp_1_2,
+    ref_dc,
+    chip.mzi_node_test(delay_arms,
+                       dc, include_input_ps=False,
+                       detector=detector,
+                       name='bare_mzi'),
+    bend_exp_1_3,
+    ref_dc,
+    chip.mzi_node_test(delay_arms,
+                       dc, include_input_ps=False,
+                       detector=detector,
+                       name='bare_mzi'),
+    bend_exp_1_1,
+    ref_dc,
+    chip.mzi_node_test(delay_arms,
+                       dc, include_input_ps=False,
+                       detector=detector,
+                       name='bare_mzi'),
+    bend_exp_1_2,
+    ref_dc,
+    chip.mzi_node_test(delay_arms,
+                       dc, include_input_ps=False,
+                       detector=detector,
+                       name='bare_mzi'),
+
+
+]
+
 
 # testing tap lines
 testing_tap_line = chip.tap_line(n_test)
@@ -276,10 +405,14 @@ tdc_columns = [
     pull_in_gap_tdc + pull_in_taper_tdc + pull_in_fin_tdc
 ]
 
+# make sure there are 17 structures per column
+vip_columns = [reference_devices]
+
 gridsearches = []
 
+# TODO(Nate): Match this to the fill of the test array
 # Number of test structures in each tap line, comment this out when not needed (when all are n_test)
-gridsearch_ls = [len(ps_columns[0]), len(ps_columns[1]), len(tdc_columns[0]), len(tdc_columns[1])] * 2
+gridsearch_ls = [len(ps_columns[0]), len(ps_columns[1]), len(tdc_columns[0]), len(tdc_columns[1]), len(vip_columns[0])]
 
 
 def autoroute_node_detector(p1, n2, n1, p2,
@@ -304,13 +437,55 @@ for col, ps_columns in enumerate(ps_columns):
         line = testing_tap_line.put()
         for i, ps in enumerate(ps_columns):
             # all structures for a tap line should be specified here
-            node = chip.mzi_node(ps, dc, include_input_ps=False,
-                                 detector=detector,
-                                 name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
+            node = chip.mzi_node_test(ps, dc, include_input_ps=False,
+                                      detector=detector,
+                                      name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
+            # mzi_node_test tracks multiple gnd and pos lines in the upper and lower arms
+
             autoroute_node_detector(node.pin['p1'], node.pin['n2'], node.pin['n1'], node.pin['p2'])
             nd.Pin(f'd{i}').put(node.pin['b0'])  # this is useful for autorouting the gnd path
+            # TODO(Nate): need a subroutine to connect then and give the device a gnd0 and pos0 node
+            gnd_l, gnd_u, pos_l, pos_u = None, None, None, None,
+            for pin in node.pin.keys():
+                if pin.split('_')[0] == 'gnd0':
+                    if pin.split('_')[1] == 'l':
+                        if gnd_l is not None:
+                            chip.m2_ic.bend_strt_bend_p2p(node.pin[gnd_l], node.pin[pin], radius=8).put()
+                        gnd_l = pin
+                    if pin.split('_')[1] == 'u':
+                        if gnd_u is not None:
+                            chip.m2_ic.bend_strt_bend_p2p(node.pin[gnd_u], node.pin[pin], radius=8).put()
+                        gnd_u = pin
+                    gnd_pin = pin
+                if pin.split('_')[0] == 'pos0':
+                    if pin.split('_')[1] == 'l':
+                        if pos_l is not None:
+                            chip.m2_ic.bend_strt_bend_p2p(node.pin[pos_l], node.pin[pin], radius=8).put()
+                        pos_l = pin
+                    if pin.split('_')[1] == 'u':
+                        if pos_u is not None:
+                            chip.m2_ic.bend_strt_bend_p2p(node.pin[pos_u], node.pin[pin], radius=8).put()
+                        pos_u = pin
+                    pos_pin = pin
+
+            if (gnd_u is not None) and (gnd_l is not None):
+                chip.m2_ic.bend_strt_bend_p2p(node.pin[gnd_u], node.pin[gnd_l], radius=8).put()
+                gnd_pin = gnd_u
+                nd.Pin(f'gnd{i}').put(node.pin[gnd_pin])
+            elif(gnd_u is not None) or (gnd_l is not None):
+                gnd_pin = gnd_u if gnd_u is not None else gnd_l
+                nd.Pin(f'gnd{i}').put(node.pin[gnd_pin])
+
+            if (pos_u is not None) and (pos_l is not None):
+                chip.m2_ic.bend_strt_bend_p2p(node.pin[pos_u], node.pin[pos_l], radius=8).put()
+                pos_pin = pos_u
+                nd.Pin(f'pos{i}').put(node.pin[pos_pin])
+            elif(pos_u is not None) or (pos_l is not None):
+                pos_pin = pos_u if pos_u is not None else pos_l
+                nd.Pin(f'pos{i}').put(node.pin[pos_pin])
+
             if 'pos0' in node.pin:
-                nd.Pin(f'pos{i}').put(node.pin['pos0'])
+                nd.Pin(f'pos{i}').put(node.pin['pos0'])  # hard coded special case that I know about the array elements
             if 'gnd0' in node.pin:
                 nd.Pin(f'gnd{i}').put(node.pin['gnd0'])
         nd.Pin('in').put(line.pin['in'])
@@ -328,31 +503,72 @@ for col, tdc_column in enumerate(tdc_columns):
             autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
             nd.Pin(f'd{i}').put(_tdc.pin['b0'])  # this is useful for autorouting the gnd path
             # TODO: ground connections for the TDC
+            gnd_l, gnd_u = None, None
+            for pin in _tdc.pin.keys():
+                if pin.split('_')[0] == 'gnd0' and len(pin.split('_')) > 1:
+                    if pin.split('_')[1] == 'l':
+                        if gnd_l is not None:
+                            chip.m2_ic.strt_p2p(_tdc.pin[gnd_l], _tdc.pin[pin]).put()
+                        gnd_l = pin
+                    if pin.split('_')[1] == 'u':
+                        if gnd_u is not None:
+                            chip.m2_ic.strt_p2p(_tdc.pin[gnd_u], _tdc.pin[pin]).put()
+                        gnd_u = pin
+                    gnd_pin = pin
+            chip.m2_ic.ubend_p2p(_tdc.pin['gnd0_u_0'], _tdc.pin['gnd0_l_0'], radius=10).put()
+
             if 'pos1' in _tdc.pin:
                 nd.Pin(f'pos{i}').put(_tdc.pin['pos1'])
             if 'gnd0' in _tdc.pin:
                 nd.Pin(f'gnd{i}').put(_tdc.pin['gnd0'])
+            elif 'gnd0_u_1' in _tdc.pin:
+                nd.Pin(f'gnd{i}').put(_tdc.pin['gnd0_u_1'])
+        nd.Pin('in').put(line.pin['in'])
+        nd.Pin('out').put(line.pin['out'])
+    gridsearches.append(gridsearch)
+
+
+# TODO(Nate): Here insert VIP Test column into gridsearch listing
+
+for col, vip_column in enumerate(vip_columns):
+    with nd.Cell(f'gridsearch_{col + len(vip_columns)}') as gridsearch:
+        line = testing_tap_line.put()
+        for i, vip in enumerate(vip_column):
+            # all structures for a tap line should be specified here
+            _vip = vip.put(line.pin[f'a{2 * i + 1}'])
+            if bool(set(['p1', 'n2', 'n1', 'p2']) & set(_vip.pin)):
+                autoroute_node_detector(_vip.pin['p1'], _vip.pin['n2'], _vip.pin['n1'], _vip.pin['p2'])
+            nd.Pin(f'd{i}').put(_vip.pin['b0'])  # this is useful for autorouting the gnd path
+            # if 'pos1' in _tdc.pin:
+            #     nd.Pin(f'pos{i}').put(_tdc.pin['pos1'])
+            # if 'gnd0' in _tdc.pin:
+            #     nd.Pin(f'gnd{i}').put(_tdc.pin['gnd0'])
         nd.Pin('in').put(line.pin['in'])
         nd.Pin('out').put(line.pin['out'])
     gridsearches.append(gridsearch)
 
 # test structures between the meshes
 
+
 middle_mesh_pull_apart = [
     chip.mzi_node(chip.singlemode_ps(ps, interport_w=mesh_interport_w,
                                      phaseshift_l=mesh_phaseshift_l), dc, include_input_ps=False,
                   name=f'meshtest_mzi_{ps.name}') for ps in (chip.nems_ps(anchor=pull_apart_anchor),
-                                                         chip.nems_ps(anchor=pull_apart_anchor,
-                                                                      **pull_apart_taper_dict(-0.05, 30)))
+                                                             chip.nems_ps(anchor=pull_apart_anchor,
+                                                                          **pull_apart_taper_dict(-0.05, 30)))
 ]
+
+
 middle_mesh_pull_in = [
-    chip.mzi_node(chip.singlemode_ps_ext_gnd(ps, gnd_wg_l=gnd_length, interport_w=mesh_interport_w,
-                                     phaseshift_l=pull_in_phaseshift_l + 2 * gnd_length), dc, include_input_ps=False,
-                  name=f'meshtest_mzi_{ps.name}') for ps in (chip.nems_ps(anchor=pull_in_anchor,
-                                                                          **pull_in_dict(pull_in_phaseshift_l)),
-                                                             chip.nems_ps(anchor=pull_in_anchor,
-                                                                          **pull_in_dict(pull_in_phaseshift_l,
-                                                                                         -0.05, 20)))
+    chip.mzi_node_test(chip.mzi_arms([delay_line_50, ps, 25, gnd_wg],
+                                     [delay_line_200, gnd_wg],
+                                     interport_w=mesh_interport_w),
+                       dc, include_input_ps=False,
+                       name=f'meshtest_mzi_{ps.name}') for ps in (chip.nems_ps(anchor=pull_in_anchor,
+                                                                               **pull_in_dict(pull_in_phaseshift_l)),
+                                                                  chip.nems_ps(anchor=pull_in_anchor,
+                                                                               **pull_in_dict(pull_in_phaseshift_l,
+                                                                                              -0.05, 20)))
 ]
 middle_mesh_tdc = [chip.nems_tdc(anchor=pull_apart_anchor), chip.nems_tdc(anchor=tdc_anchor),
                    chip.nems_tdc(anchor=pull_apart_anchor, **taper_dict_tdc(-0.2, 40))]
@@ -385,22 +601,28 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
     eu_array_thermal = eu_array.put(-180, 1538, flip=True)
 
     # all ranges are [inclusive, exclusive) as is convention in python range() method
+    # TODO(someone not Nate): double check the remapped mesh connections
     # add more when test structures are added in between the meshes
-    eu_bp_port_ranges_m1 = [(0, 2), (5, 7), (15, 17), (20, 25),
-                            (28, 30), (38, 40), (43, 48),
-                            (50, 53), (61, 64),
-                            (73, 76), (84, 87),
-                            (96, 100), (107, 111),
-                            (118, 122), (130, 134),
-                            (139, 144), (153, 158),
-                            (162, 167), (176, 181),
-                            (185, 190), (199, 204),
-                            (210, 214), (222, 226),
-                            (232, 237), (245, 249),
-                            (257, 260), (268, 271),
-                            (280, 283), (291, 294),
-                            (304, 306), (314, 316),
-                            (327, 329), (337, 339)]
+    eu_bp_port_ranges_m1 = [(0, 2),                  # layer 0 /input
+                            (5, 7),                  # 2 lines into this layer
+                            (15, 20),                # backward mesh output detector layer
+                            # (20, 22), (23, 25),      # test MZI # moved to test routing
+                            (28, 30), (38, 40),      # layer 1
+                            # (43, 45), (46, 48),      # test MZI # moved to test routing
+                            (50, 53), (61, 64),      # 3 lines into this layer
+                            (73, 76), (84, 87),      # layer 2
+                            (95, 99), (107, 111),    # 4 lines into this layer
+                            (118, 122), (130, 134),  # layer 3
+                            (140, 145), (153, 158),  # 5 lines into this layer
+                            (163, 168), (176, 181),  # layer 4
+                            (186, 191), (199, 204),  # 5 lines into this layer
+                            (210, 214), (222, 226),  # layer 5
+                            (233, 237), (245, 249),  # 4 lines into this layer
+                            (257, 260), (268, 271),  # layer 6
+                            (280, 283), (291, 294),  # 3 lines into this layer
+                            (304, 306), (314, 316),  # layer 7
+                            (327, 329),              # 2 lines into this layer
+                            (337, 342)]              # forward mesh output detector layer
 
     eu_bp_m1_idx = np.hstack([np.arange(*r) for r in eu_bp_port_ranges_m1])
 
@@ -421,14 +643,101 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         chip.m2_ic.strt(100 * (2 - j), width=8).put(bp_array_thermal.pin[f'u{i},{j}'])
         chip.m2_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
 
-    # TODO: incomplete... fill out these ranges and do routing
-    eu_bp_port_blocks_m2 = [(7, 10), (11, 14), (30, 33), (34, 37)]
+    # TODO: M2 and M1 are flipped in varibale names around eu_bp_ variables
+    # TODO(someone not Nate): double check the remapped mesh connections
+
+    # Added the Shared GND and Anode Vbias lines
+    eu_bp_port_blocks_m2 = [
+        (7, 11), (11, 15), (30, 34), (34, 38), (53, 57),
+        (57, 61), (76, 80), (80, 84), (99, 103), (103, 107),
+        (122, 126), (126, 130), (145, 149), (149, 153), (168, 172),
+        (172, 176), (191, 195), (195, 199), (214, 218), (218, 222),
+        (237, 241), (241, 245), (260, 264), (264, 268), (283, 287),
+        (287, 291), (306, 310), (310, 314), (329, 333), (333, 337)
+    ]
+
+    eu_bp_port_blocks = [np.arange(*r) for r in eu_bp_port_blocks_m2]
+
+    for block in tqdm(eu_bp_port_blocks):
+        closest_pair = (0, (0, 0))
+        closest_dist = np.inf
+        start_idx = None
+        for idx in block:
+            if start_idx is None:
+                start_idx = idx
+            pin_x = eu_array_nems.pin[f'o{idx}'].x
+            for i, j in itertools.product(range(70), range(3)):
+                dist = np.abs(bp_array_nems.pin[f'u{i},{j}'].x - pin_x)
+                if dist < closest_dist and (i, j) not in used_connections:
+                    closest_pair = (idx, (i, j))
+                    closest_dist = dist
+        # connect all pins in a block
+        chip.m2_ic.strt_p2p(eu_array_nems.pin[f'o{start_idx}'], eu_array_nems.pin[f'o{idx}'], width=12).put()
+        chip.m1_ic.strt_p2p(eu_array_nems.pin[f'o{start_idx}'], eu_array_nems.pin[f'o{idx}'], width=12).put()
+        chip.m2_ic.strt_p2p(eu_array_thermal.pin[f'o{start_idx}'], eu_array_thermal.pin[f'o{idx}'], width=12).put()
+        chip.m1_ic.strt_p2p(eu_array_thermal.pin[f'o{start_idx}'], eu_array_thermal.pin[f'o{idx}'], width=12).put()
+        chip.m2_ic.strt_p2p(eu_array_nems.pin[f'i{start_idx}'], eu_array_nems.pin[f'i{idx}'], width=12).put()
+        chip.m1_ic.strt_p2p(eu_array_nems.pin[f'i{start_idx}'], eu_array_nems.pin[f'i{idx}'], width=12).put()
+        chip.m2_ic.strt_p2p(eu_array_thermal.pin[f'i{start_idx}'], eu_array_thermal.pin[f'i{idx}'], width=12).put()
+        chip.m1_ic.strt_p2p(eu_array_thermal.pin[f'i{start_idx}'], eu_array_thermal.pin[f'i{idx}'], width=12).put()
+
+        used_connections.add(closest_pair[1])
+        i, j = closest_pair[1]
+        idx = closest_pair[0]
+        chip.m2_ic.strt(100 * (2 - j), width=8).put(bp_array_nems.pin[f'u{i},{j}'])
+        chip.m2_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
+        chip.m2_ic.strt(100 * (2 - j), width=19).put(bp_array_thermal.pin[f'u{i},{j}'])
+        chip.m2_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=19).put()
+        # TODO: Add M1 layer to thermal gnd blocks to push down resistance
+        # chip.v1_via_4.put()
+
+    # TODO:In mesh test Structure BP routing
+    # TODO(someone not Nate): double check the remapped mesh connections
+    eu_bp_port_tests_m1 = [
+        (20, 22), (23, 25),      # test MZI # moved to test routing
+        (43, 45), (46, 48),      # test MZI # moved to test routing
+        (69, 70), (89, 91),
+        (92, 93), (112, 114),
+        (115, 116), (135, 136),
+        (138, 139), (158, 160),
+        (161, 162), (181, 183),
+        (184, 185), (204, 206),
+        (207, 208), (227, 228),
+        (319, 321),
+        (342, 344)
+    ]
+
+    eu_bp_test_m1_idx = np.hstack([np.arange(*r) for r in eu_bp_port_tests_m1])
+
+    left_most = np.NINF
+    for idx in tqdm(eu_bp_test_m1_idx):
+        pin_x = eu_array_nems.pin[f'o{idx}'].x
+        closest = (0, 0)
+        closest_dist = np.inf
+        for i, j in itertools.product(range(70), range(3)):
+            dist = np.abs(bp_array_nems.pin[f'u{i},{j}'].x - pin_x)
+            # hacking this to prevent crossings in test layer
+            if dist < closest_dist and bp_array_nems.pin[f'u{i},{j}'].x > left_most and (i, j) not in used_connections:
+                closest = (i, j)
+                closest_dist = dist
+        left_most = pin_x
+        used_connections.add(closest)
+        i, j = closest
+        chip.v1_via_8.put(bp_array_nems.pin[f'u{i},{j}'])
+        chip.m1_ic.strt(100 * (2 - j), width=8).put(bp_array_nems.pin[f'u{i},{j}'])
+        chip.m1_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
+        chip.v1_via_8.put()
+
+        chip.v1_via_8.put(bp_array_thermal.pin[f'u{i},{j}'])
+        chip.m1_ic.strt(100 * (2 - j), width=8).put(bp_array_thermal.pin[f'u{i},{j}'])
+        chip.m1_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
+        chip.v1_via_8.put()
 
     pin_num = 0
     num_ps_middle_mesh = len(middle_mesh_pull_apart + middle_mesh_pull_in)
 
     mzi_node_nems_detector.put(input_interposer.pin['a7'], flip=True)
-    alignment_mark.put(-500, 0)
+    alignment_mark.put(-500, 0)  # TODO(Nate): add more alignment marks
 
     for layer in range(15):
         # autoroute
@@ -469,6 +778,63 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             chip.v1_via_4.put()
             chip.v1_via_4.put(d1.pin['p'])
             chip.v1_via_4.put(d2.pin['p'])
+            # TODO(Nate): Add raised pin logic
+
+            # TODO(Nate): need a subroutine to connect then and give the device a gnd0 and pos0 node
+            gnd_l, gnd_u, pos_l, pos_u = None, None, None, None,
+            for pin in ts.pin.keys():
+                if pin.split('_')[0] == 'gnd0' and len(pin.split('_')) > 1:
+                    if pin.split('_')[1] == 'l':
+                        if gnd_l is not None:
+                            chip.m2_ic.strt_p2p(ts.pin[gnd_l], ts.pin[pin]).put()
+                        gnd_l = pin
+                    if pin.split('_')[1] == 'u':
+                        if gnd_u is not None:
+                            chip.m2_ic.strt_p2p(ts.pin[gnd_u], ts.pin[pin]).put()
+                        gnd_u = pin
+                    gnd_pin = pin
+                # if pin.split('_')[0] == 'pos0':
+                #     if pin.split('_')[1] == 'l':
+                #         if pos_l is not None:
+                #             chip.m2_ic.bend_strt_bend_p2p(ts.pin[pos_l], ts.pin[pin], radius=8).put()
+                #         pos_l = pin
+                #     if pin.split('_')[1] == 'u':
+                #         if pos_u is not None:
+                #             chip.m2_ic.bend_strt_bend_p2p(ts.pin[pos_u], ts.pin[pin], radius=8).put()
+                #         pos_u = pin
+                #     pos_pin = pin
+
+                # TODO: ground connections for the TDC
+                # gnd_l, gnd_u = None, None
+                # for pin in _tdc.pin.keys():
+                #     if pin.split('_')[0] == 'gnd0' and len(pin.split('_')) > 1:
+                #         if pin.split('_')[1] == 'l':
+                #             if gnd_l is not None:
+                #                 chip.m2_ic.strt_p2p(_tdc.pin[gnd_l], _tdc.pin[pin]).put()
+                #             gnd_l = pin
+                #         if pin.split('_')[1] == 'u':
+                #             if gnd_u is not None:
+                #                 chip.m2_ic.strt_p2p(_tdc.pin[gnd_u], _tdc.pin[pin]).put()
+                #             gnd_u = pin
+                #         gnd_pin = pin
+                # chip.m2_ic.ubend_p2p(_tdc.pin['gnd0_u_0'], _tdc.pin['gnd0_l_0'], radius=10).put()
+
+            if (gnd_u is not None) and (gnd_l is not None):
+                chip.m2_ic.ubend_p2p(ts.pin[gnd_l], ts.pin[gnd_u], radius=8).put()
+                gnd_pin = gnd_u
+                # nd.Pin(f'gnd{i}').put(ts.pin[gnd_pin])
+            elif(gnd_u is not None) or (gnd_l is not None):
+                gnd_pin = gnd_u if gnd_u is not None else gnd_l
+                # nd.Pin(f'gnd{i}').put(ts.pin[gnd_pin])
+
+            # if (pos_u is not None) and (pos_l is not None):
+            #     chip.m2_ic.bend_strt_bend_p2p(ts.pin[pos_u], ts.pin[pos_l], radius=8).put()
+            #     pos_pin = pos_u
+            #     nd.Pin(f'pos{i}').put(ts.pin[pos_pin])
+            # elif(pos_u is not None) or (pos_l is not None):
+            #     pos_pin = pos_u if pos_u is not None else pos_l
+            #     nd.Pin(f'pos{i}').put(ts.pin[pos_pin])
+
             if 'pos0' in ts.pin:
                 chip.m2_ic.bend_strt_bend_p2p(ts.pin['pos0'], autoroute_nems_pos.pin['a6'], radius=4).put()
             if 'gnd1' in ts.pin:
@@ -552,12 +918,11 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         pin_num += 1
 
 
-
 # Test chiplet layout
 with nd.Cell('test_chiplet') as test_chiplet:
     # place test taplines down at non-overlapping locations
     detector_x = []
-    test_structures = gridsearches + gridsearches  # TODO: change this once all 8 columns are added
+    test_structures = gridsearches  # TODO: change this once all 8 columns are added
     ga = grating_array.put(*grating_array_xy, -90)
     gs_list = []
     for i, item in enumerate(zip(tapline_x, test_structures)):
@@ -614,7 +979,7 @@ with nd.Cell('test_chiplet') as test_chiplet:
             cx = nd.cp.x()
             # gnd connection
             if f'gnd{i}' in gs_list[j].pin:
-                chip.m2_ic.bend_strt_bend_p2p(gs_list[j].pin[f'gnd{i}'], radius=8).put()
+                chip.m2_ic.bend_strt_bend_p2p(gs_list[j].pin[f'gnd{i}'], radius=8).put()  # for anchor gnd pin
             # pos electrode connection
             if f'pos{i}' in gs_list[j].pin:
                 pin = gs_list[j].pin[f'pos{i}']
@@ -641,6 +1006,6 @@ with nd.Cell('aim_layout') as aim_layout:
     chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
                        -standard_grating_interport + edge_shift_dim[1])
 
-nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+# nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly
-# nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])

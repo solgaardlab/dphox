@@ -146,7 +146,6 @@ class LateralNemsTDC(GroupedPattern):
         patterns = [dc] + nanofins + connectors + pads
 
         # TODO(Nate): make the brim connector to ground standard for 220nm, rework the taper helpers
-        # TODO(Nate): remove hard coded connector length
         if pad_dim is not None:
             brim_l, brim_taper = get_linear_adiabatic(min_width=waveguide_w, max_width=1, aggressive=True)
             brim_taper = cubic_taper(brim_taper[1])
@@ -197,6 +196,12 @@ class LateralNemsTDC(GroupedPattern):
         center = np.asarray(self.center)
         self.port['t0'] = Port(*(center + dy))
         self.port['t1'] = Port(*(center - dy))
+        gnd_labels = ['gnd0_l_0', 'gnd0_u_0', 'gnd0_l_1', 'gnd0_u_1']
+        angle = 0
+        for gnd_label, pad in zip(gnd_labels, pads):
+            center = pad.center
+            self.port[gnd_label] = Port(*(center), a=angle)
+            angle += np.pi
 
 
 class NemsAnchor(GroupedPattern):
@@ -333,8 +338,8 @@ class GndWaveguide(Pattern):
         self.wg, self.rib_brim, self.pads = [wg], rib_brim, [pad]
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['b0'] = Port(length, 0)
-        self.port['c0'] = Port(*pad.center, -np.pi)
-        self.port['d0'] = Port(*pad.center)
+        self.port['gnd1'] = Port(*pad.center, -np.pi)
+        self.port['gnd0'] = Port(*pad.center)
 
 
 class MemsMonitorCoupler(Pattern):
