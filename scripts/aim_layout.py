@@ -505,9 +505,9 @@ for col, ps_columns in enumerate(ps_columns):
 for col, tdc_column in enumerate(tdc_columns):
     with nd.Cell(f'gridsearch_{col + len(ps_columns)}') as gridsearch:
         line = testing_tap_line_tdc.put()
-        for i, tdc in enumerate(tdc_column):
+        for i, _tdc in enumerate(tdc_column):
             # all structures for a tap line should be specified here
-            dev = tdc.put(line.pin[f'a{2 * i + 1}'])
+            dev = _tdc.put(line.pin[f'a{2 * i + 1}'])
             d1 = detector.put(dev.pin['b0'])
             d2 = detector.put(dev.pin['b1'], flip=True)
             autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
