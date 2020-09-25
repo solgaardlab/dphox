@@ -305,6 +305,8 @@ class NemsAnchor(GroupedPattern):
             connector = GroupedPattern(shuttle, straight, loop)
         elif straight_connector is not None:
             straight = Box(straight_connector)
+            fat_connector = (shuttle_dim[0], straight_connector[1])
+            fat = Box(fat_connector)
             connector = GroupedPattern(connector,
                                        copy(straight).halign(connector).valign(connector, bottom=False,
                                                                                opposite=True),
@@ -317,7 +319,7 @@ class NemsAnchor(GroupedPattern):
                                            copy(connector).translate(*connector.size)),
                                        copy(straight).halign(connector).valign(
                                            copy(connector).translate(*connector.size)),
-                                       copy(straight).align(connector).valign(
+                                       copy(fat).align(connector).valign(
                                            copy(connector).translate(*connector.size))
                                        )
         if include_fin_dummy and not attach_comb:
