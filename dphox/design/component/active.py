@@ -49,8 +49,7 @@ class LateralNemsPS(GroupedPattern):
         self.boundary_taper = boundary_taper
 
         if not phaseshift_l >= 2 * taper_l:
-            raise ValueError(
-                f'Require interaction_l >= 2 * taper_l but got {phaseshift_l} < {2 * taper_l}')
+            raise ValueError(f'Require interaction_l >= 2 * taper_l but got {phaseshift_l} < {2 * taper_l}')
 
         boundary_taper = wg_taper if boundary_taper is None else boundary_taper
 
@@ -299,11 +298,11 @@ class NemsAnchor(GroupedPattern):
                                                                                     opposite=True),
                                        # adding more straight connectors for mirror symmetric mechanics
                                        copy(straight).halign(connector, left=False, opposite=False).valign(
-                                           copy(connector).translate(connector.size[0], connector.size[1]), ),
+                                           copy(connector).translate(*connector.size)),
                                        copy(straight).halign(connector).valign(
-                                           copy(connector).translate(connector.size[0], connector.size[1]), ),
+                                           copy(connector).translate(*connector.size)),
                                        copy(straight).align(connector).valign(
-                                           copy(connector).translate(connector.size[0], connector.size[1]), )
+                                           copy(connector).translate(*connector.size))
                                        )
         if include_fin_dummy and not attach_comb:
             # this is the mirror image dummy for mechanics

@@ -92,11 +92,12 @@ class AIMNazca:
                 anchor: Optional[nd.Cell] = None, tap_sep: Optional[Tuple[nd.Cell, float]] = None,
                 gnd_connector: Optional[Dim3] = (2, 0.2, 1), taper_l: float = 0, end_ls: Tuple[float, ...] = (5,),
                 gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
-                boundary_taper: Optional[Tuple[float, ...]] = None, fin_adiabatic_bend_dim: Optional[Dim2] = (3, 1),
-                end_taper: Optional[Tuple[float, ...]] = ((0, -0.08),), name: str = 'nems_ps') -> nd.Cell:
+                boundary_taper: Optional[Tuple[float, ...]] = None, fin_adiabatic_bend_dim: Optional[Dim2] = (2, 1),
+                end_taper: Optional[Tuple[Tuple[float, ...], ...]] = ((0, -0.08),), gnd_connector_idx: int = -1,
+                name: str = 'nems_ps') -> nd.Cell:
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
                           num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
-                          fin_adiabatic_bend_dim=fin_adiabatic_bend_dim,
+                          fin_adiabatic_bend_dim=fin_adiabatic_bend_dim, gnd_connector_idx=gnd_connector_idx,
                           gap_taper=gap_taper, wg_taper=wg_taper, end_ls=end_ls, end_taper=end_taper,
                           taper_l=taper_l, boundary_taper=boundary_taper, gnd_connector=gnd_connector)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
@@ -182,16 +183,16 @@ class AIMNazca:
         return autoroute_turn
 
     def nems_anchor(self, fin_dim: Dim2 = (100, 0.15), shuttle_dim: Dim2 = (50, 2),
-                    top_spring_dim: Dim2 = None, straight_connector: Optional[Dim2] = (0.25, 1),
-                    tether_connector: Optional[Dim3] = (2.5, 0.5, 45, 5, 1),
+                    spring_dim: Dim2 = None, straight_connector: Optional[Dim2] = (0.25, 1),
+                    tether_connector: Optional[Dim4] = (3, 1, 0.5, 1),
                     pos_electrode_dim: Optional[Dim3] = (90, 4, 2),
                     neg_electrode_dim: Optional[Dim2] = (3, 5), dope_expand: float = 0.25, attach_comb: bool = False,
-                    dope_grow: float = 0.1, name: str = 'nems_anchor'):
+                    dope_grow: float = 0.1, include_fin_dummy: bool = True, name: str = 'nems_anchor'):
         c = NemsAnchor(fin_dim=fin_dim, shuttle_dim=shuttle_dim,
-                       spring_dim=top_spring_dim, straight_connector=straight_connector,
+                       spring_dim=spring_dim, straight_connector=straight_connector,
                        tether_connector=tether_connector, pos_electrode_dim=pos_electrode_dim,
                        neg_electrode_dim=neg_electrode_dim, attach_comb=attach_comb,
-                       include_fin_dummy=True)
+                       include_fin_dummy=include_fin_dummy)
         pads, dopes = [], []
         if pos_electrode_dim is not None:
             if neg_electrode_dim is None:

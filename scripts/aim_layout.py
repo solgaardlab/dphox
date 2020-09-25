@@ -57,6 +57,8 @@ test_tdc_radius = 10
 test_tdc_bend_dim = test_tdc_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
 mesh_interport_w = 50
 mesh_phaseshift_l = 90
+tether_phaseshift_l = 30
+tether_interaction_l = 100
 detector_route_loop = (20, 30, 40)  # height, length, relative starting x for loops around detectors
 tapline_x_start = 600
 # x for the 8 taplines, numpy gives errors for some reason, so need to use raw python
@@ -401,6 +403,40 @@ reference_devices = [
 ]
 
 
+def tether_ps(phaseshift_l=tether_phaseshift_l, taper_l=5, taper_change=-0.05):
+    anchor_tether = chip.nems_anchor(
+        fin_dim=(phaseshift_l, 0.4), shuttle_dim=(10, 2), spring_dim=(phaseshift_l + 10, 0.22),
+        tether_connector=(3, 1, 0.5, 1), pos_electrode_dim=(phaseshift_l + 10, 4, 1.5), neg_electrode_dim=(3, 3),
+        include_fin_dummy=False, name=f'anchor_tether_ps_{phaseshift_l}_{taper_l}_{taper_change}'
+    )
+    return chip.mzi_arms(
+            [delay_line_50, chip.nems_ps(end_ls=(5, 5), end_taper=((0.0,), (0.0, -0.08),), taper_l=taper_l,
+                         wg_taper=cubic_taper(taper_change), gap_taper=cubic_taper(taper_change), gnd_connector_idx=0,
+                         phaseshift_l=phaseshift_l, anchor=anchor_tether)],
+            [delay_line_200],
+            interport_w=test_interport_w,
+            name=f'pull_apart_tether_{phaseshift_l}_{taper_l}_{taper_change}'
+    )
+
+
+def tether_tdc(interaction_l=tether_interaction_l, taper_l=5, taper_change=-0.05):
+    anchor_tether = chip.nems_anchor(
+        fin_dim=(interaction_l, 0.4), shuttle_dim=(10, 2), spring_dim=(interaction_l + 10, 0.22),
+        tether_connector=(3, 1, 0.5, 1), pos_electrode_dim=(interaction_l + 10, 4, 1.5), neg_electrode_dim=(3, 3),
+        include_fin_dummy=False, name=f'anchor_tether_tdc_{interaction_l}_{taper_l}_{taper_change}'
+    )
+    return chip.nems_tdc(anchor=anchor_tether, interaction_l=interaction_l,
+                         dc_taper_ls=(taper_l,), dc_taper=(cubic_taper(taper_change),),
+                         beam_taper=(cubic_taper(taper_change),),
+                         name=f'pull_apart_tdc_{interaction_l}_{taper_l}_{taper_change}')
+
+
+tether_column = [
+    tether_ps(psl, taper_l, taper_change) for psl in (40, 60) for taper_l, taper_change in ((5, -0.05), (10, -0.1))
+] + [
+    tether_tdc(il, taper_l, taper_change) for il, taper_change in ((100, -0.05), (80, -0.1)) for taper_l in range(5, 10)
+]
+
 # testing tap lines
 testing_tap_line = chip.tap_line(n_test)
 testing_tap_line_tdc = chip.tap_line(n_test, inter_wg_dist=200)
@@ -424,7 +460,8 @@ gridsearches = []
 
 # TODO(Nate): Match this to the fill of the test array
 # Number of test structures in each tap line, comment this out when not needed (when all are n_test)
-gridsearch_ls = [len(ps_columns[0]), len(ps_columns[1]), len(tdc_columns[0]), len(tdc_columns[1]), len(vip_columns[0]), len(vip_columns[0]), len(tdc_columns[1]), len(tdc_columns[0])]
+gridsearch_ls = [len(ps_columns[0]), len(ps_columns[1]), len(tdc_columns[0]), len(tdc_columns[1]),
+                 len(vip_columns[0]), len(tether_column), len(tdc_columns[1]), len(tdc_columns[0])]
 
 
 def autoroute_node_detector(p1, n2, n1, p2,
@@ -509,38 +546,36 @@ for col, tdc_column in enumerate(tdc_columns):
         line = testing_tap_line_tdc.put()
         for i, tdc in enumerate(tdc_column):
             # all structures for a tap line should be specified here
-            _tdc = tdc.put(line.pin[f'a{2 * i + 1}'])
-            d1 = detector.put(_tdc.pin['b0'])
-            d2 = detector.put(_tdc.pin['b1'], flip=True)
+            dev = tdc.put(line.pin[f'a{2 * i + 1}'])
+            d1 = detector.put(dev.pin['b0'])
+            d2 = detector.put(dev.pin['b1'], flip=True)
             autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
-            nd.Pin(f'd{i}').put(_tdc.pin['b0'])  # this is useful for autorouting the gnd path
+            nd.Pin(f'd{i}').put(dev.pin['b0'])  # this is useful for autorouting the gnd path
             # TODO: ground connections for the TDC
             gnd_l, gnd_u = None, None
-            for pin in _tdc.pin.keys():
+            for pin in dev.pin.keys():
                 if pin.split('_')[0] == 'gnd0' and len(pin.split('_')) > 1:
                     if pin.split('_')[1] == 'l':
                         if gnd_l is not None:
-                            chip.m2_ic.strt_p2p(_tdc.pin[gnd_l], _tdc.pin[pin]).put()
+                            chip.m2_ic.strt_p2p(dev.pin[gnd_l], dev.pin[pin]).put()
                         gnd_l = pin
                     if pin.split('_')[1] == 'u':
                         if gnd_u is not None:
-                            chip.m2_ic.strt_p2p(_tdc.pin[gnd_u], _tdc.pin[pin]).put()
+                            chip.m2_ic.strt_p2p(dev.pin[gnd_u], dev.pin[pin]).put()
                         gnd_u = pin
                     gnd_pin = pin
-            chip.m2_ic.ubend_p2p(_tdc.pin['gnd0_u_0'], _tdc.pin['gnd0_l_0'], radius=10).put()
+            chip.m2_ic.ubend_p2p(dev.pin['gnd0_u_0'], dev.pin['gnd0_l_0'], radius=10).put()
 
-            if 'pos1' in _tdc.pin:
-                nd.Pin(f'pos{i}').put(_tdc.pin['pos1'])
-            if 'gnd0' in _tdc.pin:
-                nd.Pin(f'gnd{i}').put(_tdc.pin['gnd0'])
-            elif 'gnd0_u_1' in _tdc.pin:
-                nd.Pin(f'gnd{i}').put(_tdc.pin['gnd0_u_1'])
+            if 'pos1' in dev.pin:
+                nd.Pin(f'pos{i}').put(dev.pin['pos1'])
+            if 'gnd0' in dev.pin:
+                nd.Pin(f'gnd{i}').put(dev.pin['gnd0'])
+            elif 'gnd0_u_1' in dev.pin:
+                nd.Pin(f'gnd{i}').put(dev.pin['gnd0_u_1'])
         nd.Pin('in').put(line.pin['in'])
         nd.Pin('out').put(line.pin['out'])
     gridsearches.append(gridsearch)
 
-
-# TODO(Nate): Here insert VIP Test column into gridsearch listing
 
 for col, vip_column in enumerate(vip_columns):
     with nd.Cell(f'gridsearch_{col + len(vip_columns)}') as gridsearch:
@@ -548,8 +583,7 @@ for col, vip_column in enumerate(vip_columns):
         for i, vip in enumerate(vip_column):
             # all structures for a tap line should be specified here
             _vip = vip.put(line.pin[f'a{2 * i + 1}'])
-            if bool(set(['p1', 'n2', 'n1', 'p2']) & set(_vip.pin)):
-                autoroute_node_detector(_vip.pin['p1'], _vip.pin['n2'], _vip.pin['n1'], _vip.pin['p2'])
+            autoroute_node_detector(_vip.pin['p1'], _vip.pin['n2'], _vip.pin['n1'], _vip.pin['p2'])
             nd.Pin(f'd{i}').put(_vip.pin['b0'])  # this is useful for autorouting the gnd path
             # if 'pos1' in _tdc.pin:
             #     nd.Pin(f'pos{i}').put(_tdc.pin['pos1'])
@@ -558,6 +592,31 @@ for col, vip_column in enumerate(vip_columns):
         nd.Pin('in').put(line.pin['in'])
         nd.Pin('out').put(line.pin['out'])
     gridsearches.append(gridsearch)
+
+
+# tether gridsearch
+with nd.Cell(f'gridsearch_tether') as gridsearch:
+    line = testing_tap_line.put()
+    for i, device in enumerate(tether_column):
+        if i < 4:
+            dev = chip.mzi_node_test(device, dc, include_input_ps=False,
+                                  detector=detector,
+                                  name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
+            autoroute_node_detector(dev.pin['p1'], dev.pin['n2'], dev.pin['n1'], dev.pin['p2'])
+        else:
+            # all structures for a tap line should be specified here
+            dev = device.put(line.pin[f'a{2 * i + 1}'])
+            d1 = detector.put(dev.pin['b0'])
+            d2 = detector.put(dev.pin['b1'], flip=True)
+            autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
+        nd.Pin(f'd{i}').put(dev.pin['b0'])  # this is useful for autorouting the gnd path
+        if 'pos1' in dev.pin:
+            nd.Pin(f'pos{i}').put(dev.pin['pos1'])
+        if 'gnd0' in dev.pin:
+            nd.Pin(f'gnd{i}').put(dev.pin['gnd0'])
+    nd.Pin('in').put(line.pin['in'])
+    nd.Pin('out').put(line.pin['out'])
+gridsearches.append(gridsearch)
 
 # test structures between the meshes
 
@@ -892,10 +951,10 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
 
         if layer == 14:
             # mesh TDC test
-            _tdc = tdc.put(output_interposer.pin['a7'])
+            dev = tdc.put(output_interposer.pin['a7'])
             chip.waveguide_ic.bend(10, -180).put()
             d1 = detector.put(flip=True)
-            chip.waveguide_ic.bend(10, 180).put(_tdc.pin['b1'])
+            chip.waveguide_ic.bend(10, 180).put(dev.pin['b1'])
             d2 = detector.put(flip=True)
             chip.m2_ic.bend_strt_bend_p2p(d2.pin['n'], autoroute_nems_anode.pin['a5'], radius=4).put()
             chip.m2_ic.bend_strt_bend_p2p(d1.pin['n'], autoroute_nems_anode.pin['a6'], radius=4).put()
@@ -951,7 +1010,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
 with nd.Cell('test_chiplet') as test_chiplet:
     # place test taplines down at non-overlapping locations
     detector_x = []
-    test_structures = gridsearches + gridsearches[-1:-4:-1]  # TODO: change this once all 8 columns are added
+    test_structures = gridsearches + gridsearches[2:4]  # TODO: change this once all 8 columns are added
     ga = grating_array.put(*grating_array_xy, -90)
     gs_list = []
     for i, item in enumerate(zip(tapline_x, test_structures)):
