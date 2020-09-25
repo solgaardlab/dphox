@@ -393,3 +393,73 @@ class DelayLine(Pattern):
         self.port['a0'] = Port(0, 0, -np.pi)
         # self.port['b0'] = Port(self.size[0], 0) #odd bug where the starting x position is -0.22966)
         self.port['b0'] = Port(self.bounds[2], 0)
+
+
+# TODO: remove this later and fix the actual issue
+class DCQuickFix(Pattern):
+    def __init__(self, bend_dim: Dim2, waveguide_w: float, gap_w: float, interaction_l: float,
+                 coupler_boundary_taper_ls: Tuple[float, ...] = (0,),
+                 coupler_boundary_taper: Optional[Tuple[Tuple[float, ...]]] = None,
+                 end_bend_dim: Optional[Dim3] = None, use_radius: bool = False):
+        """Directional coupler
+
+        Args:
+            bend_dim: if use_radius is True (bend_radius, bend_height), else (bend_width, bend_height)
+            waveguide_w: waveguide width
+            gap_w: gap between the waveguides
+            interaction_l: interaction length
+            coupler_boundary_taper_ls: coupler boundary tapers length
+            coupler_boundary_taper: coupler boundary taper params
+            end_bend_dim: If specified, places an additional end bend (see DC)
+            use_radius: use radius to define bends
+        """
+        self.bend_dim = bend_dim
+        self.waveguide_w = waveguide_w
+        self.interaction_l = interaction_l
+        self.gap_w = gap_w
+        self.end_bend_dim = end_bend_dim
+        self.use_radius = use_radius
+        self.coupler_boundary_taper_ls = coupler_boundary_taper_ls
+        self.coupler_boundary_taper = coupler_boundary_taper
+
+        interport_distance = waveguide_w + 2 * bend_dim[1] + gap_w
+        if end_bend_dim:
+            interport_distance += 2 * end_bend_dim[1]
+
+        lower_path = Path(waveguide_w).dc(bend_dim, interaction_l, end_l=0, end_bend_dim=end_bend_dim,
+                                          use_radius=use_radius)
+        upper_path = Path(waveguide_w).dc(bend_dim, interaction_l, end_l=0, end_bend_dim=end_bend_dim,
+                                          inverted=True, use_radius=use_radius)
+        upper_path.translate(dx=0, dy=interport_distance)
+
+        if coupler_boundary_taper is not None and np.sum(coupler_boundary_taper_ls) > 0:
+            current_dc = Pattern(upper_path, lower_path)
+            outer_boundary = Waveguide(waveguide_w=2 * waveguide_w + gap_w, length=interaction_l,
+                                       taper_params=coupler_boundary_taper,
+                                       taper_ls=coupler_boundary_taper_ls).align(current_dc)
+            center_wg = Box((interaction_l, waveguide_w)).align(current_dc.center)
+            dc_interaction = GroupedPattern(copy(center_wg).translate(dy=-gap_w / 2 - waveguide_w / 2),
+                                            copy(center_wg).translate(dy=gap_w / 2 + waveguide_w / 2))
+
+            cuts = dc_interaction.pattern - outer_boundary.pattern
+
+            # hacky way to make sure polygons are completely separated
+            dc_without_interaction = current_dc.pattern - Box((dc_interaction.size[0],
+                                                               dc_interaction.size[1] * 2)).align(current_dc).pattern
+            paths = [dc_without_interaction, dc_interaction.pattern - cuts]
+        else:
+            paths = lower_path, upper_path
+        super(DCQuickFix, self).__init__(*paths)
+        self.lower_path, self.upper_path = Pattern(lower_path), Pattern(upper_path)
+        self.port['a0'] = Port(0, 0, -np.pi)
+        self.port['a1'] = Port(0, interport_distance, -np.pi)
+        self.port['b0'] = Port(self.size[0], 0)
+        self.port['b1'] = Port(self.size[0], interport_distance)
+
+    @property
+    def interaction_points(self) -> np.ndarray:
+        bl = np.asarray(self.center) - np.asarray((self.interaction_l, self.waveguide_w + self.gap_w)) / 2
+        tl = bl + np.asarray((0, self.waveguide_w + self.gap_w))
+        br = bl + np.asarray((self.interaction_l, 0))
+        tr = tl + np.asarray((self.interaction_l, 0))
+        return np.vstack((bl, tl, br, tr))
