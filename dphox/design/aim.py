@@ -60,6 +60,7 @@ class AIMNazca:
                  use_radius: bool = True, clearout_box_dim: Dim2 = (100, 2.5), dc_taper_ls: Tuple[float, ...] = None,
                  dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5,
                  dope_grow: float = 0.25, dope_expand: float = 0.1,
+                 metal_extension: float = 3,
                  diff_ps: Optional[nd.Cell] = None, name: str = 'nems_tdc') -> nd.Cell:
         c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
                            interaction_l=interaction_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
@@ -78,7 +79,7 @@ class AIMNazca:
                 tdc = device.nazca_cell('tdc').put()
                 top_anchor = anchor.put(tdc.pin['t0'])
                 bottom_anchor = anchor.put(tdc.pin['t1'], flip=True)
-                self.metal_box(top_anchor, bottom_anchor, interaction_l, extra_length=3)
+                self.metal_box(top_anchor, bottom_anchor, interaction_l, extra_length=metal_extension)
                 nd.Pin('a0').put(tdc.pin['a0'])
                 nd.Pin('b0').put(tdc.pin['b0'])
                 nd.Pin('a1').put(tdc.pin['a1'])
@@ -94,6 +95,7 @@ class AIMNazca:
                 gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
                 boundary_taper: Optional[Tuple[float, ...]] = None, fin_adiabatic_bend_dim: Optional[Dim2] = (2, 1),
                 end_taper: Optional[Tuple[Tuple[float, ...], ...]] = ((0, -0.08),), gnd_connector_idx: int = -1,
+                metal_extension: float = 6,
                 name: str = 'nems_ps') -> nd.Cell:
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
                           num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
@@ -111,7 +113,7 @@ class AIMNazca:
             ps = device.nazca_cell('ps').put()
             top_anchor = anchor.put(ps.pin['fin0'])
             bottom_anchor = anchor.put(ps.pin['fin1'], flip=True)
-            self.metal_box(top_anchor, bottom_anchor, phaseshift_l)
+            self.metal_box(top_anchor, bottom_anchor, phaseshift_l, extra_length=metal_extension)
             nd.Pin('a0').put(ps.pin['a0'])
             if tap_sep is not None:
                 tap, sep = tap_sep

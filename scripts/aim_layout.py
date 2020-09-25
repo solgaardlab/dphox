@@ -47,6 +47,7 @@ mesh_layer_x = 450
 # testing params
 
 waveguide_w = 0.48
+wg_filler = 15
 test_interport_w = 50
 test_gap_w = 0.3
 test_bend_dim = test_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
@@ -219,7 +220,7 @@ Pull-in phase shifter or PSV1
 # and phase shift length
 pull_in_gap = [
     chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_in_anchor, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
-                                               name=f'ps_gap_{gap_w}'), 25, gnd_wg],
+                                               name=f'ps_gap_{gap_w}'), wg_filler, gnd_wg],
                   [delay_line_200, gnd_wg],
                   interport_w=test_interport_w,
                   name=f'pull_in_gap_{gap_w}')
@@ -230,7 +231,7 @@ pull_in_gap = [
 pull_in_taper = [
     chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict(pull_in_phaseshift_l,
                                                                                      taper_change, taper_length),
-                                               name=f'ps_taper_{taper_change}_{taper_length}'), 25, gnd_wg],
+                                               name=f'ps_taper_{taper_change}_{taper_length}'), wg_filler, gnd_wg],
                   [delay_line_200, gnd_wg],
                   interport_w=test_interport_w,
                   name=f'pull_in_taper_{taper_change}_{taper_length}')
@@ -240,7 +241,7 @@ pull_in_taper = [
 pull_in_fin = [
     chip.mzi_arms([delay_line_50,
                    chip.nems_ps(anchor=pull_in_anchor, nanofin_w=nanofin_w, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
-                                name=f'ps_fin_{nanofin_w}_{gap_w}'), 25, gnd_wg],
+                                name=f'ps_fin_{nanofin_w}_{gap_w}'), wg_filler, gnd_wg],
                   [delay_line_200, gnd_wg],
                   interport_w=test_interport_w,
                   name=f'pull_in_fin_{nanofin_w}_{gap_w}')
@@ -324,7 +325,7 @@ def bend_exp(name='bends_1_1'):
         delay_line = chip.delay_line(delay_length=delay_length, straight_length=straight_length, bend_radius=bend_radius)
         l_arm = [delay_line for count in range(int(name.split('_')[-1]))]
         mzi_arms = chip.mzi_arms(l_arm,
-                                 [25, ],
+                                 [wg_filler, ],
                                  interport_w=test_interport_w,
                                  name='bare_mzi_arms').put(first_dc.pin['b0'])
         nd.Pin('a0').put(first_dc.pin['a0'])
