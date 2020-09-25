@@ -359,19 +359,20 @@ bend_exp_names += [f'bends_10_{i}' for i in [2, 3]]
 reference_devices += [bend_exp(name=bend_exp_name) for bend_exp_name in bend_exp_names]
 print(len(reference_devices))
 
+
 def tether_ps(phaseshift_l=tether_phaseshift_l, taper_l=5, taper_change=-0.05):
     anchor_tether = chip.nems_anchor(
-        fin_dim=(phaseshift_l, 0.4), shuttle_dim=(10, 2), spring_dim=(phaseshift_l + 10, 0.22),  straight_connector=None,
+        fin_dim=(phaseshift_l, 0.4), shuttle_dim=(10, 2), spring_dim=(phaseshift_l + 10, 0.22), straight_connector=None,
         tether_connector=(2, 1, 0.5, 1), pos_electrode_dim=(phaseshift_l, 4, 1.5), neg_electrode_dim=(3, 3),
         include_fin_dummy=False, name=f'anchor_tether_ps_{phaseshift_l}_{taper_l}_{taper_change}',
     )
     return chip.mzi_arms(
-            [delay_line_50, chip.nems_ps(end_ls=(5, 5), end_taper=((0.0,), (0.0, -0.08),), taper_l=taper_l,
-                         wg_taper=cubic_taper(taper_change), gap_taper=cubic_taper(taper_change), gnd_connector_idx=0,
-                         phaseshift_l=phaseshift_l, anchor=anchor_tether, clearout_box_dim=(phaseshift_l + 5, 12.88))],
-            [delay_line_200],
-            interport_w=test_interport_w,
-            name=f'pull_apart_tether_{phaseshift_l}_{taper_l}_{taper_change}'
+        [delay_line_50, chip.nems_ps(end_ls=(5, 5), end_taper=((0.0,), (0.0, -0.08),), taper_l=taper_l,
+                                     wg_taper=cubic_taper(taper_change), gap_taper=cubic_taper(taper_change), gnd_connector_idx=0,
+                                     phaseshift_l=phaseshift_l, anchor=anchor_tether, clearout_box_dim=(phaseshift_l + 5, 12.88))],
+        [delay_line_200],
+        interport_w=test_interport_w,
+        name=f'pull_apart_tether_{phaseshift_l}_{taper_l}_{taper_change}'
     )
 
 
@@ -508,7 +509,6 @@ for col, tdc_column in enumerate(tdc_columns):
             d2 = detector.put(dev.pin['b1'], flip=True)
             autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
             nd.Pin(f'd{i}').put(dev.pin['b0'])  # this is useful for autorouting the gnd path
-            # TODO: ground connections for the TDC
             gnd_l, gnd_u = None, None
             for pin in dev.pin.keys():
                 if pin.split('_')[0] == 'gnd0' and len(pin.split('_')) > 1:
@@ -553,8 +553,8 @@ with nd.Cell(f'gridsearch_tether') as gridsearch:
     for i, device in enumerate(tether_column):
         if i < 4:
             dev = chip.mzi_node_test(device, dc, include_input_ps=False,
-                                  detector=detector,
-                                  name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
+                                     detector=detector,
+                                     name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
             autoroute_node_detector(dev.pin['p1'], dev.pin['n2'], dev.pin['n1'], dev.pin['p2'])
         else:
             # all structures for a tap line should be specified here
