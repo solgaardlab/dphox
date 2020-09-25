@@ -346,7 +346,8 @@ class NemsAnchor(GroupedPattern):
                 pads.extend([neg_electrode_left, neg_electrode_right])
 
         super(NemsAnchor, self).__init__(*patterns)
-        shift = (-connector.center[0], -connector.bounds[1])
+        shift = [-connector.center[0], -connector.bounds[1]]
+        shift[1] -= -tether_connector[-1] if tether_connector is not None and straight_connector is None else 0
         self.translate(*shift)
         self.pads = [pad.translate(*shift) for pad in pads]
         self.springs = [s.translate(*shift) for s in springs]
