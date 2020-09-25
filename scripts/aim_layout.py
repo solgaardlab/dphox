@@ -507,12 +507,8 @@ for col, tdc_column in enumerate(tdc_columns):
             d1 = detector.put(dev.pin['b0'])
             d2 = detector.put(dev.pin['b1'], flip=True)
             autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
-<<<<<<< HEAD
             nd.Pin(f'd{i}').put(dev.pin['b0'])  # this is useful for autorouting the gnd path
             # TODO: ground connections for the TDC
-=======
-            nd.Pin(f'd{i}').put(_tdc.pin['b0'])  # this is useful for autorouting the gnd path
->>>>>>> wip: set 2 tdc columns, orgnized bend experiments, fixed mesh_tests auto routing
             gnd_l, gnd_u = None, None
             for pin in dev.pin.keys():
                 if pin.split('_')[0] == 'gnd0' and len(pin.split('_')) > 1:
