@@ -96,7 +96,7 @@ class AIMNazca:
                 gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
                 boundary_taper: Optional[Tuple[float, ...]] = None, fin_adiabatic_bend_dim: Optional[Dim2] = (2, 1),
                 end_taper: Optional[Tuple[Tuple[float, ...], ...]] = ((0, -0.08),), gnd_connector_idx: int = -1,
-                metal_extension: float = 6,
+                metal_extension: float = 10,
                 name: str = 'nems_ps') -> nd.Cell:
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
                           num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
@@ -188,8 +188,8 @@ class AIMNazca:
     def nems_anchor(self, fin_dim: Dim2 = (100, 0.15), shuttle_dim: Dim2 = (50, 2),
                     spring_dim: Dim2 = None, straight_connector: Optional[Dim2] = (0.25, 1),
                     tether_connector: Optional[Dim4] = (3, 1, 0.5, 1),
-                    pos_electrode_dim: Optional[Dim3] = (90, 4, 2),
-                    neg_electrode_dim: Optional[Dim2] = (3, 5), dope_expand: float = 0.25, attach_comb: bool = False,
+                    pos_electrode_dim: Optional[Dim3] = (90, 4, 0.5),
+                    neg_electrode_dim: Optional[Dim2] = (3, 4), dope_expand: float = 0.25, attach_comb: bool = False,
                     dope_grow: float = 0.1, include_fin_dummy: bool = True, name: str = 'nems_anchor'):
         c = NemsAnchor(fin_dim=fin_dim, shuttle_dim=shuttle_dim,
                        spring_dim=spring_dim, straight_connector=straight_connector,
@@ -444,7 +444,7 @@ class AIMNazca:
         return bond_pad_array
 
     def custom_dc(self, waveguide_w: float = 0.48, bend_dim: Dim2 = (20, 50.78 / 2), gap_w: float = 0.3,
-                  interaction_l: float = 40, end_bend_dim: Optional[Dim3] = None,
+                  interaction_l: float = 37.8, end_bend_dim: Optional[Dim3] = None,
                   use_radius: bool = True) -> Tuple[nd.Cell, nd.Cell]:
         dc = DC(bend_dim, waveguide_w, gap_w, interaction_l, (0,), None, end_bend_dim, use_radius)
         return dc.nazca_cell('dc', layer='seam'), dc.upper_path.nazca_cell('bendy_dc_dummy', layer='seam')

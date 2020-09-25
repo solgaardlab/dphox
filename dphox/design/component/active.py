@@ -53,7 +53,7 @@ class LateralNemsPS(GroupedPattern):
 
         boundary_taper = wg_taper if boundary_taper is None else boundary_taper
 
-        _gap_w = gap_w + np.sum([np.sum(et) for et in end_taper])
+        _gap_w = gap_w + np.sum([np.sum(et) for et in end_taper]) / 2
 
         wg_taper = (wg_taper,) if end_taper is None else (*end_taper, wg_taper)
         box_w = nanofin_w * 2 + _gap_w * 2 + waveguide_w
@@ -324,7 +324,8 @@ class NemsAnchor(GroupedPattern):
                                        )
         if include_fin_dummy and not attach_comb:
             # this is the mirror image dummy for mechanics
-            patterns.append(Box(fin_dim).align((connector.center[0], connector.bounds[3])))
+            dummy_fin = Box(fin_dim).align((connector.center[0], connector.bounds[3]))
+            patterns.append(dummy_fin)
         patterns.append(connector)
         if spring_dim is not None:
             top_spring = Box(spring_dim).align(shuttle).valign(shuttle, bottom=True, opposite=True)
@@ -332,6 +333,10 @@ class NemsAnchor(GroupedPattern):
             if pos_electrode_dim is not None:
                 pos_electrode = Box((pos_electrode_dim[0], pos_electrode_dim[1])).align(top_spring).valign(
                     top_spring, opposite=True).translate(dy=pos_electrode_dim[2])
+                # fixing pos electrode alignment based on the existance of the dummy fin
+                if include_fin_dummy and not attach_comb:
+                    pos_electrode = Box((pos_electrode_dim[0], pos_electrode_dim[1])).align(top_spring).valign(
+                        dummy_fin, opposite=True).translate(dy=pos_electrode_dim[2])
                 patterns.append(pos_electrode)
                 pads.append(pos_electrode)
                 patterns.extend([top_spring, bottom_spring])
@@ -378,7 +383,7 @@ class NemsAnchor(GroupedPattern):
 
 class GndWaveguide(GroupedPattern):
     def __init__(self, waveguide_w: float, length: float, rib_brim_w: float, gnd_connector_dim: Optional[Dim2],
-                 gnd_contact_dim: Optional[Dim2], flip: bool=False):
+                 gnd_contact_dim: Optional[Dim2], flip: bool = False):
         """Grounded waveguide, typically required for photonic MEMS, consisting of a rib brim
         around an (optionally) tapered waveguide.
 
