@@ -56,7 +56,8 @@ class LateralNemsPS(GroupedPattern):
 
         wg_taper = (wg_taper,) if end_taper is None else (*end_taper, wg_taper)
         box_w = nanofin_w * 2 + gap_w * 2 + waveguide_w
-        wg = Waveguide(waveguide_w, taper_ls=(*end_ls, taper_l), taper_params=wg_taper, length=phaseshift_l + 2 * np.sum(end_ls),
+        wg = Waveguide(waveguide_w, taper_ls=(*end_ls, taper_l), taper_params=wg_taper,
+                       length=phaseshift_l + 2 * np.sum(end_ls),
                        num_taper_evaluations=num_taper_evaluations)
         boundary = Waveguide(box_w, taper_ls=(taper_l,), taper_params=(boundary_taper,), length=phaseshift_l,
                              num_taper_evaluations=num_taper_evaluations).align(wg).pattern
@@ -84,20 +85,20 @@ class LateralNemsPS(GroupedPattern):
         rib_brim = []
 
         gnd_connector_idx = len(end_ls) - 1 if gnd_connector_idx == -1 else gnd_connector_idx
-        rib_brim_x = float(np.sum(end_ls[:gnd_connector_idx + 1]))
+        rib_brim_x = float(np.sum(end_ls[:gnd_connector_idx]))
 
         if gnd_connector is not None:
             final_width = waveguide_w + np.sum([np.sum(t) for t in end_taper])
-            rib_brim = Waveguide(waveguide_w=waveguide_w, length=end_ls[gnd_connector_idx], taper_ls=(end_ls[gnd_connector_idx] / 2,
-                                                                                                      end_ls[gnd_connector_idx] / 2),
+            rib_brim = Waveguide(waveguide_w=waveguide_w, length=end_ls[gnd_connector_idx],
+                                 taper_ls=(end_ls[gnd_connector_idx] / 2,
+                                           end_ls[gnd_connector_idx] / 2),
                                  taper_params=(cubic_taper(gnd_connector[0] - waveguide_w),
                                                cubic_taper(final_width - gnd_connector[0])),
                                  symmetric=False
                                  )
 
-            rib_brims = [rib_brim.copy.align(wg).halign(rib_brim_x, left=False, opposite=True),
-                         rib_brim.copy.flip(horiz=True).align(wg).halign(rib_brim_x, left=True, opposite=True
-                                                                         ).translate(phaseshift_l)]
+            rib_brims = [copy(rib_brim).translate(rib_brim_x),
+                         copy(rib_brim).flip(horiz=True).translate(wg.size[0] - rib_brim_x)]
 
             gnd_connection = GroupedPattern(
                 Box(gnd_connector[1:]).align(rib_brims[0]).valign(rib_brim, bottom=True, opposite=True),
