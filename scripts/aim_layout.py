@@ -406,13 +406,13 @@ reference_devices = [
 def tether_ps(phaseshift_l=tether_phaseshift_l, taper_l=5, taper_change=-0.05):
     anchor_tether = chip.nems_anchor(
         fin_dim=(phaseshift_l, 0.4), shuttle_dim=(10, 2), spring_dim=(phaseshift_l + 10, 0.22),
-        tether_connector=(3, 1, 0.5, 1), pos_electrode_dim=(phaseshift_l + 10, 4, 1.5), neg_electrode_dim=(3, 3),
+        tether_connector=(3, 1, 0.5, 1), pos_electrode_dim=(phaseshift_l, 4, 1.5), neg_electrode_dim=(3, 3),
         include_fin_dummy=False, name=f'anchor_tether_ps_{phaseshift_l}_{taper_l}_{taper_change}'
     )
     return chip.mzi_arms(
             [delay_line_50, chip.nems_ps(end_ls=(5, 5), end_taper=((0.0,), (0.0, -0.08),), taper_l=taper_l,
                          wg_taper=cubic_taper(taper_change), gap_taper=cubic_taper(taper_change), gnd_connector_idx=0,
-                         phaseshift_l=phaseshift_l, anchor=anchor_tether)],
+                         phaseshift_l=phaseshift_l, anchor=anchor_tether, clearout_box_dim=(phaseshift_l, 12.88))],
             [delay_line_200],
             interport_w=test_interport_w,
             name=f'pull_apart_tether_{phaseshift_l}_{taper_l}_{taper_change}'
@@ -421,13 +421,13 @@ def tether_ps(phaseshift_l=tether_phaseshift_l, taper_l=5, taper_change=-0.05):
 
 def tether_tdc(interaction_l=tether_interaction_l, taper_l=5, taper_change=-0.05):
     anchor_tether = chip.nems_anchor(
-        fin_dim=(interaction_l, 0.4), shuttle_dim=(10, 2), spring_dim=(interaction_l + 10, 0.22),
-        tether_connector=(3, 1, 0.5, 1), pos_electrode_dim=(interaction_l + 10, 4, 1.5), neg_electrode_dim=(3, 3),
+        fin_dim=(interaction_l, 0.4), shuttle_dim=(10, 2), spring_dim=(interaction_l, 0.22),
+        tether_connector=(3, 1, 0.5, 1), pos_electrode_dim=(interaction_l, 4, 1.5), neg_electrode_dim=(3, 3),
         include_fin_dummy=False, name=f'anchor_tether_tdc_{interaction_l}_{taper_l}_{taper_change}'
     )
     return chip.nems_tdc(anchor=anchor_tether, interaction_l=interaction_l,
                          dc_taper_ls=(taper_l,), dc_taper=(cubic_taper(taper_change),),
-                         beam_taper=(cubic_taper(taper_change),),
+                         beam_taper=(cubic_taper(taper_change),), clearout_box_dim=(interaction_l, 12.88),
                          name=f'pull_apart_tdc_{interaction_l}_{taper_l}_{taper_change}')
 
 
@@ -1036,7 +1036,7 @@ with nd.Cell('test_chiplet') as test_chiplet:
 
     # place test pads
     test_pad_x = [tapline_x[0] - 80, tapline_x[1] - 80, tapline_x[2] - 250, tapline_x[3] - 250,
-                  tapline_x[4] - 80, tapline_x[5] - 80, tapline_x[6] - 250, tapline_x[7] - 250]
+                  tapline_x[4] - 80, tapline_x[5] - 280, tapline_x[6] - 250, tapline_x[7] - 250]
 
     # for probes, we can either manually cut them in the end or have a semiautomated way of doing it (modify below)
     test_pads = [test_pad.put(x, test_pad_y) for x in test_pad_x]
