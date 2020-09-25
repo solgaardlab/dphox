@@ -49,9 +49,9 @@ class AIMNazca:
         self.ml_ic = nd.interconnects.Interconnect(width=100, xs='ml_xs')
         self.v1_via = Via((0.4, 0.4), 0.1, top_metal='m2am', bot_metal='m1am', via='v1am').nazca_cell('v1_via')
         self.va_via = Via((3.6, 3.6), 1.5, top_metal='mlam', bot_metal='m2am', via='vaam').nazca_cell('va_via')
-        self.v1_via_4 = Via((0.4, 0.4), 0.1, shape=(1, 4), pitch=1,
+        self.v1_via_4 = Via((0.4, 0.4), 0.15, shape=(1, 4), pitch=1,
                             top_metal='m2am', bot_metal='m1am', via='v1am').nazca_cell('v1_via_4')
-        self.v1_via_8 = Via((0.4, 0.4), 0.1, shape=(1, 8), pitch=1,
+        self.v1_via_8 = Via((0.4, 0.4), 0.15, shape=(1, 8), pitch=1,
                             top_metal='m2am', bot_metal='m1am', via='v1am').nazca_cell('v1_via_8')
 
     def nems_tdc(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
@@ -432,7 +432,7 @@ class AIMNazca:
             for i in range(n_pads[0]):
                 for j in range(n_pads[1]):
                     for k, pad in enumerate(pads):
-                        pad.put(i * pitch[0], j * pitch[1] + 4 * (k == 1) - 2 * (k == 3), 270)
+                        pad.put(i * pitch[0], j * pitch[1] + 5 * (k == 1) - 1 * (k == 3), 270)
                     if j == 0:
                         nd.Pin(f'o{i}').put(i * pitch[0], j * pitch[1], -90)
                     elif j == n_pads[1] - 1:

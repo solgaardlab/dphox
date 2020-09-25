@@ -677,7 +677,7 @@ with nd.Cell('gnd_pad') as gnd_pad:
 with nd.Cell('test_pad') as test_pad:
     chip.ml_ic.strt(width=1716, length=60).put()
 
-chiplet_divider = chip.dice_box((100, 1923))
+chiplet_divider = chip.dice_box((100, 1973))
 chip_horiz_dice = chip.dice_box((chip_w, perimeter_w))
 chip_vert_dice = chip.dice_box((perimeter_w, chip_h))
 
@@ -1152,7 +1152,7 @@ with nd.Cell('test_chiplet') as test_chiplet:
 with nd.Cell('aim_layout') as aim_layout:
     mesh_chiplet.put(mesh_chiplet_x)
     test_chiplet.put(test_chiplet_x)
-    chiplet_divider.put(chiplet_divider_x, -standard_grating_interport)
+    chiplet_divider.put(chiplet_divider_x, -standard_grating_interport + 20)
     chip_horiz_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],
                         -standard_grating_interport + edge_shift_dim[1] - perimeter_w)
     chip_horiz_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],
