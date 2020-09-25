@@ -9,18 +9,18 @@ from dphox.design.component import cubic_taper
 from datetime import date
 from tqdm import tqdm
 
-# chip = AIMNazca(
-#     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
-#     waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
-#     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
-# )
+chip = AIMNazca(
+    passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
+    waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
+    active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
+)
 
 # #Please leave this so Nate can run this quickly
-chip = AIMNazca(
-    passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
-    waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
-    active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
-)
+# chip = AIMNazca(
+#     passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
+#     waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
+#     active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
+# )
 
 # chip params
 
@@ -176,7 +176,7 @@ def pull_apart_taper_dict(taper_change: float, taper_length: float):
     )
 
 
-def pull_in_dict(phaseshift_l: float = 100, taper_change: float = None, taper_length: float = None,
+def pull_in_dict(phaseshift_l: float = pull_in_phaseshift_l, taper_change: float = None, taper_length: float = None,
                  clearout_dim: Optional[float] = None):
     # DOne: modify this to taper the pull-in fin adiabatically using rib_brim_taper
     # Became irrelevant with new ps class structure
@@ -455,7 +455,8 @@ aggressive_column = [
     tether_ps_slot(tether_phaseshift_l, taper_length)
     for taper_length in (5, 10) for taper_change in (-0.25, -0.3)  # slot variations
 ] + [chip.mzi_arms([chip.nems_ps(anchor=pull_apart_anchor)], [tether_phaseshift_l + 10]) for _ in range(2)] + [
-    chip.mzi_arms([chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict())], [pull_in_phaseshift_l + 10]) for _ in range(2)
+    chip.mzi_arms([chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict(pull_in_phaseshift_l))],
+                  [pull_in_phaseshift_l + 10]) for _ in range(2)
 ]
 
 # TODO(sunil): MANUAL insert test structures
@@ -686,7 +687,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
     thermal = thermal_mesh.put(0, 1000)
     input_interposer = interposer.put(thermal.pin['a4'])
     output_interposer = interposer.put(thermal.pin['b4'], flip=True)
-    mzi_node_thermal_detector.put(input_interposer.pin['a6'])
+    mzi_node_thermal = mzi_node_thermal_detector.put(input_interposer.pin['a6'])
 
     # routing code for the meshes
     bp_array_nems = bp_array.put(-180, -40)
@@ -844,7 +845,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
     pin_num = 0
     num_ps_middle_mesh = len(middle_mesh_pull_apart + middle_mesh_pull_in)
 
-    mzi_node_nems_detector.put(input_interposer.pin['a7'], flip=True)
+    mzi_node_nems = mzi_node_nems_detector.put(input_interposer.pin['a7'], flip=True)
     alignment_mark.put(-500, 0)
     alignment_mark.put(7000, 0)
     alignment_mark.put(7000, 1700)
@@ -945,6 +946,22 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             ic.bend_strt_bend_p2p(p2, radius=radius).put()
             if use_m1:
                 chip.v1_via_4.put()
+
+        if layer == 2:
+            # TODO(sunil): edit this
+            # nems and thermal test node
+            chip.m2_ic.bend_strt_bend_p2p(mzi_node_nems.pin['n1'], autoroute_nems_anode.pin['a5'], radius=8).put()
+            chip.m2_ic.bend_strt_bend_p2p(mzi_node_nems.pin['n2'], autoroute_nems_anode.pin['a6'], radius=8).put()
+            chip.m1_ic.bend_strt_bend_p2p(mzi_node_nems.pin['p1'], autoroute_nems_cathode.pin['a5'], radius=8).put()
+            chip.m2_ic.bend_strt_bend_p2p(mzi_node_nems.pin['p2'], autoroute_nems_cathode.pin['a6'], radius=8).put()
+            chip.v1_via_4.put(mzi_node_nems.pin['p1'])
+            chip.v1_via_4.put(autoroute_nems_cathode.pin['p1'], flop=True)
+            chip.m2_ic.bend_strt_bend_p2p(mzi_node_thermal.pin['n1'], autoroute_therm_anode.pin['a5'], radius=8).put()
+            chip.m2_ic.bend_strt_bend_p2p(mzi_node_thermal.pin['n2'], autoroute_therm_anode.pin['a6'], radius=8).put()
+            chip.m1_ic.bend_strt_bend_p2p(mzi_node_thermal.pin['p1'], autoroute_therm_cathode.pin['a5'], radius=8).put()
+            chip.m2_ic.bend_strt_bend_p2p(mzi_node_thermal.pin['p2'], autoroute_therm_cathode.pin['a6'], radius=8).put()
+            chip.v1_via_4.put(mzi_node_thermal.pin['p1'])
+            chip.v1_via_4.put(autoroute_therm_cathode.pin['p1'], flop=True)
 
         if layer == 13:
             # mesh DC test
@@ -1145,6 +1162,6 @@ with nd.Cell('aim_layout') as aim_layout:
     chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
                        -standard_grating_interport + edge_shift_dim[1])
 
-# nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly
-nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+# nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
