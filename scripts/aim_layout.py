@@ -78,6 +78,10 @@ tapline_x = [tapline_x_start + x for x in [0, 400, 700, 1000, 1400, 1800, 2100, 
 tapline_y = 162  # y for the taplines
 grating_array_xy = (600, 125)
 
+# spacing of test array  probe pads
+test_pad_x = [tapline_x[0] - 80, tapline_x[1] - 80, tapline_x[2] - 250, tapline_x[3] - 250,
+              tapline_x[4] - 80, tapline_x[5] - 292, tapline_x[6] - 250, tapline_x[7] - 250]
+
 # bond pad (testing)
 
 left_bp_x = 100
@@ -91,7 +95,7 @@ via_y = -770
 
 dc = chip.custom_dc(bend_dim=(dc_radius, test_bend_dim))[0]
 dc_short = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_short), gap_w=test_gap_w_aggressive,
-                               interaction_l=test_interaction_l_aggressive)[0]
+                          interaction_l=test_interaction_l_aggressive)[0]
 dc_aggressive = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_aggressive), gap_w=test_gap_w_aggressive,
                                interaction_l=test_interaction_l_aggressive)[0]
 dc_invdes = chip.custom_dc_taper(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes), gap_w=test_gap_w_invdes,
@@ -421,6 +425,7 @@ def tether_tdc(interaction_l=tether_interaction_l, taper_l=5, taper_change=-0.05
                          name=f'pull_apart_tdc_{interaction_l}_{taper_l}_{taper_change}', dc_end_l=5,
                          metal_extension=6)
 
+
 # testing tap lines
 testing_tap_line = chip.tap_line(n_test)
 testing_tap_line_tdc = chip.tap_line(n_test, inter_wg_dist=200)
@@ -642,7 +647,6 @@ with nd.Cell(f'gridsearch_aggressive') as gridsearch:
 aggressive_gridsearch = gridsearch
 
 
-
 # test structures between the meshes
 
 
@@ -794,10 +798,10 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
     69, 89, 90
     92, 112, 113
     115, 135, 136
-    138, 158, 159
-    161, 181, 182
-    184, 204, 205
-    207, 227, 228
+    138, 158, 159 double check these pins
+    161, 181, 182 double check these pins
+    184, 204, 205 double check these pins
+    207, 227, 228 double check these pins
     319, 320
     342, 343
     '''
@@ -807,11 +811,11 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         (43, 45), (46, 48),      # test MZI # moved to test routing
         (69, 70), (89, 91),
         (92, 93), (112, 114),
-        (115, 116), (135, 136),
+        (115, 116), (135, 137),
         (138, 139), (158, 160),
         (161, 162), (181, 183),
         (184, 185), (204, 206),
-        (207, 208), (227, 228),
+        (207, 208), (227, 229),
         (319, 321),
         (342, 344)
     ]
@@ -824,7 +828,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         closest = (0, 0)
         closest_dist = np.inf
         for i, j in itertools.product(range(70), range(3)):
-            dist = np.abs(bp_array_nems.pin[f'u{i},{j}'].x - pin_x)
+            dist = (bp_array_nems.pin[f'u{i},{j}'].x - pin_x)
             # hacking this to prevent crossings in test layer
             if dist < closest_dist and bp_array_nems.pin[f'u{i},{j}'].x > left_most and (i, j) not in used_connections:
                 closest = (i, j)
@@ -833,14 +837,14 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         used_connections.add(closest)
         i, j = closest
         chip.v1_via_8.put(bp_array_nems.pin[f'u{i},{j}'])
-        chip.m1_ic.strt(100 * (2 - j), width=8).put(bp_array_nems.pin[f'u{i},{j}'])
+        chip.m2_ic.strt(100 * (2 - j), width=8).put(bp_array_nems.pin[f'u{i},{j}'])
         # chip.m1_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
-        # chip.v1_via_8.put()
+        chip.v1_via_8.put()
 
         chip.v1_via_8.put(bp_array_thermal.pin[f'u{i},{j}'])
-        chip.m1_ic.strt(100 * (2 - j), width=8).put(bp_array_thermal.pin[f'u{i},{j}'])
+        chip.m2_ic.strt(100 * (2 - j), width=8).put(bp_array_thermal.pin[f'u{i},{j}'])
         # chip.m1_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
-        # chip.v1_via_8.put()
+        chip.v1_via_8.put()
 
     pin_num = 0
     num_ps_middle_mesh = len(middle_mesh_pull_apart + middle_mesh_pull_in)
@@ -1010,11 +1014,14 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
                         pos_u = pin
                     pos_pin = pin
 
-            if (gnd_u is not None) and (gnd_l is not None):
-                chip.m2_ic.ubend_p2p(ts.pin[gnd_l], ts.pin[gnd_u], radius=8).put()
-                gnd_pin = gnd_u
-            elif(gnd_u is not None) or (gnd_l is not None):
-                gnd_pin = gnd_u if gnd_u is not None else gnd_l
+            # if (gnd_u is not None) and (gnd_l is not None):
+            #     chip.m2_ic.ubend_p2p(dev.pin[gnd_l], dev.pin[gnd_u], radius=8).put()
+            #     gnd_pin = gnd_u
+            # elif(gnd_u is not None) or (gnd_l is not None):
+            #     gnd_pin = gnd_u if gnd_u is not None else gnd_l
+
+            # Nate quick hack because I know device orientation
+            chip.m2_ic.ubend_p2p(dev.pin['gnd0_u_0'], dev.pin['gnd0_l_0'], radius=8).put()
 
             if 'pos1' in dev.pin:
                 chip.m2_ic.bend_strt_bend_p2p(dev.pin['pos1'], autoroute_nems_pos.pin['a5'], radius=4).put()
@@ -1098,11 +1105,10 @@ with nd.Cell('test_chiplet') as test_chiplet:
     # place ground bus
     gnd_pad.put(-15, test_pad_y)
 
+    # TODO(Nate): space thse pads as columns are filled
     # place test pads
-    test_pad_x = [tapline_x[0] - 80, tapline_x[1] - 80, tapline_x[2] - 250, tapline_x[3] - 250,
-                  tapline_x[4] - 80, tapline_x[5] - 280, tapline_x[6] - 250, tapline_x[7] - 250]
 
-    # for probes, we can either manually cut them in the end or have a semiautomated way of doing it (modify below)
+    # TODO(Nate): for probes, we can either manually cut them in the end or have a semiautomated way of doing it (modify below)
     test_pads = [test_pad.put(x, test_pad_y) for x in test_pad_x]
 
     for i in range(min(gridsearch_ls)):  # change this to n_test when all structures are filled in each column
