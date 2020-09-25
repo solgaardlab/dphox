@@ -86,13 +86,8 @@ class AIMNazca:
                 tdc.raise_pins(['gnd0_l_0', 'gnd0_u_0', 'gnd0_l_1', 'gnd0_u_1'])
         return self.tdc_node(diff_ps, cell) if diff_ps is not None else cell
 
-<<<<<<< HEAD
     def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 90,
-                gap_w: float = 0.15, pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (90, 13.8),
-=======
-    def nems_ps(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 100,
                 gap_w: float = 0.10, pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (90, 13.8),
->>>>>>> wip: adjusted nems ps and anchor based on sims, adjusted amarks
                 clearout_etch_stop_grow: float = 0.5, num_taper_evaluations: int = 100,
                 anchor: Optional[nd.Cell] = None, tap_sep: Optional[Tuple[nd.Cell, float]] = None,
                 gnd_connector: Optional[Dim3] = (2, 0.2, 1), taper_l: float = 0, end_ls: Tuple[float, ...] = (5,),
@@ -190,14 +185,9 @@ class AIMNazca:
 
     def nems_anchor(self, fin_spring_dim: Dim2 = (100, 0.15), shuttle_dim: Dim2 = (50, 2),
                     top_spring_dim: Dim2 = None, straight_connector: Optional[Dim2] = (0.25, 1),
-<<<<<<< HEAD
                     tether_connector: Optional[Dim3] = (2.5, 0.5, 45, 5, 1),
                     pos_electrode_dim: Optional[Dim3] = (90, 4, 2),
                     neg_electrode_dim: Optional[Dim2] = (3, 5), dope_expand: float = 0.25, attach_comb: bool = False,
-=======
-                    loop_connector: Optional[Dim3] = (50, 0.5, 0.15), pos_electrode_dim: Optional[Dim3] = (90, 4, 1.5),
-                    neg_electrode_dim: Optional[Dim2] = (3, 5), dope_expand: float = 0.25,
->>>>>>> wip: adjusted nems ps and anchor based on sims, adjusted amarks
                     dope_grow: float = 0.1, name: str = 'nems_anchor'):
         c = NemsAnchor(fin_spring_dim=fin_spring_dim, shuttle_dim=shuttle_dim,
                        top_spring_dim=top_spring_dim, straight_connector=straight_connector,
@@ -291,7 +281,7 @@ class AIMNazca:
 
             i_l = 0
             l_device = self.waveguide_ic.strt(lower_arm[0]).put() if isinstance(lower_arm[0], (float, int)) else \
-            lower_arm[0].put()
+                lower_arm[0].put()
             if bool(set(pins_to_raise) & set(l_device.pin)):  # using this to sqush nazca yelling
                 lower_pins = [f'pos0_l_{i_l}', f'pos1_l_{i_l}', f'gnd0_l_{i_l}', f'gnd1_l_{i_l}']
                 l_device.raise_pins(pins_to_raise, lower_pins)
@@ -299,7 +289,7 @@ class AIMNazca:
             nd.Pin('a0').put(l_device.pin['a0'])
             for lower_device in lower_arm[1:]:
                 l_device = self.waveguide_ic.strt(lower_device).put() if isinstance(lower_device, (
-                float, int)) else lower_device.put()
+                    float, int)) else lower_device.put()
                 if bool(set(pins_to_raise) & set(l_device.pin)):
                     lower_pins = [f'pos0_l_{i_l}', f'pos1_l_{i_l}', f'gnd0_l_{i_l}', f'gnd1_l_{i_l}']
                     l_device.raise_pins(pins_to_raise, lower_pins)
@@ -307,7 +297,7 @@ class AIMNazca:
 
             i_u = 0
             u_device = self.waveguide_ic.strt(upper_arm[0]).put(0, interport_w, flip=True) if isinstance(upper_arm[0], (
-            float, int)) else upper_arm[0].put(0, interport_w, flip=True)
+                float, int)) else upper_arm[0].put(0, interport_w, flip=True)
             if bool(set(pins_to_raise) & set(u_device.pin)):
                 upper_pins = [f'pos0_u_{i_u}', f'pos1_u_{i_u}', f'gnd0_u_{i_u}', f'gnd1_u_{i_u}']
                 u_device.raise_pins(pins_to_raise, upper_pins)
@@ -315,7 +305,7 @@ class AIMNazca:
             nd.Pin('a1').put(u_device.pin['a0'])
             for upper_device in upper_arm[1:]:
                 u_device = self.waveguide_ic.strt(upper_device).put(flip=True) if isinstance(upper_device, (
-                float, int)) else upper_device.put(flip=True)
+                    float, int)) else upper_device.put(flip=True)
                 if bool(set(pins_to_raise) & set(u_device.pin)):
                     upper_pins = [f'pos0_u_{i_u}', f'pos1_u_{i_u}', f'gnd0_u_{i_u}', f'gnd1_u_{i_u}']
                     u_device.raise_pins(pins_to_raise, upper_pins)
