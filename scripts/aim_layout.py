@@ -9,18 +9,18 @@ from dphox.design.component import cubic_taper
 from datetime import date
 from tqdm import tqdm
 
-# chip = AIMNazca(
-#     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
-#     waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
-#     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
-# )
+chip = AIMNazca(
+    passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
+    waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
+    active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
+)
 
 # #Please leave this so Nate can run this quickly
-chip = AIMNazca(
-    passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
-    waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
-    active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
-)
+# chip = AIMNazca(
+#     passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
+#     waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
+#     active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
+# )
 
 # chip params
 
@@ -56,7 +56,7 @@ pull_in_phaseshift_l = 50
 test_tdc_radius = 10
 test_tdc_bend_dim = test_tdc_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
 mesh_interport_w = 50
-mesh_phaseshift_l = 100
+mesh_phaseshift_l = 90
 detector_route_loop = (20, 30, 40)  # height, length, relative starting x for loops around detectors
 tapline_x_start = 600
 # x for the 8 taplines, numpy gives errors for some reason, so need to use raw python
@@ -80,13 +80,12 @@ mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
 tap_detector = chip.bidirectional_tap(10, mesh_bend=True)
 pull_apart_anchor = chip.nems_anchor()
 pull_apart_anchor_comb = chip.nems_anchor(attach_comb=True)
-pull_in_anchor = chip.nems_anchor(shuttle_dim=(40, 5), fin_spring_dim=(50, 0.15),
+pull_in_anchor = chip.nems_anchor(shuttle_dim=(40, 5), fin_dim=(50, 0.15),
                                   pos_electrode_dim=None, neg_electrode_dim=None)
 tdc_anchor = chip.nems_anchor(shuttle_dim=(test_tdc_interaction_l, 5),
                               pos_electrode_dim=None, neg_electrode_dim=None)
 tdc = chip.nems_tdc(anchor=tdc_anchor, bend_dim=(test_tdc_radius, test_tdc_bend_dim))
 gnd_wg = chip.gnd_wg()
-gnd_wg_pull_apart = chip.gnd_wg(wg_taper=(0, -0.08), symmetric=True)
 ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap_detector, sep))
 ps_no_anchor = chip.nems_ps()
 alignment_mark = chip.alignment_mark()
@@ -1040,6 +1039,6 @@ with nd.Cell('aim_layout') as aim_layout:
     chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
                        -standard_grating_interport + edge_shift_dim[1])
 
-# nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly
-nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+# nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])

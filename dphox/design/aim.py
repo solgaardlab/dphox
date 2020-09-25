@@ -121,7 +121,7 @@ class AIMNazca:
                 nd.Pin('b0').put(ps.pin['b0'])
         return cell
 
-    def metal_box(self, top_anchor: nd.Instance, bottom_anchor: nd.Instance, length: float, extra_length: float = 15):
+    def metal_box(self, top_anchor: nd.Instance, bottom_anchor: nd.Instance, length: float, extra_length: float = 8):
         has_c1 = 'c1' in top_anchor.pin
         m2_radius = (top_anchor.pin['c0'].y - bottom_anchor.pin['c0'].y) / 2
         self.m2_ic.strt(length / 2 + extra_length * has_c1).put(top_anchor.pin['c0'])
@@ -151,11 +151,9 @@ class AIMNazca:
 
     def gnd_wg(self, waveguide_w: float = 0.48, length: float = 13, gnd_contact_dim: Optional[Dim2] = (2, 2),
                rib_brim_w: float = 1.5, gnd_connector_dim: Optional[Dim2] = (1, 2),
-               flip: bool = False, dope_grow: float = 0.25, symmetric: bool = False, wg_taper: Optional[Tuple[float, ...]] = None,
-               name='gnd_wg') -> nd.Cell:
+               flip: bool = False, dope_grow: float = 0.25, name='gnd_wg') -> nd.Cell:
         c = GndWaveguide(waveguide_w=waveguide_w, length=length, gnd_contact_dim=gnd_contact_dim,
-                         rib_brim_w=rib_brim_w, gnd_connector_dim=gnd_connector_dim, flip=flip,
-                         wg_taper=wg_taper, symmetric_taper=False, symmetric=symmetric)
+                         rib_brim_w=rib_brim_w, gnd_connector_dim=gnd_connector_dim, flip=flip)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
         dopes = list(zip([p.offset(dope_grow) for p in c.pads], ('pppam',)))
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
@@ -183,14 +181,14 @@ class AIMNazca:
             nd.put_stub()
         return autoroute_turn
 
-    def nems_anchor(self, fin_spring_dim: Dim2 = (100, 0.15), shuttle_dim: Dim2 = (50, 2),
+    def nems_anchor(self, fin_dim: Dim2 = (100, 0.15), shuttle_dim: Dim2 = (50, 2),
                     top_spring_dim: Dim2 = None, straight_connector: Optional[Dim2] = (0.25, 1),
                     tether_connector: Optional[Dim3] = (2.5, 0.5, 45, 5, 1),
                     pos_electrode_dim: Optional[Dim3] = (90, 4, 2),
                     neg_electrode_dim: Optional[Dim2] = (3, 5), dope_expand: float = 0.25, attach_comb: bool = False,
                     dope_grow: float = 0.1, name: str = 'nems_anchor'):
-        c = NemsAnchor(fin_spring_dim=fin_spring_dim, shuttle_dim=shuttle_dim,
-                       top_spring_dim=top_spring_dim, straight_connector=straight_connector,
+        c = NemsAnchor(fin_dim=fin_dim, shuttle_dim=shuttle_dim,
+                       spring_dim=top_spring_dim, straight_connector=straight_connector,
                        tether_connector=tether_connector, pos_electrode_dim=pos_electrode_dim,
                        neg_electrode_dim=neg_electrode_dim, attach_comb=attach_comb,
                        include_fin_dummy=True)
