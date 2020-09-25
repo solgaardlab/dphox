@@ -80,7 +80,7 @@ class AIMNazca:
                 tdc = device.nazca_cell('tdc').put()
                 top_anchor = anchor.put(tdc.pin['t0'])
                 bottom_anchor = anchor.put(tdc.pin['t1'], flip=True)
-                self.metal_box(top_anchor, bottom_anchor, interaction_l, extra_length=metal_extension)
+                self.metal_box(top_anchor, bottom_anchor, interaction_l, m2_extension=metal_extension)
                 nd.Pin('a0').put(tdc.pin['a0'])
                 nd.Pin('b0').put(tdc.pin['b0'])
                 nd.Pin('a1').put(tdc.pin['a1'])
@@ -114,7 +114,7 @@ class AIMNazca:
             ps = device.nazca_cell('ps').put()
             top_anchor = anchor.put(ps.pin['fin0'])
             bottom_anchor = anchor.put(ps.pin['fin1'], flip=True)
-            self.metal_box(top_anchor, bottom_anchor, phaseshift_l, extra_length=metal_extension)
+            self.metal_box(top_anchor, bottom_anchor, phaseshift_l, m2_extension=metal_extension)
             nd.Pin('a0').put(ps.pin['a0'])
             if tap_sep is not None:
                 tap, sep = tap_sep
@@ -125,16 +125,16 @@ class AIMNazca:
                 nd.Pin('b0').put(ps.pin['b0'])
         return cell
 
-    def metal_box(self, top_anchor: nd.Instance, bottom_anchor: nd.Instance, length: float, extra_length: float = 4):
+    def metal_box(self, top_anchor: nd.Instance, bottom_anchor: nd.Instance, length: float, m2_extension: float = 4):
         has_c1 = 'c1' in top_anchor.pin
         m2_radius = (top_anchor.pin['c0'].y - bottom_anchor.pin['c0'].y) / 2
-        self.m2_ic.strt(length / 2 + extra_length * has_c1).put(top_anchor.pin['c0'])
+        self.m2_ic.strt(length / 2 + m2_extension * has_c1).put(top_anchor.pin['c0'])
         self.m2_ic.bend(m2_radius, 180).put()
-        x = self.m2_ic.strt(length + 2 * extra_length * has_c1).put()
+        x = self.m2_ic.strt(length + 2 * m2_extension * has_c1).put()
         nd.Pin('pos0').put(x.pin['a0'])
         nd.Pin('pos1').put(x.pin['b0'])
         self.m2_ic.bend(m2_radius, 180).put()
-        self.m2_ic.strt(length / 2 + extra_length * has_c1).put()
+        self.m2_ic.strt(length / 2 + m2_extension * has_c1).put()
         if has_c1:
             interpad_distance_x = top_anchor.pin['c1'].x - top_anchor.pin['c2'].x
             interpad_distance_y = top_anchor.pin['c2'].y - bottom_anchor.pin['c2'].y + 2

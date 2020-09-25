@@ -380,13 +380,14 @@ def tether_ps(phaseshift_l=tether_phaseshift_l, taper_l=5, taper_change=-0.05):
 def tether_tdc(interaction_l=tether_interaction_l, taper_l=5, taper_change=-0.05):
     anchor_tether = chip.nems_anchor(
         fin_dim=(interaction_l, 0.4), shuttle_dim=(5, 2), spring_dim=(interaction_l + 5, 0.22), straight_connector=None,
-        tether_connector=(2, 1, 0.5, 1), pos_electrode_dim=(interaction_l, 4, 1.5), neg_electrode_dim=(3, 3),
+        tether_connector=(2, 1, 0.5, 1), pos_electrode_dim=(interaction_l - 5, 4, 1.5), neg_electrode_dim=(3, 3),
         include_fin_dummy=False, name=f'anchor_tether_tdc_{interaction_l}_{taper_l}_{taper_change}'
     )
     return chip.nems_tdc(anchor=anchor_tether, interaction_l=interaction_l,
                          dc_taper_ls=(taper_l,), dc_taper=(cubic_taper(taper_change),),
                          beam_taper=(cubic_taper(taper_change),), clearout_box_dim=(interaction_l + 5, 12.88),
-                         name=f'pull_apart_tdc_{interaction_l}_{taper_l}_{taper_change}', dc_end_l=5)
+                         name=f'pull_apart_tdc_{interaction_l}_{taper_l}_{taper_change}', dc_end_l=5,
+                         metal_extension=6)
 
 
 tether_column = [
