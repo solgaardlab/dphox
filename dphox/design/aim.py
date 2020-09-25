@@ -98,11 +98,12 @@ class AIMNazca:
                 end_taper: Optional[Tuple[Tuple[float, ...], ...]] = ((0, -0.08),), gnd_connector_idx: int = -1,
                 metal_extension: float = 10,
                 name: str = 'nems_ps') -> nd.Cell:
-        c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
-                          num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
-                          fin_adiabatic_bend_dim=fin_adiabatic_bend_dim, gnd_connector_idx=gnd_connector_idx,
-                          gap_taper=gap_taper, wg_taper=wg_taper, end_ls=end_ls, end_taper=end_taper,
-                          taper_l=taper_l, boundary_taper=boundary_taper, gnd_connector=gnd_connector)
+        # TODO pivot back to LateralNemsPS if there's an issue here
+        c = LateralNemsPSSlotOption(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
+                                  num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
+                                  fin_adiabatic_bend_dim=fin_adiabatic_bend_dim, gnd_connector_idx=gnd_connector_idx,
+                                  gap_taper=gap_taper, wg_taper=wg_taper, end_ls=end_ls, end_taper=end_taper,
+                                  taper_l=taper_l, boundary_taper=boundary_taper, gnd_connector=gnd_connector)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
         clearout = c.clearout_box(clearout_layer='clearout', clearout_etch_stop_layer='snam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)

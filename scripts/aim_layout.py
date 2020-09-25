@@ -38,6 +38,7 @@ n_pads_eu = (344, 12)
 n_pads_bp = (70, 3)
 n_test = 17
 dc_radius = 15
+aggressive_dc_radius = 5
 pdk_dc_radius = 25
 sep = 30
 gnd_length = 15
@@ -50,7 +51,16 @@ waveguide_w = 0.48
 wg_filler = 15
 test_interport_w = 50
 test_gap_w = 0.3
+test_gap_w_aggressive = 0.15
+test_gap_w_short = 0.25
+test_gap_w_invdes = 0.6
+test_interaction_l_short = 22
+test_interaction_l_invdes = 3.72
+test_interaction_l_aggressive = 9
 test_bend_dim = test_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
+test_bend_dim_short = test_interport_w / 2 - test_gap_w_short / 2 - waveguide_w / 2
+test_bend_dim_aggressive = test_interport_w / 2 - test_gap_w_aggressive / 2 - waveguide_w / 2
+test_bend_dim_invdes = test_interport_w / 2 - test_gap_w_invdes / 2 - waveguide_w / 2
 test_tdc_interport_w = 50
 test_tdc_interaction_l = 100
 test_tdc_interaction_l_extr = 50
@@ -59,7 +69,7 @@ test_tdc_radius = 10
 test_tdc_bend_dim = test_tdc_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
 mesh_interport_w = 50
 mesh_phaseshift_l = 90
-tether_phaseshift_l = 30
+tether_phaseshift_l = 75
 tether_interaction_l = 100
 detector_route_loop = (20, 30, 40)  # height, length, relative starting x for loops around detectors
 tapline_x_start = 600
@@ -80,6 +90,12 @@ via_y = -770
 # TODO(Nate): Double check the defaults of these parameters
 
 dc = chip.custom_dc(bend_dim=(dc_radius, test_bend_dim))[0]
+dc_short = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_short), gap_w=test_gap_w_aggressive,
+                               interaction_l=test_interaction_l_aggressive)[0]
+dc_aggressive = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_aggressive), gap_w=test_gap_w_aggressive,
+                               interaction_l=test_interaction_l_aggressive)[0]
+dc_invdes = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes), gap_w=test_gap_w_invdes,
+                           interaction_l=test_interaction_l_invdes)[0]
 mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
 tap_detector = chip.bidirectional_tap(10, mesh_bend=True)
 pull_apart_anchor = chip.nems_anchor()
@@ -377,6 +393,22 @@ def tether_ps(phaseshift_l=tether_phaseshift_l, taper_l=5, taper_change=-0.05):
     )
 
 
+def tether_ps_slot(phaseshift_l=tether_phaseshift_l, taper_l=5, taper_change=-0.3):
+    anchor_tether = chip.nems_anchor(
+        fin_dim=(phaseshift_l, 0.4), shuttle_dim=(10, 2), spring_dim=(phaseshift_l + 10, 0.22), straight_connector=None,
+        tether_connector=(2, 1, 0.5, 1), pos_electrode_dim=(phaseshift_l, 4, 1.5), neg_electrode_dim=(3, 3),
+        include_fin_dummy=False, name=f'anchor_tether_ps_{phaseshift_l}_{taper_l}_{taper_change}',
+    )
+    return chip.mzi_arms(
+        [chip.nems_ps(end_ls=(5, 5), end_taper=((0.0,), (0.0, -0.08),), taper_l=taper_l, boundary_taper=cubic_taper(taper_change),
+                      wg_taper=cubic_taper(-0.4), gap_taper=cubic_taper(-0.4), gnd_connector_idx=0,
+                      phaseshift_l=phaseshift_l, anchor=anchor_tether, clearout_box_dim=(phaseshift_l + 5, 12.88))],
+        [tether_phaseshift_l + 10],
+        interport_w=test_interport_w,
+        name=f'tether_slot_{phaseshift_l}_{taper_l}_{taper_change}'
+    )
+
+
 def tether_tdc(interaction_l=tether_interaction_l, taper_l=5, taper_change=-0.05):
     anchor_tether = chip.nems_anchor(
         fin_dim=(interaction_l, 0.4), shuttle_dim=(5, 2), spring_dim=(interaction_l + 5, 0.22), straight_connector=None,
@@ -389,22 +421,10 @@ def tether_tdc(interaction_l=tether_interaction_l, taper_l=5, taper_change=-0.05
                          name=f'pull_apart_tdc_{interaction_l}_{taper_l}_{taper_change}', dc_end_l=5,
                          metal_extension=6)
 
-
-tether_column = [
-    tether_ps(psl, taper_l, taper_change) for psl in (60, 80) for taper_l, taper_change in ((5, -0.05), (10, -0.1), (15, -0.1))
-] + [
-    tether_tdc(il, taper_l, taper_change) for il in (80, 100) for taper_l, taper_change in ((10, -0.1), (15, -0.1), (20, -0.16))
-    # Nate: Making these more agreesive b/c the waveguide width it's thin enough, 400nm needs to be a test pt, actually the taper chagnes needed to be doubled
-] + [
-    tether_tdc(il, taper_l, taper_change) for il in (100,) for taper_l, taper_change in ((20, -0.32), (20, -0.52))
-
-]
-
-print(len(tether_column))
-
 # testing tap lines
 testing_tap_line = chip.tap_line(n_test)
 testing_tap_line_tdc = chip.tap_line(n_test, inter_wg_dist=200)
+testing_tap_line_aggressive = chip.tap_line(n_test, inter_wg_dist=280)
 
 # make sure there are 17 structures per column
 ps_columns = [
@@ -421,42 +441,37 @@ tdc_columns = [
 # make sure there are 17 structures per column
 vip_columns = [reference_devices]
 
+tether_column = [
+    tether_ps(psl, taper_l, taper_change) for psl in (60, 80) for taper_l, taper_change in ((5, -0.05), (10, -0.1), (15, -0.1))
+] + [
+    tether_tdc(il, taper_l, taper_change) for il in (80, 100) for taper_l, taper_change in ((10, -0.1), (15, -0.1), (20, -0.16))
+    # Nate: Making these more agreesive b/c the waveguide width it's thin enough, 400nm needs to be a test pt, actually the taper chagnes needed to be doubled
+] + [
+    tether_tdc(il, taper_l, taper_change) for il in (100,) for taper_l, taper_change in ((20, -0.32), (20, -0.52))
+
+]
+
+aggressive_column = [
+    tether_ps_slot(tether_phaseshift_l, taper_length)
+    for taper_length in (5, 10) for taper_change in (-0.25, -0.3)  # slot variations
+] + [chip.mzi_arms([chip.nems_ps(anchor=pull_apart_anchor)], [tether_phaseshift_l + 10]) for _ in range(2)] + [
+    chip.mzi_arms([chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict())], [pull_in_phaseshift_l + 10]) for _ in range(2)
+]
+
+# TODO(sunil): MANUAL insert test structures
+aggressive_column_dcs = [dc_short] * 4 + [dc_aggressive, dc_invdes, dc_aggressive, dc_invdes]
+
 gridsearches = []
 
 # TODO(Nate): Match this to the fill of the test array
 # Number of test structures in each tap line, comment this out when not needed (when all are n_test)
 gridsearch_ls = [len(ps_columns[0]), len(ps_columns[1]), len(tdc_columns[0]), len(tdc_columns[1]),
-                 len(vip_columns[0]), len(tether_column), len(tdc_columns[1]), len(tdc_columns[0])]
+                 len(vip_columns[0]), len(tether_column), len(tdc_columns[1]), len(aggressive_column)]
 
 print(gridsearch_ls)
 
 
 # test structures between the meshes
-
-middle_mesh_pull_apart = [
-    chip.mzi_node_test(chip.mzi_arms([ps], [1], interport_w=mesh_interport_w), dc, include_input_ps=False,
-                       name=f'meshtest_mzi_{ps.name}') for ps in (chip.nems_ps(anchor=pull_apart_anchor),
-                                                                  chip.nems_ps(anchor=pull_apart_anchor,
-                                                                               **pull_apart_taper_dict(-0.05, 30)))
-]
-
-
-middle_mesh_pull_in = [
-    chip.mzi_node_test(chip.mzi_arms([delay_line_50, ps, gnd_wg],
-                                     [delay_line_200, gnd_wg],
-                                     interport_w=mesh_interport_w),
-                       dc, include_input_ps=False,
-                       name=f'meshtest_mzi_{ps.name}') for ps in (chip.nems_ps(anchor=pull_in_anchor,
-                                                                               **pull_in_dict(pull_in_phaseshift_l)),
-                                                                  chip.nems_ps(anchor=pull_in_anchor,
-                                                                               **pull_in_dict(pull_in_phaseshift_l,
-                                                                                              -0.05, 20)))
-]
-middle_mesh_tdc = [chip.nems_tdc(anchor=pull_apart_anchor, metal_extension=2.5), chip.nems_tdc(anchor=tdc_anchor),
-                   chip.nems_tdc(anchor=pull_apart_anchor, metal_extension=2.5, **taper_dict_tdc(-0.2, 40))]
-
-middle_mesh_test_structures = middle_mesh_pull_apart + middle_mesh_pull_in + middle_mesh_tdc
-
 
 def autoroute_node_detector(p1, n2, n1, p2,
                             r1=8, r2=4, r3=4, r4=8,
@@ -605,6 +620,54 @@ with nd.Cell(f'gridsearch_tether') as gridsearch:
     nd.Pin('in').put(line.pin['in'])
     nd.Pin('out').put(line.pin['out'])
 gridsearches.append(gridsearch)
+
+
+# aggressive gridsearch
+with nd.Cell(f'gridsearch_aggressive') as gridsearch:
+    line = testing_tap_line_aggressive.put()
+    for i, device in enumerate(zip(aggressive_column, aggressive_column_dcs)):
+        ps, dc = device
+        dev = chip.mzi_node_test(ps, dc, include_input_ps=False,
+                                 detector=detector,
+                                 name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
+        autoroute_node_detector(dev.pin['p1'], dev.pin['n2'], dev.pin['n1'], dev.pin['p2'])
+        nd.Pin(f'd{i}').put(dev.pin['b0'])  # this is useful for autorouting the gnd path
+        if 'pos1' in dev.pin:
+            nd.Pin(f'pos{i}').put(dev.pin['pos1'])
+        if 'gnd0' in dev.pin:
+            nd.Pin(f'gnd{i}').put(dev.pin['gnd0'])
+    nd.Pin('in').put(line.pin['in'])
+    nd.Pin('out').put(line.pin['out'])
+aggressive_gridsearch = gridsearch
+
+
+
+# test structures between the meshes
+
+
+middle_mesh_pull_apart = [
+    chip.mzi_node_test(chip.mzi_arms([ps], [1], interport_w=mesh_interport_w), dc, include_input_ps=False,
+                       name=f'meshtest_mzi_{ps.name}') for ps in (chip.nems_ps(anchor=pull_apart_anchor),
+                                                                  chip.nems_ps(anchor=pull_apart_anchor,
+                                                                               **pull_apart_taper_dict(-0.05, 30)))
+]
+
+
+middle_mesh_pull_in = [
+    chip.mzi_node_test(chip.mzi_arms([delay_line_50, ps, gnd_wg],
+                                     [delay_line_200, gnd_wg],
+                                     interport_w=mesh_interport_w),
+                       dc, include_input_ps=False,
+                       name=f'meshtest_mzi_{ps.name}') for ps in (chip.nems_ps(anchor=pull_in_anchor,
+                                                                               **pull_in_dict(pull_in_phaseshift_l)),
+                                                                  chip.nems_ps(anchor=pull_in_anchor,
+                                                                               **pull_in_dict(pull_in_phaseshift_l,
+                                                                                              -0.05, 20)))
+]
+middle_mesh_tdc = [chip.nems_tdc(anchor=pull_apart_anchor), chip.nems_tdc(anchor=tdc_anchor),
+                   chip.nems_tdc(anchor=pull_apart_anchor, **taper_dict_tdc(-0.2, 40))]
+
+middle_mesh_test_structures = middle_mesh_pull_apart + middle_mesh_pull_in + middle_mesh_tdc
 
 # gnd pad (testing side)
 with nd.Cell('gnd_pad') as gnd_pad:
@@ -994,7 +1057,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
 with nd.Cell('test_chiplet') as test_chiplet:
     # place test taplines down at non-overlapping locations
     detector_x = []
-    test_structures = gridsearches + gridsearches[2:4]  # TODO: change this once all 8 columns are added
+    test_structures = gridsearches + gridsearches[2:3] + [aggressive_gridsearch]  # TODO: change this once all 8 columns are added
     ga = grating_array.put(*grating_array_xy, -90)
     gs_list = []
     for i, item in enumerate(zip(tapline_x, test_structures)):
