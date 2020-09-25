@@ -59,13 +59,14 @@ class AIMNazca:
                  bend_dim: Dim2 = (10, 24.66), pad_dim: Dim4 = (2, 2, 2, 0.75), anchor: nd.Cell = None,
                  use_radius: bool = True, clearout_box_dim: Dim2 = (100, 2.5), dc_taper_ls: Tuple[float, ...] = None,
                  dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5,
-                 dope_grow: float = 0.25, dope_expand: float = 0.1,
-                 metal_extension: float = 3,
+                 dope_grow: float = 0.25, dope_expand: float = 0.1, fin_adiabatic_bend_dim: Optional[Dim2] = (2, 1),
+                 dc_end_l: float = 0, metal_extension: float = 3,
                  diff_ps: Optional[nd.Cell] = None, name: str = 'nems_tdc') -> nd.Cell:
         c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
                            interaction_l=interaction_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
                            bend_dim=bend_dim, pad_dim=pad_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
-                           dc_taper=dc_taper, beam_taper=beam_taper)
+                           dc_taper=dc_taper, beam_taper=beam_taper, fin_adiabatic_bend_dim=fin_adiabatic_bend_dim,
+                           dc_end_l=dc_end_l)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
         clearout = c.clearout_box(clearout_layer='clearout', clearout_etch_stop_layer='snam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
@@ -91,7 +92,7 @@ class AIMNazca:
                 gap_w: float = 0.10, pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (90, 13.8),
                 clearout_etch_stop_grow: float = 0.5, num_taper_evaluations: int = 100,
                 anchor: Optional[nd.Cell] = None, tap_sep: Optional[Tuple[nd.Cell, float]] = None,
-                gnd_connector: Optional[Dim3] = (2, 0.2, 1), taper_l: float = 0, end_ls: Tuple[float, ...] = (5,),
+                gnd_connector: Optional[Dim3] = (2, 0.2, 3), taper_l: float = 0, end_ls: Tuple[float, ...] = (5,),
                 gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
                 boundary_taper: Optional[Tuple[float, ...]] = None, fin_adiabatic_bend_dim: Optional[Dim2] = (2, 1),
                 end_taper: Optional[Tuple[Tuple[float, ...], ...]] = ((0, -0.08),), gnd_connector_idx: int = -1,

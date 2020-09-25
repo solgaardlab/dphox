@@ -9,18 +9,18 @@ from dphox.design.component import cubic_taper
 from datetime import date
 from tqdm import tqdm
 
-# chip = AIMNazca(
-#     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
-#     waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
-#     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
-# )
+chip = AIMNazca(
+    passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
+    waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
+    active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
+)
 
 # #Please leave this so Nate can run this quickly
-chip = AIMNazca(
-    passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
-    waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
-    active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
-)
+# chip = AIMNazca(
+#     passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
+#     waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
+#     active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
+# )
 
 # chip params
 
@@ -379,21 +379,23 @@ def tether_ps(phaseshift_l=tether_phaseshift_l, taper_l=5, taper_change=-0.05):
 
 def tether_tdc(interaction_l=tether_interaction_l, taper_l=5, taper_change=-0.05):
     anchor_tether = chip.nems_anchor(
-        fin_dim=(interaction_l, 0.4), shuttle_dim=(10, 2), spring_dim=(interaction_l, 0.22), straight_connector=None,
-        tether_connector=(3, 1, 0.5, 1), pos_electrode_dim=(interaction_l, 4, 1.5), neg_electrode_dim=(3, 3),
+        fin_dim=(interaction_l, 0.4), shuttle_dim=(5, 2), spring_dim=(interaction_l + 5, 0.22), straight_connector=None,
+        tether_connector=(2, 1, 0.5, 1), pos_electrode_dim=(interaction_l, 4, 1.5), neg_electrode_dim=(3, 3),
         include_fin_dummy=False, name=f'anchor_tether_tdc_{interaction_l}_{taper_l}_{taper_change}'
     )
     return chip.nems_tdc(anchor=anchor_tether, interaction_l=interaction_l,
                          dc_taper_ls=(taper_l,), dc_taper=(cubic_taper(taper_change),),
-                         beam_taper=(cubic_taper(taper_change),), clearout_box_dim=(interaction_l, 12.88),
-                         name=f'pull_apart_tdc_{interaction_l}_{taper_l}_{taper_change}')
+                         beam_taper=(cubic_taper(taper_change),), clearout_box_dim=(interaction_l + 5, 12.88),
+                         name=f'pull_apart_tdc_{interaction_l}_{taper_l}_{taper_change}', dc_end_l=5)
 
 
 tether_column = [
-    tether_ps(psl, taper_l, taper_change) for psl in (40, 60) for taper_l, taper_change in ((5, -0.05), (10, -0.1))
+    tether_ps(psl, taper_l, taper_change) for psl in (60, 80) for taper_l, taper_change in ((5, -0.05), (10, -0.1), (15, -0.1))
 ] + [
-    tether_tdc(il, taper_l, taper_change) for il, taper_change in ((100, -0.05), (80, -0.1)) for taper_l in range(5, 10)
+    tether_tdc(il, taper_l, taper_change) for il in (80, 100) for taper_l, taper_change in ((10, -0.05), (15, -0.05), (20, -0.08))
 ]
+
+print(len(tether_column))
 
 # testing tap lines
 testing_tap_line = chip.tap_line(n_test)
@@ -552,7 +554,7 @@ for col, vip_column in enumerate(vip_columns):
 with nd.Cell(f'gridsearch_tether') as gridsearch:
     line = testing_tap_line.put()
     for i, device in enumerate(tether_column):
-        if i < 4:
+        if i < 6:
             dev = chip.mzi_node_test(device, dc, include_input_ps=False,
                                      detector=detector,
                                      name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
@@ -1044,6 +1046,6 @@ with nd.Cell('aim_layout') as aim_layout:
     chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
                        -standard_grating_interport + edge_shift_dim[1])
 
-# nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly
-nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+# nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])

@@ -124,11 +124,11 @@ class LateralNemsPS(GroupedPattern):
 
 class LateralNemsTDC(GroupedPattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, dc_gap_w: float, beam_gap_w: float, bend_dim: Dim2,
-                 interaction_l: float, dc_taper_ls: Tuple[float, ...] = None,
+                 interaction_l: float, fin_adiabatic_bend_dim: Dim2, dc_taper_ls: Tuple[float, ...] = None,
                  dc_taper: Optional[Tuple[Tuple[float, ...]]] = None,
                  beam_taper: Optional[Tuple[Tuple[float, ...]]] = None,
                  boundary_taper: Optional[Tuple[Tuple[float, ...]]] = None,
-                 end_bend_dim: Optional[Dim3] = None,
+                 end_bend_dim: Optional[Dim3] = None, dc_end_l: float = 0,
                  pad_dim: Optional[Dim4] = None, use_radius: bool = True):
         """NEMS tunable directional coupler
 
@@ -144,8 +144,10 @@ class LateralNemsTDC(GroupedPattern):
             beam_taper: tapering of the lower boundary of the fin
             boundary_taper: tapering of the upper boundary of the fin (currently not implemented)
             end_bend_dim: If specified, places an additional end bend (see DC)
+            dc_end_l: End length for the directional coupler
             pad_dim: If specified, silicon gnd pad xy size followed by connector dimensions (distance to guide, width)
             use_radius: use radius (see DC)
+             fin_adiabatic_bend_dim: Dim2,
         """
         self.waveguide_w = waveguide_w
         self.nanofin_w = nanofin_w
@@ -154,10 +156,13 @@ class LateralNemsTDC(GroupedPattern):
         self.beam_gap_w = beam_gap_w
         self.pad_dim = pad_dim
         self.use_radius = use_radius
+        self.dc_end_l = dc_end_l
+        self.dc_taper = dc_taper
+        self.dc_taper_ls = dc_taper_ls
 
         dc = DC(bend_dim=bend_dim, waveguide_w=waveguide_w, gap_w=dc_gap_w,
                 coupler_boundary_taper_ls=dc_taper_ls, coupler_boundary_taper=dc_taper,
-                interaction_l=interaction_l, end_bend_dim=end_bend_dim, use_radius=use_radius)
+                interaction_l=interaction_l + 2 * dc_end_l, end_bend_dim=end_bend_dim, use_radius=use_radius)
         connectors, pads, gnd_connections, rib_brim = [], [], [], []
 
         nanofin_y = nanofin_w / 2 + dc_gap_w / 2 + waveguide_w + beam_gap_w
@@ -186,7 +191,16 @@ class LateralNemsTDC(GroupedPattern):
             # nanofins = [Pattern(poly) for poly in (boundary - gap_path)]
             ######### NATE: trying to taper center of TDC ###################
 
-        patterns = [dc] + nanofins + connectors + pads
+        nanofin_adiabatic = Pattern(Path(nanofin_w).sbend(fin_adiabatic_bend_dim))
+        nanofin_height = (nanofin_w / 2 + beam_gap_w + waveguide_w) + dc_gap_w / 2
+        nanofin_ends = GroupedPattern(
+            nanofin_adiabatic.copy.translate(nanofins[0].bounds[2], nanofin_height),
+            nanofin_adiabatic.copy.flip().translate(nanofins[1].bounds[2], -nanofin_height),
+            nanofin_adiabatic.copy.flip(horiz=True).translate(nanofins[0].bounds[0], nanofin_height),
+            nanofin_adiabatic.copy.flip(horiz=True).flip().translate(nanofins[1].bounds[0], -nanofin_height)
+        ).align(dc)
+
+        patterns = [dc] + nanofins + connectors + pads + [nanofin_ends]
 
         # TODO(Nate): make the brim connector to ground standard for 220nm, rework the taper helpers
         if pad_dim is not None:
