@@ -55,7 +55,7 @@ test_gap_w_aggressive = 0.15
 test_gap_w_short = 0.25
 test_gap_w_invdes = 0.6
 test_interaction_l_short = 22
-test_interaction_l_invdes = 3.72
+test_interaction_l_invdes = 5.72
 test_interaction_l_aggressive = 9
 test_bend_dim = test_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
 test_bend_dim_short = test_interport_w / 2 - test_gap_w_short / 2 - waveguide_w / 2
@@ -94,7 +94,7 @@ dc_short = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_short), 
                                interaction_l=test_interaction_l_aggressive)[0]
 dc_aggressive = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_aggressive), gap_w=test_gap_w_aggressive,
                                interaction_l=test_interaction_l_aggressive)[0]
-dc_invdes = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes), gap_w=test_gap_w_invdes,
+dc_invdes = chip.custom_dc_taper(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes), gap_w=test_gap_w_invdes,
                            interaction_l=test_interaction_l_invdes)[0]
 mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
 tap_detector = chip.bidirectional_tap(10, mesh_bend=True)

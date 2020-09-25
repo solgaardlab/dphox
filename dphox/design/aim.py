@@ -152,7 +152,7 @@ class AIMNazca:
             self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c1'].x, bottom_anchor.pin['c1'].y - 1, 90)
             self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c2'].x, bottom_anchor.pin['c2'].y - 1, 90)
             for pin in (top_anchor.pin['c1'], top_anchor.pin['c2'], bottom_anchor.pin['c1'], bottom_anchor.pin['c2']):
-                self.v1_via.put(pin)
+                self.v1_via_4.put(pin)
 
     def gnd_wg(self, waveguide_w: float = 0.48, length: float = 13, gnd_contact_dim: Optional[Dim2] = (2, 2),
                rib_brim_w: float = 1.5, gnd_connector_dim: Optional[Dim2] = (1, 2),
@@ -432,7 +432,7 @@ class AIMNazca:
             for i in range(n_pads[0]):
                 for j in range(n_pads[1]):
                     for k, pad in enumerate(pads):
-                        pad.put(i * pitch[0], j * pitch[1] + 5 * (k == 1) - 1 * (k == 3), 270)
+                        pad.put(i * pitch[0], j * pitch[1] + 5.2 * (k == 1) - 0.8 * (k == 3), 270)
                     if j == 0:
                         nd.Pin(f'o{i}').put(i * pitch[0], j * pitch[1], -90)
                     elif j == n_pads[1] - 1:
@@ -448,6 +448,12 @@ class AIMNazca:
                   interaction_l: float = 37.8, end_bend_dim: Optional[Dim3] = None,
                   use_radius: bool = True) -> Tuple[nd.Cell, nd.Cell]:
         dc = DC(bend_dim, waveguide_w, gap_w, interaction_l, (0,), None, end_bend_dim, use_radius)
+        return dc.nazca_cell('dc', layer='seam'), dc.upper_path.nazca_cell('bendy_dc_dummy', layer='seam')
+
+    def custom_dc_taper(self, waveguide_w: float = 0.48, bend_dim: Dim2 = (20, 50.78 / 2), gap_w: float = 0.3,
+                  interaction_l: float = 37.8, end_bend_dim: Optional[Dim3] = None,
+                  use_radius: bool = True, taper_ls= (1,), coupler_boundary_taper = (0, 0.02)) -> Tuple[nd.Cell, nd.Cell]:
+        dc = DC(bend_dim, waveguide_w, gap_w, interaction_l, taper_ls, coupler_boundary_taper, end_bend_dim, use_radius)
         return dc.nazca_cell('dc', layer='seam'), dc.upper_path.nazca_cell('bendy_dc_dummy', layer='seam')
 
     def pdk_dc(self, radius: float, interport_w: float) -> nd.Cell:
@@ -482,7 +488,7 @@ class AIMNazca:
                 self.waveguide_ic.strt(radius / 4).put()
                 self.waveguide_ic.bend(radius, angle=-90).put()
             pd0 = self.pdk_cells['cl_band_photodetector_digital'].put(flip=True)
-            self.v1_via.put(pd0.pin['p'])
+            self.v1_via_4.put(pd0.pin['p'])
             self.m1_ic.bend(4, 90).put(pd0.pin['p'])
             metal_route(self.m1_ic, level=1)
             self.m2_ic.bend(4, 90).put(pd0.pin['n'])
@@ -492,7 +498,7 @@ class AIMNazca:
                 self.waveguide_ic.strt(radius / 4).put()
                 self.waveguide_ic.bend(radius, angle=90).put()
             pd1 = self.pdk_cells['cl_band_photodetector_digital'].put()
-            self.v1_via.put(pd1.pin['p'])
+            self.v1_via_4.put(pd1.pin['p'])
             self.m1_ic.bend(4, -90).put(pd1.pin['p'])
             metal_route(self.m1_ic, level=1)
             self.m2_ic.bend(4, -90).put(pd1.pin['n'])
