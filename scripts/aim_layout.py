@@ -99,7 +99,7 @@ dc_short = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_short), 
 dc_aggressive = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_aggressive), gap_w=test_gap_w_aggressive,
                                interaction_l=test_interaction_l_aggressive)[0]
 dc_invdes = chip.custom_dc_taper(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes), gap_w=test_gap_w_invdes,
-                           interaction_l=test_interaction_l_invdes)[0]
+                                 interaction_l=test_interaction_l_invdes)[0]
 mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
 tap_detector = chip.bidirectional_tap(10, mesh_bend=True)
 pull_apart_anchor = chip.nems_anchor()
@@ -333,6 +333,36 @@ with nd.Cell(name='ref_dc') as ref_dc:
     nd.Pin('n2').put(d.pin['n'])
     dc_r.raise_pins(['a0', 'a1', 'b0', 'b1'])
 
+with nd.Cell(name='ref_dc_short') as ref_dc_short:
+    dc_r = dc_short.put()
+    d = detector.put(dc_r.pin['b1'], flip=True)
+    nd.Pin('p1').put(d.pin['p'])
+    nd.Pin('n1').put(d.pin['n'])
+    d = detector.put(dc_r.pin['b0'])
+    nd.Pin('p2').put(d.pin['p'])
+    nd.Pin('n2').put(d.pin['n'])
+    dc_r.raise_pins(['a0', 'a1', 'b0', 'b1'])
+
+with nd.Cell(name='ref_dc_invdes') as ref_dc_invdes:
+    dc_r = dc_invdes.put()
+    d = detector.put(dc_r.pin['b1'], flip=True)
+    nd.Pin('p1').put(d.pin['p'])
+    nd.Pin('n1').put(d.pin['n'])
+    d = detector.put(dc_r.pin['b0'])
+    nd.Pin('p2').put(d.pin['p'])
+    nd.Pin('n2').put(d.pin['n'])
+    dc_r.raise_pins(['a0', 'a1', 'b0', 'b1'])
+
+with nd.Cell(name='ref_dc_aggressive') as ref_dc_aggressive:
+    dc_r = dc_aggressive.put()
+    d = detector.put(dc_r.pin['b1'], flip=True)
+    nd.Pin('p1').put(d.pin['p'])
+    nd.Pin('n1').put(d.pin['n'])
+    d = detector.put(dc_r.pin['b0'])
+    nd.Pin('p2').put(d.pin['p'])
+    nd.Pin('n2').put(d.pin['n'])
+    dc_r.raise_pins(['a0', 'a1', 'b0', 'b1'])
+
 # Testing bend Radii 10,5,2.5,1
 
 
@@ -379,9 +409,9 @@ reference_devices = [
                        dc, include_input_ps=False,
                        detector=detector,
                        name='bare_mzi'),
-    dc_short,
-    dc_aggressive,
-    dc_invdes
+    ref_dc_short,
+    ref_dc_aggressive,
+    ref_dc_invdes
 ]
 
 bend_exp_names = [f'bends_{br}_{i}' for i in [2, 4, 8] for br in [1, 2.5, 5]]
