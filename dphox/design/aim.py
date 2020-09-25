@@ -152,7 +152,7 @@ class AIMNazca:
             self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c1'].x, bottom_anchor.pin['c1'].y - 1, 90)
             self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c2'].x, bottom_anchor.pin['c2'].y - 1, 90)
             for pin in (top_anchor.pin['c1'], top_anchor.pin['c2'], bottom_anchor.pin['c1'], bottom_anchor.pin['c2']):
-                self.v1_via_4.put(pin)
+                self.v1_via.put(pin)
 
     def gnd_wg(self, waveguide_w: float = 0.48, length: float = 13, gnd_contact_dim: Optional[Dim2] = (2, 2),
                rib_brim_w: float = 1.5, gnd_connector_dim: Optional[Dim2] = (1, 2),
