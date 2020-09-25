@@ -53,19 +53,21 @@ class LateralNemsPS(GroupedPattern):
 
         boundary_taper = wg_taper if boundary_taper is None else boundary_taper
 
+        _gap_w = gap_w + np.sum([np.sum(et) for et in end_taper])
+
         wg_taper = (wg_taper,) if end_taper is None else (*end_taper, wg_taper)
-        box_w = nanofin_w * 2 + gap_w * 2 + waveguide_w
+        box_w = nanofin_w * 2 + _gap_w * 2 + waveguide_w
         wg = Waveguide(waveguide_w, taper_ls=(*end_ls, taper_l), taper_params=wg_taper,
                        length=phaseshift_l + 2 * np.sum(end_ls),
                        num_taper_evaluations=num_taper_evaluations)
         boundary = Waveguide(box_w, taper_ls=(taper_l,), taper_params=(boundary_taper,), length=phaseshift_l,
                              num_taper_evaluations=num_taper_evaluations).align(wg).pattern
-        gap_path = Waveguide(waveguide_w + gap_w * 2, taper_params=(gap_taper,), taper_ls=(taper_l,), length=phaseshift_l,
+        gap_path = Waveguide(waveguide_w + _gap_w * 2, taper_params=(gap_taper,), taper_ls=(taper_l,), length=phaseshift_l,
                              num_taper_evaluations=num_taper_evaluations).align(wg).pattern
 
         nanofins = [Pattern(poly) for poly in (boundary - gap_path)]
         nanofin_adiabatic = Pattern(Path(nanofin_w).sbend(fin_adiabatic_bend_dim))
-        nanofin_height = waveguide_w / 2 + gap_w + nanofin_w / 2
+        nanofin_height = waveguide_w / 2 + _gap_w + nanofin_w / 2
         nanofin_ends = [
             nanofin_adiabatic.copy.translate(nanofins[0].bounds[2], nanofin_height),
             nanofin_adiabatic.copy.flip().translate(nanofins[1].bounds[2], -nanofin_height),
