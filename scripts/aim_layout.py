@@ -244,7 +244,7 @@ pull_in_gap = [
                   [delay_line_200, gnd_wg],
                   interport_w=test_interport_w,
                   name=f'pull_in_gap_{gap_w}')
-    for gap_w in (0.1, 0.15, 0.2, 0.25)]
+    for gap_w in (0.1, 0.125, 0.15, 0.2, 0.25)]
 
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length. To increase pull-in voltage, phase shift length is made shorter.
@@ -362,6 +362,13 @@ def bend_exp(name='bends_1_1'):
     return bend_exp
 
 
+dc_short = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_short), gap_w=test_gap_w_aggressive,
+                          interaction_l=test_interaction_l_aggressive)[0]
+dc_aggressive = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_aggressive), gap_w=test_gap_w_aggressive,
+                               interaction_l=test_interaction_l_aggressive)[0]
+dc_invdes = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes), gap_w=test_gap_w_invdes,
+                           interaction_l=test_interaction_l_invdes)[0]
+
 reference_devices = [
     ref_dc,
     chip.mzi_node_test(delay_arms_gnded,
@@ -372,6 +379,9 @@ reference_devices = [
                        dc, include_input_ps=False,
                        detector=detector,
                        name='bare_mzi'),
+    dc_short,
+    dc_aggressive,
+    dc_invdes
 ]
 
 bend_exp_names = [f'bends_{br}_{i}' for i in [2, 4, 8] for br in [1, 2.5, 5]]
@@ -838,12 +848,12 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         i, j = closest
         chip.v1_via_8.put(bp_array_nems.pin[f'u{i},{j}'])
         chip.m2_ic.strt(100 * (2 - j), width=8).put(bp_array_nems.pin[f'u{i},{j}'])
-        # chip.m1_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
+        chip.m1_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
         chip.v1_via_8.put()
 
         chip.v1_via_8.put(bp_array_thermal.pin[f'u{i},{j}'])
         chip.m2_ic.strt(100 * (2 - j), width=8).put(bp_array_thermal.pin[f'u{i},{j}'])
-        # chip.m1_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
+        chip.m1_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
         chip.v1_via_8.put()
 
     pin_num = 0
