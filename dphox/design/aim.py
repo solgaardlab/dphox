@@ -55,7 +55,7 @@ class AIMNazca:
                             top_metal='m2am', bot_metal='m1am', via='v1am').nazca_cell('v1_via_8')
 
     def nems_tdc(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
-                 interaction_l: float = 100, dc_gap_w: float = 0.2, beam_gap_w: float = 0.15,
+                 interaction_l: float = 100, dc_gap_w: float = 0.2, beam_gap_w: float = 0.1,
                  bend_dim: Dim2 = (10, 24.66), pad_dim: Dim4 = (2, 2, 2, 0.75), anchor: nd.Cell = None,
                  use_radius: bool = True, clearout_box_dim: Dim2 = (100, 2.5), dc_taper_ls: Tuple[float, ...] = None,
                  dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5,
@@ -78,7 +78,7 @@ class AIMNazca:
                 tdc = device.nazca_cell('tdc').put()
                 top_anchor = anchor.put(tdc.pin['t0'])
                 bottom_anchor = anchor.put(tdc.pin['t1'], flip=True)
-                self.metal_box(top_anchor, bottom_anchor, interaction_l)
+                self.metal_box(top_anchor, bottom_anchor, interaction_l, extra_length=3)
                 nd.Pin('a0').put(tdc.pin['a0'])
                 nd.Pin('b0').put(tdc.pin['b0'])
                 nd.Pin('a1').put(tdc.pin['a1'])
