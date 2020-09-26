@@ -9,18 +9,18 @@ from dphox.design.component import cubic_taper
 from datetime import date
 from tqdm import tqdm
 
-# chip = AIMNazca(
-#     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
-#     waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
-#     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
-# )
+chip = AIMNazca(
+    passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
+    waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
+    active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
+)
 
 # #Please leave this so Nate can run this quickly
-chip = AIMNazca(
-    passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
-    waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
-    active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
-)
+# chip = AIMNazca(
+#     passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
+#     waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
+#     active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
+# )
 
 # chip params
 
@@ -55,7 +55,7 @@ test_gap_w_aggressive = 0.15
 test_gap_w_short = 0.25
 test_gap_w_invdes = 0.6
 test_interaction_l_short = 22
-test_interaction_l_invdes = 5.72
+test_interaction_l_invdes = 3.72
 test_interaction_l_aggressive = 9
 test_bend_dim = test_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
 test_bend_dim_short = test_interport_w / 2 - test_gap_w_short / 2 - waveguide_w / 2
@@ -187,13 +187,13 @@ def pull_in_dict(phaseshift_l: float = pull_in_phaseshift_l, taper_change: float
     clearout_dim = (phaseshift_l - 10, 3) if clearout_dim is None else clearout_dim
     if taper_change is None or taper_length is None:
         return dict(
-            phaseshift_l=phaseshift_l, clearout_box_dim=clearout_dim
+            phaseshift_l=phaseshift_l, clearout_box_dim=clearout_dim, gnd_connector=None
         )
     else:
         return dict(
             phaseshift_l=phaseshift_l, clearout_box_dim=clearout_dim,
             taper_l=taper_length, gap_taper=cubic_taper(taper_change),
-            wg_taper=cubic_taper(taper_change)
+            wg_taper=cubic_taper(taper_change), gnd_connector=None
         )
 
 
@@ -239,7 +239,7 @@ Pull-in phase shifter or PSV1
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length
 pull_in_gap = [
-    chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_in_anchor, gnd_connector=None, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
+    chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_in_anchor, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
                                                name=f'ps_gap_{gap_w}'), wg_filler, gnd_wg],
                   [delay_line_200, gnd_wg],
                   interport_w=test_interport_w,
@@ -249,7 +249,7 @@ pull_in_gap = [
 # Motivation: attempt pull-in phase shifter idea with tapering to reduce pull-in voltage (for better or worse...)
 # and phase shift length. To increase pull-in voltage, phase shift length is made shorter.
 pull_in_taper = [
-    chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_in_anchor, gnd_connector=None, **pull_in_dict(pull_in_phaseshift_l,
+    chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict(pull_in_phaseshift_l,
                                                                                                          taper_change, taper_length),
                                                name=f'ps_taper_{taper_change}_{taper_length}'), wg_filler, gnd_wg],
                   [delay_line_200, gnd_wg],
@@ -260,7 +260,7 @@ pull_in_taper = [
 # Motivation: attempt pull-in phase shifter idea with modifying fin width / phase shift per unit length
 pull_in_fin = [
     chip.mzi_arms([delay_line_50,
-                   chip.nems_ps(anchor=pull_in_anchor, gnd_connector=None, nanofin_w=nanofin_w, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
+                   chip.nems_ps(anchor=pull_in_anchor, nanofin_w=nanofin_w, gap_w=gap_w, **pull_in_dict(pull_in_phaseshift_l),
                                 name=f'ps_fin_{nanofin_w}_{gap_w}'), wg_filler, gnd_wg],
                   [delay_line_200, gnd_wg],
                   interport_w=test_interport_w,
@@ -445,7 +445,7 @@ def tether_ps_slot(phaseshift_l=tether_phaseshift_l, taper_l=5, taper_change=-0.
     )
     return chip.mzi_arms(
         [chip.nems_ps(end_ls=(5, 5), end_taper=((0.0,), (0.0, -0.08),), taper_l=taper_l, boundary_taper=cubic_taper(taper_change),
-                      wg_taper=cubic_taper(-0.4), gap_taper=cubic_taper(-0.4), gnd_connector_idx=0,
+                      wg_taper=cubic_taper(-0.32), gap_taper=cubic_taper(-0.32), gnd_connector_idx=0,
                       phaseshift_l=phaseshift_l, anchor=anchor_tether, clearout_box_dim=(phaseshift_l + 5, 12.88))],
         [tether_phaseshift_l + 10],
         interport_w=test_interport_w,
@@ -492,20 +492,27 @@ tether_column = [
     tether_tdc(il, taper_l, taper_change) for il in (80, 100) for taper_l, taper_change in ((10, -0.1), (15, -0.1), (20, -0.16))
     # Nate: Making these more agreesive b/c the waveguide width it's thin enough, 400nm needs to be a test pt, actually the taper chagnes needed to be doubled
 ] + [
-    tether_tdc(il, taper_l, taper_change) for il in (100,) for taper_l, taper_change in ((20, -0.32), (20, -0.52))
-
+    tether_tdc(il, taper_l, taper_change) for il in (80, 100) for taper_l, taper_change in ((20, -0.32), (20, -0.52))
+] + [
+    tether_tdc(30, 5, -0.1)
 ]
 
 aggressive_column = [
     tether_ps_slot(tether_phaseshift_l, taper_length)
-    for taper_length in (5, 10) for taper_change in (-0.25, -0.3)  # slot variations
+    for taper_length in (5, 10) for taper_change in (-0.25, -0.3, -0.35)  # slot variations
 ] + [chip.mzi_arms([chip.nems_ps(anchor=pull_apart_anchor)], [tether_phaseshift_l + 10]) for _ in range(2)] + [
     chip.mzi_arms([chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict(pull_in_phaseshift_l))],
                   [pull_in_phaseshift_l + 10]) for _ in range(2)
+] + [
+    tether_ps(100, taper_l, taper_change) for taper_l, taper_change in ((10, -0.05), (15, -0.1), (20, -0.1),
+                                                                        (25, -0.1))
+] + [
+    tether_tdc(il, taper_l, taper_change) for il in (100,) for taper_l, taper_change in ((20, -0.32), (20, -0.42),
+                                                                                         (20, -0.52))
 ]
 
 # TODO(sunil): MANUAL insert test structures
-aggressive_column_dcs = [dc_short] * 4 + [dc_aggressive, dc_invdes, dc_aggressive, dc_invdes]
+aggressive_column_dcs = [dc_short] * 6 + [dc_aggressive, dc_invdes, dc_aggressive, dc_invdes] + [dc_short] * 7
 
 gridsearches = []
 
@@ -1208,6 +1215,6 @@ with nd.Cell('aim_layout') as aim_layout:
     chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
                        -standard_grating_interport + edge_shift_dim[1])
 
-# nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly
-nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+# nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
