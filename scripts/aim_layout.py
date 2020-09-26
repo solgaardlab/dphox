@@ -885,12 +885,12 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         i, j = closest
         chip.v1_via_8.put(bp_array_nems.pin[f'u{i},{j}'])
         chip.m2_ic.strt(100 * (2 - j), width=8).put(bp_array_nems.pin[f'u{i},{j}'])
-        chip.m1_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
+        # chip.m1_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
         chip.v1_via_8.put()
 
         chip.v1_via_8.put(bp_array_thermal.pin[f'u{i},{j}'])
         chip.m2_ic.strt(100 * (2 - j), width=8).put(bp_array_thermal.pin[f'u{i},{j}'])
-        chip.m1_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
+        # chip.m1_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
         chip.v1_via_8.put()
 
     pin_num = 0
