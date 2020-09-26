@@ -74,13 +74,13 @@ tether_interaction_l = 100
 detector_route_loop = (20, 30, 40)  # height, length, relative starting x for loops around detectors
 tapline_x_start = 600
 # x for the 8 taplines, numpy gives errors for some reason, so need to use raw python
-tapline_x = [tapline_x_start + x for x in [0, 400, 700, 1000, 1400, 1800, 2100, 2400]]  # TODO(Nate): update this spacing based final array
+tapline_x = [tapline_x_start + x for x in [0, 400, 700, 1000, 1400, 1800, 2070, 2400]]  # TODO(Nate): update this spacing based final array
 tapline_y = 162  # y for the taplines
 grating_array_xy = (600, 125)
 
 # spacing of test array  probe pads
 test_pad_x = [tapline_x[0] - 80, tapline_x[1] - 80, tapline_x[2] - 250, tapline_x[3] - 250,
-              tapline_x[4] - 80, tapline_x[5] - 292, tapline_x[6] - 250, tapline_x[7] - 250]
+              tapline_x[4] - 80, tapline_x[5] - 292, tapline_x[6] - 240, tapline_x[7] - 300]
 
 # bond pad (testing)
 
@@ -104,10 +104,15 @@ mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
 tap_detector = chip.bidirectional_tap(10, mesh_bend=True)
 pull_apart_anchor = chip.nems_anchor()
 pull_apart_anchor_comb = chip.nems_anchor(attach_comb=True)
+pull_apart_anchor_extr = chip.nems_anchor(pos_electrode_dim=(test_tdc_interaction_l_extr, 4, 0.5),
+                                          fin_dim=(test_tdc_interaction_l_extr, 0.15),)
 pull_in_anchor = chip.nems_anchor(shuttle_dim=(40, 5), fin_dim=(50, 0.15),
                                   pos_electrode_dim=None, neg_electrode_dim=None)
 tdc_anchor = chip.nems_anchor(shuttle_dim=(test_tdc_interaction_l, 5),
                               pos_electrode_dim=None, neg_electrode_dim=None)
+tdc_anchor_extr = chip.nems_anchor(shuttle_dim=(test_tdc_interaction_l_extr, 5),
+                                   fin_dim=(test_tdc_interaction_l_extr, 0.15),
+                                   pos_electrode_dim=None, neg_electrode_dim=None)
 tdc = chip.nems_tdc(anchor=tdc_anchor, bend_dim=(test_tdc_radius, test_tdc_bend_dim))
 gnd_wg = chip.gnd_wg()
 ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap_detector, sep))
@@ -184,7 +189,7 @@ def pull_in_dict(phaseshift_l: float = pull_in_phaseshift_l, taper_change: float
                  clearout_dim: Optional[float] = None):
     # DOne: modify this to taper the pull-in fin adiabatically using rib_brim_taper
     # Became irrelevant with new ps class structure
-    clearout_dim = (phaseshift_l - 10, 3) if clearout_dim is None else clearout_dim
+    clearout_dim = (phaseshift_l, 3) if clearout_dim is None else clearout_dim
     if taper_change is None or taper_length is None:
         return dict(
             phaseshift_l=phaseshift_l, clearout_box_dim=clearout_dim, gnd_connector=None
@@ -287,7 +292,11 @@ pull_apart_taper_tdc = [
     for gap_w in (0.100, 0.125, .150, 0.300) for taper_change in (0, -0.16, -0.32, -0.52) for taper_length in (20,)]
 
 taper_change, taper_length, gap_w = -0.52, 20, 0.125
-pull_apart_taper_tdc += [chip.nems_tdc(interaction_l=test_tdc_interaction_l_extr, anchor=pull_apart_anchor, dc_gap_w=gap_w, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - gap_w / 2 - waveguide_w / 2), **taper_dict_tdc(taper_change, taper_length))]
+pull_apart_taper_tdc += [chip.nems_tdc(interaction_l=test_tdc_interaction_l_extr,
+                                       clearout_box_dim=(test_tdc_interaction_l_extr, 2.5),
+                                       anchor=pull_apart_anchor_extr, dc_gap_w=gap_w,
+                                       bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - gap_w / 2 - waveguide_w / 2),
+                                       **taper_dict_tdc(taper_change, taper_length))]
 
 # Motivation: fin thickness alone doesn't seem to be a critical parameter
 # pull_apart_fin_tdc = [chip.nems_tdc(anchor=pull_apart_anchor, nanofin_w=nanofin_w) for nanofin_w in (0.15, 0.22)]
@@ -303,10 +312,15 @@ pull_in_gap_tdc = []  # Captured below
 # Motivation: attempt pull-in TDC with tapering to reduce the beat length of the TDC
 # Tapering and dc_gap is MOST important
 pull_in_taper_tdc = [
-    chip.nems_tdc(anchor=tdc_anchor, dc_gap_w=gap_w, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - gap_w / 2 - waveguide_w / 2), **taper_dict_tdc(taper_change, taper_length))
+    chip.nems_tdc(anchor=tdc_anchor, dc_gap_w=gap_w,
+                  bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - gap_w / 2 - waveguide_w / 2),
+                  **taper_dict_tdc(taper_change, taper_length))
     for gap_w in (0.100, 0.125, .150, 0.300) for taper_change in (0, -0.16, -0.32, -0.52) for taper_length in (20,)]
 taper_change, taper_length, gap_w = -0.52, 20, 0.125
-pull_in_taper_tdc += [chip.nems_tdc(interaction_l=test_tdc_interaction_l_extr, anchor=tdc_anchor, dc_gap_w=gap_w, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - gap_w / 2 - waveguide_w / 2), **taper_dict_tdc(taper_change, taper_length))]
+pull_in_taper_tdc += [chip.nems_tdc(interaction_l=test_tdc_interaction_l_extr, anchor=tdc_anchor_extr,
+                                    clearout_box_dim=(test_tdc_interaction_l_extr, 2.5),
+                                    dc_gap_w=gap_w, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - gap_w / 2 - waveguide_w / 2),
+                                    **taper_dict_tdc(taper_change, taper_length))]
 # Motivation: fin thickness alone doesn't seem to be a critical parameter
 # pull_in_fin_tdc = [chip.nems_tdc(anchor=tdc_anchor, nanofin_w=nanofin_w) for nanofin_w in (0.1, 0.22)]
 pull_in_fin_tdc = []
@@ -480,7 +494,7 @@ def tether_tdc(interaction_l=tether_interaction_l, taper_l=5, taper_change=-0.05
 # testing tap lines
 testing_tap_line = chip.tap_line(n_test)
 testing_tap_line_tdc = chip.tap_line(n_test, inter_wg_dist=200)
-testing_tap_line_aggressive = chip.tap_line(n_test, inter_wg_dist=280)
+testing_tap_line_aggressive = chip.tap_line(n_test, inter_wg_dist=320)
 
 # make sure there are 17 structures per column
 ps_columns = [
@@ -501,7 +515,8 @@ tether_column = [
     tether_ps(psl, taper_l, taper_change) for psl in (60, 80) for taper_l, taper_change in ((5, -0.05), (10, -0.1), (15, -0.1))
 ] + [
     tether_tdc(il, taper_l, taper_change) for il in (80, 100) for taper_l, taper_change in ((10, -0.1), (15, -0.1), (20, -0.16))
-    # Nate: Making these more agreesive b/c the waveguide width it's thin enough, 400nm needs to be a test pt, actually the taper chagnes needed to be doubled
+    # Nate: Making these more agreesive b/c the waveguide width it's thin enough, 400nm needs to be a test pt,
+    # actually the taper chagnes needed to be doubled
 ] + [
     tether_tdc(il, taper_l, taper_change) for il in (80, 100) for taper_l, taper_change in ((20, -0.32), (20, -0.52))
 ] + [
@@ -518,7 +533,7 @@ aggressive_column = [
     tether_ps(100, taper_l, taper_change) for taper_l, taper_change in ((10, -0.05), (15, -0.1), (20, -0.1),
                                                                         (25, -0.1))
 ] + [
-    tether_tdc(il, taper_l, taper_change) for il in (100,) for taper_l, taper_change in ((20, -0.32), (20, -0.42),
+    tether_tdc(100, taper_l, taper_change) for taper_l, taper_change in ((20, -0.32), (20, -0.42),
                                                                                          (20, -0.52))
 ]
 
@@ -678,37 +693,6 @@ with nd.Cell(f'gridsearch_tether') as gridsearch:
             autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
         nd.Pin(f'd{i}').put(dev.pin['b0'])  # this is useful for autorouting the gnd path
 
-        gnd_l, gnd_u, pos_l, pos_u = None, None, None, None,
-        for pin in dev.pin.keys():
-            if pin.split('_')[0] == 'gnd0' and len(pin.split('_')) > 1:
-                if pin.split('_')[1] == 'l':
-                    if gnd_l is not None:
-                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_l], dev.pin[pin], radius=8).put()
-                    gnd_l = pin
-                if pin.split('_')[1] == 'u':
-                    if gnd_u is not None:
-                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_u], dev.pin[pin], radius=8).put()
-                    gnd_u = pin
-                gnd_pin = pin
-            if pin.split('_')[0] == 'pos0' and len(pin.split('_')) > 1:
-                if pin.split('_')[1] == 'l':
-                    if pos_l is not None:
-                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[pos_l], dev.pin[pin], radius=8).put()
-                    pos_l = pin
-                if pin.split('_')[1] == 'u':
-                    if pos_u is not None:
-                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[pos_u], dev.pin[pin], radius=8).put()
-                    pos_u = pin
-                pos_pin = pin
-
-            if (gnd_u is not None) and (gnd_l is not None):
-                chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_u], dev.pin[gnd_l], radius=8).put()
-                gnd_pin = gnd_u
-                nd.Pin(f'gnd{i}').put(dev.pin[gnd_pin])
-            elif(gnd_u is not None) or (gnd_l is not None):
-                gnd_pin = gnd_u if gnd_u is not None else gnd_l
-                nd.Pin(f'gnd{i}').put(dev.pin[gnd_pin])
-
         if 'pos1' in dev.pin:
             nd.Pin(f'pos{i}').put(dev.pin['pos1'])
         if 'gnd0' in dev.pin:
@@ -735,36 +719,37 @@ with nd.Cell(f'gridsearch_aggressive') as gridsearch:
             autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
         nd.Pin(f'd{i}').put(dev.pin['b0'])  # this is useful for autorouting the gnd path
 
-        gnd_l, gnd_u, pos_l, pos_u = None, None, None, None,
-        for pin in dev.pin.keys():
-            if pin.split('_')[0] == 'gnd0' and len(pin.split('_')) > 1:
-                if pin.split('_')[1] == 'l':
-                    if gnd_l is not None:
-                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_l], dev.pin[pin], radius=8).put()
-                    gnd_l = pin
-                if pin.split('_')[1] == 'u':
-                    if gnd_u is not None:
-                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_u], dev.pin[pin], radius=8).put()
-                    gnd_u = pin
-                gnd_pin = pin
-            if pin.split('_')[0] == 'pos0' and len(pin.split('_')) > 1:
-                if pin.split('_')[1] == 'l':
-                    if pos_l is not None:
-                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[pos_l], dev.pin[pin], radius=8).put()
-                    pos_l = pin
-                if pin.split('_')[1] == 'u':
-                    if pos_u is not None:
-                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[pos_u], dev.pin[pin], radius=8).put()
-                    pos_u = pin
-                pos_pin = pin
-
-            if (gnd_u is not None) and (gnd_l is not None):
-                chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_u], dev.pin[gnd_l], radius=8).put()
-                gnd_pin = gnd_u
-                nd.Pin(f'gnd{i}').put(dev.pin[gnd_pin])
-            elif(gnd_u is not None) or (gnd_l is not None):
-                gnd_pin = gnd_u if gnd_u is not None else gnd_l
-                nd.Pin(f'gnd{i}').put(dev.pin[gnd_pin])
+        # TODO just need to live with no connection here for now...
+        # gnd_l, gnd_u, pos_l, pos_u = None, None, None, None,
+        # for pin in dev.pin.keys():
+        #     if pin.split('_')[0] == 'gnd0' and len(pin.split('_')) > 1:
+        #         if pin.split('_')[1] == 'l':
+        #             if gnd_l is not None:
+        #                 chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_l], dev.pin[pin], radius=8).put()
+        #             gnd_l = pin
+        #         if pin.split('_')[1] == 'u':
+        #             if gnd_u is not None:
+        #                 chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_u], dev.pin[pin], radius=8).put()
+        #             gnd_u = pin
+        #         gnd_pin = pin
+        #     if pin.split('_')[0] == 'pos0' and len(pin.split('_')) > 1:
+        #         if pin.split('_')[1] == 'l':
+        #             if pos_l is not None:
+        #                 chip.m2_ic.bend_strt_bend_p2p(dev.pin[pos_l], dev.pin[pin], radius=8).put()
+        #             pos_l = pin
+        #         if pin.split('_')[1] == 'u':
+        #             if pos_u is not None:
+        #                 chip.m2_ic.bend_strt_bend_p2p(dev.pin[pos_u], dev.pin[pin], radius=8).put()
+        #             pos_u = pin
+        #         pos_pin = pin
+        #
+        #     if (gnd_u is not None) and (gnd_l is not None):
+        #         chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_u], dev.pin[gnd_l], radius=8).put()
+        #         gnd_pin = gnd_u
+        #         nd.Pin(f'gnd{i}').put(dev.pin[gnd_pin])
+        #     elif(gnd_u is not None) or (gnd_l is not None):
+        #         gnd_pin = gnd_u if gnd_u is not None else gnd_l
+        #         nd.Pin(f'gnd{i}').put(dev.pin[gnd_pin])
 
         if 'pos1' in dev.pin:
             nd.Pin(f'pos{i}').put(dev.pin['pos1'])
@@ -1235,7 +1220,7 @@ with nd.Cell('test_chiplet') as test_chiplet:
     # place test pads
 
     # TODO(Nate): for probes, we can either manually cut them in the end or have a semiautomated way of doing it (modify below)
-    test_pads = [test_pad.put(x, test_pad_y) for x in test_pad_x]
+    test_pads = [test_pad.put(x, test_pad_y) for i, x in enumerate(test_pad_x) if i != 4]
 
     for i in range(min(gridsearch_ls)):
 
@@ -1275,7 +1260,8 @@ with nd.Cell('test_chiplet') as test_chiplet:
                 offset = ground_wire.pin['a0'].y + 6 - pin.y
                 offset = -offset if pin.a == 180 else offset
                 chip.m2_ic.sbend(radius=4, offset=offset).put(pin)
-                chip.m2_ic.strt(test_pads[j].bbox[0] - nd.cp.x()).put(*nd.cp.get_xy(), 0)
+                idx = j if j < 4 else j - 1 # hack: ignore vip col
+                chip.m2_ic.strt(test_pads[idx].bbox[0] - nd.cp.x()).put(*nd.cp.get_xy(), 0)
                 # connect to the pad using via
                 chip.va_via.put()
 

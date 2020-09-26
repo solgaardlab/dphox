@@ -389,6 +389,8 @@ class NemsAnchor(Pattern):
         shift[1] -= -tether_connector[-1] if tether_connector is not None and straight_connector is None else 0
         self.translate(*shift)
         self.pads = [pad.translate(*shift) for pad in pads]
+        self.pos_pads = self.pads[:1]
+        self.neg_pads = self.pads[1:]
         self.springs = [s.translate(*shift) for s in springs]
         self.shuttle = shuttle.translate(*shift) if pos_electrode_dim is not None else shuttle
         self.comb = comb.translate(*shift) if comb is not None else comb
@@ -476,13 +478,37 @@ class MemsMonitorCoupler(Pattern):
 
 
 class LateralNemsPSFull(Multilayer):
-    def __init__(self, ps: LateralNemsPS, anchor: NemsAnchor,
+    def __init__(self, ps: LateralNemsPS, top_anchor: NemsAnchor,
                  metal_via: Via, pad_via: Via, trace_w: float,
+                 pos_box_w: float, gnd_box_h: float,
                  ridge: str, rib: str, shuttle_dope: str,
-                 spring_dope: str, pad_dope: str, pos_metal: str, gnd_metal: str):
+                 spring_dope: str, pad_dope: str, pos_metal: str, gnd_metal: str,
+                 clearout: str, clearout_box_dim: Dim2,
+                 bot_anchor: Optional[NemsAnchor] = None):
+        """
+
+        Args:
+            ps: phase shifter
+            top_anchor: top anchor (None in pull-in case)
+            metal_via: metal via
+            pad_via: pad via
+            trace_w: trace width
+            pos_box_w: Extension for the positive box
+            gnd_box_h: Extension for the negative box
+            ridge: ridge layer
+            rib: rib layer
+            shuttle_dope: shuttle dope layer
+            spring_dope: spring dope layer
+            pad_dope: pad dope layer
+            clearout: str
+            pos_metal: pos terminal layer
+            gnd_metal: gnd terminal layer
+        """
+        bot_anchor = top_anchor if bot_anchor is None else bot_anchor
         self.config = {
             'ps': ps.config,
-            'anchor': anchor.config,
+            'top_anchor': top_anchor.config,
+            'bot_anchor': bot_anchor.config,
             'metal_via': metal_via.config,
             'pad_via': pad_via.config,
             'trace_w': trace_w,
@@ -494,14 +520,26 @@ class LateralNemsPSFull(Multilayer):
             'spring_dope': spring_dope,
             'pad_dope': pad_dope
         }
-        top = copy(anchor).translate(*ps.port['t0'].xy)
-        bot = copy(anchor).flip().translate(*ps.port['t1'].xy)
+        top = copy(top_anchor).translate(*ps.port['t0'].xy)
+        bot = copy(bot_anchor).flip().translate(*ps.port['t1'].xy)
         full_ps = Pattern(top, bot, ps)
         vias = metal_via.pattern_to_layer + pad_via.pattern_to_layer
         dopes = [top.shuttle.dope(shuttle_dope), bot.shuttle.dope(shuttle_dope)] + \
                 [s.dope(spring_dope) for s in top.springs + bot.springs] + \
                 [s.dope(pad_dope) for s in top.pads + bot.pads]
-        super(LateralNemsPSFull, self).__init__([(full_ps, ridge), (ps.rib_brim, rib)] + vias + dopes)
+        metals = []
+        if top.neg_pads:
+            neg = Pattern(*(top.neg_pads + bot.neg_pads))
+            neg_box = Box(neg.size).difference(Box((neg.size[0] - 2 * trace_w,
+                                                    neg.size[1] - trace_w + gnd_box_h))).align(neg).valign(neg,
+                                                                                                           bottom=False)
+            metals.append(neg_box)
+        elif top.pos_pads:
+            pos = Pattern(*(top.pos_pads + bot.pos_pads))
+            pos_box = Box(pos.size).difference(Box((pos.size[0] - 2 * trace_w,
+                                                    pos.size[1] - trace_w + pos_box_w))).align(pos)
+            metals.append(pos_box)
+        super(LateralNemsPSFull, self).__init__([(full_ps, ridge), (ps.rib_brim, rib)] + vias + dopes + metals)
 
 
 class NemsMillerNode(Pattern):
