@@ -1,5 +1,5 @@
 from ...typing import *
-from .pattern import Pattern, Path, GroupedPattern, Port
+from .pattern import Pattern, Path, Port
 
 from copy import deepcopy as copy
 from shapely.geometry import MultiPolygon
@@ -63,13 +63,13 @@ class DC(Pattern):
                                        taper_params=coupler_boundary_taper,
                                        taper_ls=coupler_boundary_taper_ls).align(current_dc)
             center_wg = Box((interaction_l, waveguide_w)).align(current_dc.center)
-            dc_interaction = GroupedPattern(copy(center_wg).translate(dy=-gap_w / 2 - waveguide_w / 2),
+            dc_interaction = Pattern(copy(center_wg).translate(dy=-gap_w / 2 - waveguide_w / 2),
                                             copy(center_wg).translate(dy=gap_w / 2 + waveguide_w / 2))
-            cuts = dc_interaction.pattern - outer_boundary.pattern
+            cuts = dc_interaction.shapely - outer_boundary.shapely
             # hacky way to make sure polygons are completely separated
-            dc_without_interaction = current_dc.pattern - Box((dc_interaction.size[0],
-                                                               dc_interaction.size[1] * 2)).align(current_dc).pattern
-            paths = [dc_without_interaction, dc_interaction.pattern - cuts]
+            dc_without_interaction = current_dc.shapely - Box((dc_interaction.size[0],
+                                                               dc_interaction.size[1] * 2)).align(current_dc).shapely
+            paths = [dc_without_interaction, dc_interaction.shapely - cuts]
         else:
             paths = lower_path, upper_path
         super(DC, self).__init__(*paths)
@@ -86,35 +86,6 @@ class DC(Pattern):
         br = bl + np.asarray((self.interaction_l, 0))
         tr = tl + np.asarray((self.interaction_l, 0))
         return np.vstack((bl, tl, br, tr))
-
-
-class MZI(Pattern):
-    def __init__(self, bend_dim: Dim2, waveguide_w: float, arm_l: float, gap_w: float,
-                 interaction_l: float, end_l: float = 0, end_bend_dim: Optional[Dim3] = None, use_radius: bool = False):
-        self.end_l = end_l
-        self.arm_l = arm_l
-        self.bend_dim = bend_dim
-        self.waveguide_w = waveguide_w
-        self.interaction_l = interaction_l
-        self.gap_w = gap_w
-        self.end_bend_dim = end_bend_dim
-        self.use_radius = use_radius
-
-        lower_path = Path(waveguide_w).mzi(bend_dim, interaction_l, arm_l, end_l,
-                                           end_bend_dim=end_bend_dim, use_radius=use_radius)
-        upper_path = Path(waveguide_w).mzi(bend_dim, interaction_l, arm_l, end_l,
-                                           end_bend_dim=end_bend_dim, inverted=True, use_radius=use_radius)
-        upper_path.translate(dx=0, dy=waveguide_w + 2 * bend_dim[1] + gap_w)
-
-        super(MZI, self).__init__(lower_path, upper_path)
-        self.lower_path, self.upper_path = Pattern(lower_path), Pattern(upper_path)
-        interport_distance = self.waveguide_w + 2 * self.bend_dim[1] + self.gap_w
-        if self.end_bend_dim:
-            interport_distance += 2 * self.end_bend_dim[1]
-        self.port['a0'] = Port(0, 0, -np.pi)
-        self.port['a1'] = Port(0, interport_distance, -np.pi)
-        self.port['b0'] = Port(self.size[0], 0)
-        self.port['b1'] = Port(self.size[0], interport_distance)
 
 
 class MMI(Pattern):
@@ -321,7 +292,7 @@ class Waveguide(Pattern):
         if slot_taper_params:
             center_x = length / 2
             slot = self.__init__(slot_dim[1], slot_dim[0], slot_taper_ls, slot_taper_params).align((center_x, 0))
-            pattern = Pattern(p).pattern - slot.pattern
+            pattern = Pattern(p).shapely - slot.shapely
             if isinstance(pattern, MultiPolygon):
                 slot_waveguide = [Pattern(poly) for poly in pattern]
                 super(Waveguide, self).__init__(*slot_waveguide)
@@ -438,15 +409,15 @@ class DCQuickFix(Pattern):
                                        taper_params=coupler_boundary_taper,
                                        taper_ls=coupler_boundary_taper_ls).align(current_dc)
             center_wg = Box((interaction_l, waveguide_w)).align(current_dc.center)
-            dc_interaction = GroupedPattern(copy(center_wg).translate(dy=-gap_w / 2 - waveguide_w / 2),
+            dc_interaction = Pattern(copy(center_wg).translate(dy=-gap_w / 2 - waveguide_w / 2),
                                             copy(center_wg).translate(dy=gap_w / 2 + waveguide_w / 2))
 
-            cuts = dc_interaction.pattern - outer_boundary.pattern
+            cuts = dc_interaction.shapely - outer_boundary.shapely
 
             # hacky way to make sure polygons are completely separated
-            dc_without_interaction = current_dc.pattern - Box((dc_interaction.size[0],
-                                                               dc_interaction.size[1] * 2)).align(current_dc).pattern
-            paths = [dc_without_interaction, dc_interaction.pattern - cuts]
+            dc_without_interaction = current_dc.shapely - Box((dc_interaction.size[0],
+                                                               dc_interaction.size[1] * 2)).align(current_dc).shapely
+            paths = [dc_without_interaction, dc_interaction.shapely - cuts]
         else:
             paths = lower_path, upper_path
         super(DCQuickFix, self).__init__(*paths)

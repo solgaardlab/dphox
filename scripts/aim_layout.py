@@ -9,18 +9,18 @@ from dphox.design.component import cubic_taper
 from datetime import date
 from tqdm import tqdm
 
-# chip = AIMNazca(
-#     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
-#     waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
-#     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
-# )
+chip = AIMNazca(
+    passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
+    waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
+    active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
+)
 
 # #Please leave this so Nate can run this quickly
-chip = AIMNazca(
-    passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
-    waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
-    active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
-)
+# chip = AIMNazca(
+#     passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
+#     waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
+#     active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
+# )
 
 # chip params
 
@@ -35,7 +35,7 @@ chiplet_divider_x = 7530
 # component params
 
 n_pads_eu = (344, 12)
-n_pads_bp = (70, 3)
+n_pads_bp = (69, 3)
 n_test = 17
 dc_radius = 15
 aggressive_dc_radius = 5
@@ -421,20 +421,31 @@ reference_devices += [bend_exp(name=bend_exp_name) for bend_exp_name in bend_exp
 print(len(reference_devices))
 
 
-def tether_ps(phaseshift_l=tether_phaseshift_l, taper_l=5, taper_change=-0.05):
+def tether_ps(phaseshift_l=tether_phaseshift_l, taper_l=5, taper_change=-0.05, delay_line: bool = True):
     anchor_tether = chip.nems_anchor(
         fin_dim=(phaseshift_l, 0.4), shuttle_dim=(10, 2), spring_dim=(phaseshift_l + 10, 0.22), straight_connector=None,
         tether_connector=(2, 1, 0.5, 1), pos_electrode_dim=(phaseshift_l, 4, 0.5), neg_electrode_dim=(3, 3),
         include_fin_dummy=False, name=f'anchor_tether_ps_{phaseshift_l}_{taper_l}_{taper_change}',
     )
-    return chip.mzi_arms(
-        [delay_line_50, chip.nems_ps(end_ls=(5, 5), end_taper=((0.0,), (0.0, -0.08),), taper_l=taper_l,
-                                     wg_taper=cubic_taper(taper_change), gap_taper=cubic_taper(taper_change), gnd_connector_idx=0,
-                                     phaseshift_l=phaseshift_l, anchor=anchor_tether, clearout_box_dim=(phaseshift_l + 5, 12.88))],
-        [delay_line_200],
-        interport_w=test_interport_w,
-        name=f'pull_apart_tether_{phaseshift_l}_{taper_l}_{taper_change}'
-    )
+    if not delay_line:
+        return chip.mzi_arms(
+            [chip.nems_ps(end_ls=(5, 5), end_taper=((0.0,), (0.0, -0.08),), taper_l=taper_l,
+                         wg_taper=cubic_taper(taper_change), gap_taper=cubic_taper(taper_change), gnd_connector_idx=0,
+                         phaseshift_l=phaseshift_l, anchor=anchor_tether, clearout_box_dim=(phaseshift_l + 5, 12.88))],
+            [phaseshift_l + 10],
+            interport_w=test_interport_w,
+            name=f'pull_apart_tether_{phaseshift_l}_{taper_l}_{taper_change}'
+        )
+    else:
+        return chip.mzi_arms(
+            [delay_line_50, chip.nems_ps(end_ls=(5, 5), end_taper=((0.0,), (0.0, -0.08),), taper_l=taper_l,
+                                         wg_taper=cubic_taper(taper_change), gap_taper=cubic_taper(taper_change),
+                                         gnd_connector_idx=0, phaseshift_l=phaseshift_l, anchor=anchor_tether,
+                                         clearout_box_dim=(phaseshift_l + 5, 12.88))],
+            [delay_line_200],
+            interport_w=test_interport_w,
+            name=f'pull_apart_tether_{phaseshift_l}_{taper_l}_{taper_change}'
+        )
 
 
 def tether_ps_slot(phaseshift_l=tether_phaseshift_l, taper_l=5, taper_change=-0.3):
@@ -711,11 +722,17 @@ gridsearches.append(gridsearch)
 with nd.Cell(f'gridsearch_aggressive') as gridsearch:
     line = testing_tap_line_aggressive.put()
     for i, device in enumerate(zip(aggressive_column, aggressive_column_dcs)):
-        ps, dc = device
-        dev = chip.mzi_node_test(ps, dc, include_input_ps=False,
-                                 detector=detector,
-                                 name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
-        autoroute_node_detector(dev.pin['p1'], dev.pin['n2'], dev.pin['n1'], dev.pin['p2'])
+        d, dc = device
+        if i < 14:  # all phase shifters
+            dev = chip.mzi_node_test(d, dc, include_input_ps=False,
+                                     detector=detector,
+                                     name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
+            autoroute_node_detector(dev.pin['p1'], dev.pin['n2'], dev.pin['n1'], dev.pin['p2'])
+        else:
+            dev = d.put(line.pin[f'a{2 * i + 1}'])
+            d1 = detector.put(dev.pin['b0'])
+            d2 = detector.put(dev.pin['b1'], flip=True)
+            autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
         nd.Pin(f'd{i}').put(dev.pin['b0'])  # this is useful for autorouting the gnd path
 
         gnd_l, gnd_u, pos_l, pos_u = None, None, None, None,
@@ -834,14 +851,15 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
                             (327, 329),              # 2 lines into this layer
                             (337, 342)]              # forward mesh output detector layer
 
-    eu_bp_m1_idx = np.hstack([np.arange(*r) for r in eu_bp_port_ranges_m1])
+    eu_bp_m2_idx = np.hstack([np.arange(*r) for r in eu_bp_port_ranges_m1])
 
     used_connections = set()
-    for idx in tqdm(eu_bp_m1_idx):
+    counter = 0
+    for idx in tqdm(eu_bp_m2_idx):
         pin_x = eu_array_nems.pin[f'o{idx}'].x
         closest = (0, 0)
         closest_dist = np.inf
-        for i, j in itertools.product(range(70), range(3)):
+        for i, j in itertools.product(range(n_pads_bp[0]), range(3)):
             dist = np.abs(bp_array_nems.pin[f'u{i},{j}'].x - pin_x)
             if dist < closest_dist and (i, j) not in used_connections:
                 closest = (i, j)
@@ -876,7 +894,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             if start_idx is None:
                 start_idx = idx
             pin_x = eu_array_nems.pin[f'o{idx}'].x
-            for i, j in itertools.product(range(70), range(3)):
+            for i, j in itertools.product(range(n_pads_bp[0]), range(3)):
                 dist = np.abs(bp_array_nems.pin[f'u{i},{j}'].x - pin_x)
                 if dist < closest_dist and (i, j) not in used_connections:
                     closest_pair = (idx, (i, j))
@@ -923,38 +941,35 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         (69, 70), (89, 91),
         (92, 93), (112, 114),
         (115, 116), (135, 137),
-        (138, 139), (158, 160),
-        (161, 162), (181, 183),
-        (184, 185), (204, 206),
         (207, 208), (227, 229),
-        (319, 321),
+        (230, 231), (250, 252),
+        (253, 254), (273, 275),
+        (276, 277), (296, 298),
+        (319, 321), (323, 324),
         (342, 344)
     ]
 
     eu_bp_test_m1_idx = np.hstack([np.arange(*r) for r in eu_bp_port_tests_m1])
+    pad_assignments = [(2, 2), (2, 0), (4, 2), (5, 0),
+                       (8, 1), (8, 2), (13, 0), (13, 1),
+                       (13, 2), (17, 2), (18, 1), (18, 2),
+                       (23, 0), (22, 2), (25, 0), (27, 1), (27, 2),
+                       (41, 1), (46, 0), (45, 2),
+                       (48, 0), (50, 1), (51, 0), (50, 2),
+                       (54, 1), (54, 2), (55, 0),
+                       (59, 0), (59, 1),
+                       (63, 2), (64, 0), (64, 1),
+                       (66, 1), (67, 0)
+                       ]
 
     left_most = np.NINF
-    for idx in tqdm(eu_bp_test_m1_idx):
-        pin_x = eu_array_nems.pin[f'o{idx}'].x
-        closest = (0, 0)
-        closest_dist = np.inf
-        for i, j in itertools.product(range(70), range(3)):
-            dist = (bp_array_nems.pin[f'u{i},{j}'].x - pin_x)
-            # hacking this to prevent crossings in test layer
-            if dist < closest_dist and bp_array_nems.pin[f'u{i},{j}'].x > left_most and (i, j) not in used_connections:
-                closest = (i, j)
-                closest_dist = dist
-        left_most = pin_x
-        used_connections.add(closest)
-        i, j = closest
+    for idx, assignment in tqdm(zip(eu_bp_test_m1_idx, pad_assignments)):
+        i, j = assignment
         chip.v1_via_8.put(bp_array_nems.pin[f'u{i},{j}'])
-        chip.m2_ic.strt(100 * (2 - j), width=8).put(bp_array_nems.pin[f'u{i},{j}'])
-        # chip.m1_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
+        chip.m1_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
         chip.v1_via_8.put()
-
         chip.v1_via_8.put(bp_array_thermal.pin[f'u{i},{j}'])
-        chip.m2_ic.strt(100 * (2 - j), width=8).put(bp_array_thermal.pin[f'u{i},{j}'])
-        # chip.m1_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
+        chip.m1_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
         chip.v1_via_8.put()
 
     pin_num = 0
@@ -965,6 +980,8 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
     alignment_mark.put(7000, 0)
     alignment_mark.put(7000, 1700)
     alignment_mark.put(-500, 1700)
+
+    mesh_ts_idx = 0
 
     for layer in range(15):
         # autoroute
@@ -977,14 +994,12 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         autoroute_therm_cathode = autoroute_4.put(layer * mesh_layer_x + 178, 1208, flip=True)
         autoroute_therm_anode = autoroute_4_extended.put(layer * mesh_layer_x + 178, 1200, flip=True)
 
-        if layer >= 3 and layer < len(middle_mesh_test_structures) + 3:
+        if layer in [3, 4, 5, 9, 10, 11, 12]:
             # mid-mesh test structures
-            ts_idx = layer - 3
-            test_structure = middle_mesh_test_structures[ts_idx]
-            shift_x = 40 * (ts_idx >= num_ps_middle_mesh)
+            test_structure = middle_mesh_test_structures[mesh_ts_idx]
+            shift_x = 40 * (mesh_ts_idx >= num_ps_middle_mesh)
             # Nate: added a quick 0 , -20 hack to fix drc
-            shift_hack = 0 if 'tdc' in test_structure.cell_name else -20
-            ts = test_structure.put(shift_hack + 1325 + shift_x - 30 * (ts_idx < num_ps_middle_mesh) + mesh_layer_x * ts_idx,
+            ts = test_structure.put(1325 + shift_x + mesh_layer_x * (layer - 3),
                                     output_interposer.pin['a7'].y + 20, flip=True)
             chip.waveguide_ic.strt(shift_x).put(ts.pin['a0'])
             chip.waveguide_ic.bend(radius=7, angle=-90).put()
@@ -1007,6 +1022,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             chip.v1_via_4.put()
             chip.v1_via_4.put(d1.pin['p'])
             chip.v1_via_4.put(d2.pin['p'])
+            mesh_ts_idx += 1
 
             gnd_l, gnd_u, pos_l, pos_u = None, None, None, None,
             for pin in ts.pin.keys():
@@ -1063,7 +1079,6 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
                 chip.v1_via_4.put()
 
         if layer == 2:
-            # TODO(sunil): edit this
             # nems and thermal test node
             chip.m2_ic.bend_strt_bend_p2p(mzi_node_nems.pin['n1'], autoroute_nems_anode.pin['a5'], radius=8).put()
             chip.m2_ic.bend_strt_bend_p2p(mzi_node_nems.pin['n2'], autoroute_nems_anode.pin['a6'], radius=8).put()
@@ -1222,7 +1237,7 @@ with nd.Cell('test_chiplet') as test_chiplet:
     # TODO(Nate): for probes, we can either manually cut them in the end or have a semiautomated way of doing it (modify below)
     test_pads = [test_pad.put(x, test_pad_y) for x in test_pad_x]
 
-    for i in range(min(gridsearch_ls)):  # change this to n_test when all structures are filled in each column
+    for i in range(min(gridsearch_ls)):
 
         # detector wire connections
         chip.m2_ic.bend(26, -90).put(bp_array_left.pin[f'u{0},{i}'])
@@ -1279,6 +1294,6 @@ with nd.Cell('aim_layout') as aim_layout:
     chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
                        -standard_grating_interport + edge_shift_dim[1])
 
-# nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly
-nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+# nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
