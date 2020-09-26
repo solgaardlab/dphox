@@ -9,18 +9,18 @@ from dphox.design.component import cubic_taper
 from datetime import date
 from tqdm import tqdm
 
-chip = AIMNazca(
-    passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
-    waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
-    active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
-)
+# chip = AIMNazca(
+#     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
+#     waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
+#     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
+# )
 
 # #Please leave this so Nate can run this quickly
-# chip = AIMNazca(
-#     passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
-#     waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
-#     active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
-# )
+chip = AIMNazca(
+    passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
+    waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
+    active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
+)
 
 # chip params
 
@@ -250,7 +250,7 @@ pull_in_gap = [
 # and phase shift length. To increase pull-in voltage, phase shift length is made shorter.
 pull_in_taper = [
     chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_in_anchor, **pull_in_dict(pull_in_phaseshift_l,
-                                                                                                         taper_change, taper_length),
+                                                                                     taper_change, taper_length),
                                                name=f'ps_taper_{taper_change}_{taper_length}'), wg_filler, gnd_wg],
                   [delay_line_200, gnd_wg],
                   interport_w=test_interport_w,
@@ -666,6 +666,38 @@ with nd.Cell(f'gridsearch_tether') as gridsearch:
             d2 = detector.put(dev.pin['b1'], flip=True)
             autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
         nd.Pin(f'd{i}').put(dev.pin['b0'])  # this is useful for autorouting the gnd path
+
+        gnd_l, gnd_u, pos_l, pos_u = None, None, None, None,
+        for pin in dev.pin.keys():
+            if pin.split('_')[0] == 'gnd0' and len(pin.split('_')) > 1:
+                if pin.split('_')[1] == 'l':
+                    if gnd_l is not None:
+                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_l], dev.pin[pin], radius=8).put()
+                    gnd_l = pin
+                if pin.split('_')[1] == 'u':
+                    if gnd_u is not None:
+                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_u], dev.pin[pin], radius=8).put()
+                    gnd_u = pin
+                gnd_pin = pin
+            if pin.split('_')[0] == 'pos0' and len(pin.split('_')) > 1:
+                if pin.split('_')[1] == 'l':
+                    if pos_l is not None:
+                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[pos_l], dev.pin[pin], radius=8).put()
+                    pos_l = pin
+                if pin.split('_')[1] == 'u':
+                    if pos_u is not None:
+                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[pos_u], dev.pin[pin], radius=8).put()
+                    pos_u = pin
+                pos_pin = pin
+
+            if (gnd_u is not None) and (gnd_l is not None):
+                chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_u], dev.pin[gnd_l], radius=8).put()
+                gnd_pin = gnd_u
+                nd.Pin(f'gnd{i}').put(dev.pin[gnd_pin])
+            elif(gnd_u is not None) or (gnd_l is not None):
+                gnd_pin = gnd_u if gnd_u is not None else gnd_l
+                nd.Pin(f'gnd{i}').put(dev.pin[gnd_pin])
+
         if 'pos1' in dev.pin:
             nd.Pin(f'pos{i}').put(dev.pin['pos1'])
         if 'gnd0' in dev.pin:
@@ -685,6 +717,38 @@ with nd.Cell(f'gridsearch_aggressive') as gridsearch:
                                  name=f'test_mzi_{ps.name}').put(line.pin[f'a{2 * i + 1}'])
         autoroute_node_detector(dev.pin['p1'], dev.pin['n2'], dev.pin['n1'], dev.pin['p2'])
         nd.Pin(f'd{i}').put(dev.pin['b0'])  # this is useful for autorouting the gnd path
+
+        gnd_l, gnd_u, pos_l, pos_u = None, None, None, None,
+        for pin in dev.pin.keys():
+            if pin.split('_')[0] == 'gnd0' and len(pin.split('_')) > 1:
+                if pin.split('_')[1] == 'l':
+                    if gnd_l is not None:
+                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_l], dev.pin[pin], radius=8).put()
+                    gnd_l = pin
+                if pin.split('_')[1] == 'u':
+                    if gnd_u is not None:
+                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_u], dev.pin[pin], radius=8).put()
+                    gnd_u = pin
+                gnd_pin = pin
+            if pin.split('_')[0] == 'pos0' and len(pin.split('_')) > 1:
+                if pin.split('_')[1] == 'l':
+                    if pos_l is not None:
+                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[pos_l], dev.pin[pin], radius=8).put()
+                    pos_l = pin
+                if pin.split('_')[1] == 'u':
+                    if pos_u is not None:
+                        chip.m2_ic.bend_strt_bend_p2p(dev.pin[pos_u], dev.pin[pin], radius=8).put()
+                    pos_u = pin
+                pos_pin = pin
+
+            if (gnd_u is not None) and (gnd_l is not None):
+                chip.m2_ic.bend_strt_bend_p2p(dev.pin[gnd_u], dev.pin[gnd_l], radius=8).put()
+                gnd_pin = gnd_u
+                nd.Pin(f'gnd{i}').put(dev.pin[gnd_pin])
+            elif(gnd_u is not None) or (gnd_l is not None):
+                gnd_pin = gnd_u if gnd_u is not None else gnd_l
+                nd.Pin(f'gnd{i}').put(dev.pin[gnd_pin])
+
         if 'pos1' in dev.pin:
             nd.Pin(f'pos{i}').put(dev.pin['pos1'])
         if 'gnd0' in dev.pin:
@@ -1215,6 +1279,6 @@ with nd.Cell('aim_layout') as aim_layout:
     chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
                        -standard_grating_interport + edge_shift_dim[1])
 
-nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+# nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly
-# nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
