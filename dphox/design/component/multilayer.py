@@ -1,4 +1,4 @@
-from .pattern import Pattern, Path, GroupedPattern, Port
+from .pattern import Path, Pattern, Port
 from .passive import Box
 from ...typing import *
 
@@ -26,6 +26,7 @@ class Multilayer:
         self._pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
                                   for comp, layer in pattern_to_layer}
         self.layer_to_pattern = self._layer_to_pattern()
+        # TODO: temporary way to assign ports
         self.port = dict(sum([list(pattern.port.items()) for pattern, _ in pattern_to_layer], []))
 
     @classmethod
@@ -42,7 +43,7 @@ class Multilayer:
                     # kinda hacky but is physical and prevents false polygons
                     points = np.around(points, decimals=3)
                     multilayers[polygon.layer].append(Pattern(Polygon(points)))
-        return cls([(GroupedPattern(*pattern_list), layer) for layer, pattern_list in multilayers.items()])
+        return cls([(Pattern(*pattern_list), layer) for layer, pattern_list in multilayers.items()])
 
     @property
     def bounds(self) -> Dim4:
@@ -160,7 +161,7 @@ class Multilayer:
 
     def fill_material(self, layer_name: str, growth: float, centered_layer: str = None):
         all_patterns = [Pattern(poly) for layer, poly in self.layer_to_pattern.items()]
-        all_patterns = GroupedPattern(*all_patterns)
+        all_patterns = Pattern(*all_patterns)
         minx, miny, maxx, maxy = all_patterns.bounds
         centered_pattern = all_patterns if centered_layer is None else Pattern(self.layer_to_pattern[centered_layer])
         fill = Pattern(gy.Polygon(
@@ -192,7 +193,7 @@ class Via(Multilayer):
             x, y = np.meshgrid(np.arange(shape[0]) * pitch, np.arange(shape[1]) * pitch)
             for x, y in zip(x.flatten(), y.flatten()):
                 patterns.append(copy(via_pattern).translate(x, y))
-            via_pattern = GroupedPattern(*patterns)
+            via_pattern = Pattern(*patterns)
         boundary = Box((via_pattern.size[0] + 2 * boundary_grow,
                         via_pattern.size[1] + 2 * boundary_grow)).align((0, 0)).halign(0)
         via_pattern.align(boundary)

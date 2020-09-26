@@ -120,27 +120,31 @@ class Port:
 
 
 class Pattern:
-    """Pattern or layer of material used in a GDS layout
+    """Pattern or layer of material used in a layout
 
         Args:
-            *polygons: A list of polygons specified by the user
+            *patterns: A list of polygons specified by the user, can be a Path, gdspy Polygon, shapely Polygon,
+            shapely MultiPolygon or Pattern
             call_union: Do not call union
     """
 
-    def __init__(self, *polygons: Union[Path, gy.Polygon, gy.FlexPath, Polygon, MultiPolygon], call_union: bool = True):
+    def __init__(self, *patterns: Union[Path, gy.Polygon, gy.FlexPath, Polygon, MultiPolygon, "Pattern"],
+                 call_union: bool = True):
         self.config = copy(self.__dict__)
         self.polys = []
-        for shape in polygons:
-            if not isinstance(shape, Polygon):
-                if isinstance(shape, MultiPolygon):
-                    polygons = list(shape)
+        for pattern in patterns:
+            if isinstance(pattern, Pattern):
+                self.polys += pattern.polys
+            elif not isinstance(pattern, Polygon):
+                if isinstance(pattern, MultiPolygon):
+                    patterns = list(pattern)
                 else:
-                    polygons = shape.get_polygons() if isinstance(shape, gy.FlexPath) else shape.polygons
-                self.polys += [Polygon(polygon_point_list) for polygon_point_list in polygons]
+                    patterns = pattern.get_polygons() if isinstance(pattern, gy.FlexPath) else pattern.polygons
+                self.polys += [Polygon(polygon_point_list) for polygon_point_list in patterns]
             else:
-                self.polys.append(shape)
+                self.polys.append(pattern)
         self.call_union = call_union
-        self.pattern = self._pattern()
+        self.shapely = self._shapely()
         self.port: Dict[str, Port] = {}
 
     @classmethod
@@ -149,7 +153,7 @@ class Pattern:
             else MultiPolygon([g for g in shapely_pattern.geoms if isinstance(g, Polygon)])
         return cls(collection)
 
-    def _pattern(self) -> MultiPolygon:
+    def _shapely(self) -> MultiPolygon:
         if not self.call_union:
             return MultiPolygon(self.polys)
         else:
@@ -169,7 +173,7 @@ class Pattern:
         """
         x_, y_ = np.mgrid[0:grid_spacing[0] * shape[0]:grid_spacing[0], 0:grid_spacing[1] * shape[1]:grid_spacing[1]]
 
-        return contains(self.pattern, x_, y_)
+        return contains(self.shapely, x_, y_)
 
     @property
     def bounds(self) -> Dim4:
@@ -179,7 +183,7 @@ class Pattern:
             Tuple of the form :code:`(minx, miny, maxx, maxy)`
 
         """
-        return self.pattern.bounds
+        return self.shapely.bounds
 
     @property
     def size(self) -> Dim2:
@@ -215,7 +219,7 @@ class Pattern:
 
         """
         self.polys = [translate(path, dx, dy) for path in self.polys]
-        self.pattern = self._pattern()
+        self.shapely = self._shapely()
         return self
 
     def align(self, c: Union["Pattern", Tuple[float, float]]) -> "Pattern":
@@ -298,8 +302,8 @@ class Pattern:
             Rotated pattern
 
         """
-        self.pattern = rotate(self.pattern, angle, origin)
-        self.polys = [poly for poly in self.pattern]
+        self.shapely = rotate(self.shapely, angle, origin)
+        self.polys = [poly for poly in self.shapely]
         return self
 
     @property
@@ -318,16 +322,16 @@ class Pattern:
         return boolean_func(other_pattern)
 
     def intersection(self, other_pattern: "Pattern") -> "Pattern":
-        return Pattern.from_shapely(self.pattern.intersection(other_pattern.pattern))
+        return Pattern.from_shapely(self.shapely.intersection(other_pattern.shapely))
 
     def difference(self, other_pattern: "Pattern") -> "Pattern":
-        return Pattern.from_shapely(self.pattern.difference(other_pattern.pattern))
+        return Pattern.from_shapely(self.shapely.difference(other_pattern.shapely))
 
     def union(self, other_pattern: "Pattern") -> "Pattern":
-        return Pattern.from_shapely(self.pattern.union(other_pattern.pattern))
+        return Pattern.from_shapely(self.shapely.union(other_pattern.shapely))
 
     def symmetric_difference(self, other_pattern: "Pattern") -> "Pattern":
-        return Pattern.from_shapely(self.pattern.symmetric_difference(other_pattern.pattern))
+        return Pattern.from_shapely(self.shapely.symmetric_difference(other_pattern.shapely))
 
     def to_gds(self, cell: gy.Cell):
         """
@@ -350,14 +354,14 @@ class Pattern:
         self.to_trimesh(extrude_height, engine=engine).export(filename)
 
     def plot(self, ax, color):
-        ax.add_patch(PolygonPatch(self.pattern, facecolor=color, edgecolor='none'))
+        ax.add_patch(PolygonPatch(self.shapely, facecolor=color, edgecolor='none'))
         b = self.bounds
         ax.set_xlim((b[0], b[2]))
         ax.set_ylim((b[1], b[3]))
         ax.set_aspect('equal')
 
     def offset(self, grow_d: float) -> "Pattern":
-        pattern = self.pattern.buffer(grow_d)
+        pattern = self.shapely.buffer(grow_d)
         return Pattern(pattern if isinstance(pattern, MultiPolygon) else pattern)
 
     def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> nd.Cell:
@@ -391,13 +395,16 @@ class Pattern:
         box_grow = box.offset(clearout_etch_stop_grow)
         return [(box, clearout_layer), (box_grow, clearout_etch_stop_layer)]
 
+    def put(self, port: Port):
+        return self.rotate(port.a).translate(port.x, port.y)
 
-class GroupedPattern(Pattern):
-    def __init__(self, *patterns: Pattern, call_union: bool = True):
-        self.patterns = patterns
-        super(GroupedPattern, self).__init__(*sum([list(pattern.polys) for pattern in patterns], []),
-                                             call_union=call_union)
-        self.port = dict(sum([list(pattern.port.items()) for pattern in patterns], []))
+
+# class GroupedPattern(Pattern):
+#     def __init__(self, *patterns: Pattern, call_union: bool = True, raise_ports: bool = False):
+#         super(GroupedPattern, self).__init__(*sum([list(pattern.polys) for pattern in patterns], []),
+#                                              call_union=call_union)
+#         self.patterns = patterns
+#         self.port = dict(sum([list(pattern.port.items()) for pattern in patterns], [])) if raise_ports else {}
 
 
 # TODO(nate): find a better place for these functions
