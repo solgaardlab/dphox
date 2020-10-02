@@ -10,6 +10,9 @@ try:
 except ImportError:
     pass
 
+from simphox.device import ModeDevice, MaterialBlock, SILICON, NITRIDE, OXIDE, dispersion_sweep, Material
+AIR = Material('Air', (0, 0, 0), 1)
+
 
 class LateralNemsPS(Pattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float,
@@ -137,7 +140,23 @@ class LateralNemsPS(Pattern):
             self.port['ps0'] = Port(gap_path.bounds[0], 0, -np.pi)
             self.port['ps1'] = Port(gap_path.bounds[2], 0)
             self.port['fin0'] = Port(*(center + dy))
-            self.port['fin1'] = Port(*(center - dy))
+            self.port['fin1'] = Port(*(center - dy), np.pi)
+
+    def effective_index(self, waveguide_h: float = 0.22, grid_spacing: float = 0.01,
+                        wavelength: float = 1.55, wg_z: float = 1, sim_size: Dim2 = (2.5, 2),
+                        wg_material: Material = SILICON):
+        waveguide_w_change = np.sum([np.sum(et) for et in self.end_taper])
+        waveguide_w = self.waveguide_w + waveguide_w_change
+        mode_device = ModeDevice(
+            wg=MaterialBlock((waveguide_w, waveguide_h), wg_material),
+            sub=MaterialBlock(sim_size, AIR),
+            size=sim_size,
+            wavelength=wavelength,
+            wg_height=wg_z,
+            spacing=grid_spacing
+        )
+        nanofin_ps = MaterialBlock((self.nanofin_w, waveguide_h), wg_material)
+        return mode_device.solve(mode_device.single(lat_ps=nanofin_ps, sep=self.gap_w))
 
 
 class LateralNemsTDC(Pattern):
@@ -282,7 +301,7 @@ class LateralNemsTDC(Pattern):
 class NemsAnchor(Pattern):
     def __init__(self, fin_dim: Dim2, shuttle_dim: Dim2, spring_dim: Dim2 = None,
                  straight_connector: Optional[Dim2] = None, tether_connector: Optional[Dim4] = None,
-                 pos_electrode_dim: Optional[Dim3] = None, neg_electrode_dim: Optional[Dim2] = None,
+                 pos_electrode_dim: Optional[Dim3] = None, gnd_electrode_dim: Optional[Dim2] = None,
                  include_fin_dummy: bool = False, attach_comb: bool = False, tooth_dim: Dim3 = (0.3, 3, 0.15)):
         """NEMS anchor
 
@@ -293,7 +312,7 @@ class NemsAnchor(Pattern):
             straight_connector: straight connector to the fin, box xy (overridden by loop connector)
             tether_connector: tether connector to the fin, xy dim and segment length on the top part of loop
             pos_electrode_dim: positive electrode dimension
-            neg_electrode_dim: negative electrode dimension
+            gnd_electrode_dim: negative electrode dimension
             include_fin_dummy: include fin dummy for for mechanical support
             attach_comb: attach a comb drive to the shuttle (only if pos_electrode_dim specified!)
             tooth_dim: (length, width, inter-tooth gap)
@@ -305,12 +324,12 @@ class NemsAnchor(Pattern):
         self.straight_connector = straight_connector
         self.tether_connector = tether_connector
         self.pos_electrode_dim = pos_electrode_dim
-        self.neg_electrode_dim = neg_electrode_dim
-        patterns, c_ports, pads, springs = [], [], [], []
+        self.neg_electrode_dim = gnd_electrode_dim
+        patterns, pads, springs, pos_pads, gnd_pads = [], [], [], [], []
 
         spring_dim = fin_dim if not spring_dim else spring_dim
         connector = Box(shuttle_dim).translate()
-        shuttle = copy(connector)
+        shuttle = connector.copy
         comb = None
         if tether_connector is not None and straight_connector is None:
             s = tether_connector
@@ -321,23 +340,18 @@ class NemsAnchor(Pattern):
             connector = Pattern(shuttle, straight, loop)
         elif straight_connector is not None:
             straight = Box(straight_connector)
-            fat_connector = (shuttle_dim[0], straight_connector[1])
-            fat = Box(fat_connector)
+            fat = Box((shuttle_dim[0], straight_connector[1]))
             connector = Pattern(connector,
-                                       copy(straight).halign(connector).valign(connector, bottom=False,
-                                                                               opposite=True),
-                                       copy(straight).halign(connector, left=False,
-                                                             opposite=False).valign(connector,
-                                                                                    bottom=False,
-                                                                                    opposite=True),
-                                       # adding more straight connectors for mirror symmetric mechanics
-                                       copy(straight).halign(connector, left=False, opposite=False).valign(
-                                           copy(connector).translate(*connector.size)),
-                                       copy(straight).halign(connector).valign(
-                                           copy(connector).translate(*connector.size)),
-                                       copy(fat).align(connector).valign(
-                                           copy(connector).translate(*connector.size))
-                                       )
+                                straight.copy.halign(connector).valign(connector, bottom=False,
+                                                                       opposite=True),
+                                straight.copy.halign(connector, left=False,
+                                                     opposite=False).valign(connector,
+                                                                            bottom=False,
+                                                                            opposite=True),
+                                # add a fat connector on the other side to avoid the "purse loop pull"
+                                fat.copy.align(connector).valign(
+                                    connector.copy.translate(*connector.size))
+                                )
         if include_fin_dummy and not attach_comb:
             # this is the mirror image dummy for mechanics
             dummy_fin = Box(fin_dim).align((connector.center[0], connector.bounds[3]))
@@ -351,10 +365,11 @@ class NemsAnchor(Pattern):
                     top_spring, opposite=True).translate(dy=pos_electrode_dim[2])
                 # fixing pos electrode alignment based on the existance of the dummy fin
                 if include_fin_dummy and not attach_comb:
-                    pos_electrode = Box((pos_electrode_dim[0], pos_electrode_dim[1])).align(top_spring).valign(
-                        dummy_fin, opposite=True).translate(dy=pos_electrode_dim[2])
+                    pos_electrode = Box((pos_electrode_dim[0], pos_electrode_dim[1])).align(
+                        top_spring).valign(dummy_fin, opposite=True).translate(dy=pos_electrode_dim[2])
                 patterns.append(pos_electrode)
                 pads.append(pos_electrode)
+                pos_pads.append(pos_electrode)
                 patterns.extend([top_spring, bottom_spring])
                 springs.extend([top_spring, bottom_spring])
                 if attach_comb:
@@ -363,9 +378,9 @@ class NemsAnchor(Pattern):
                     if num_teeth <= 0:
                         raise ValueError('Electrode dim is too small to hold comb teeth.')
                     tooth = Box(tooth_dim[:2])
-                    upper_comb = Pattern(*[copy(tooth).translate(dx_teeth * 2 * n)
+                    upper_comb = Pattern(*[tooth.copy.translate(dx_teeth * 2 * n)
                                                   for n in range(num_teeth)])
-                    lower_comb = Pattern(*[copy(tooth).translate(dx_teeth * (2 * n + 1))
+                    lower_comb = Pattern(*[tooth.copy.translate(dx_teeth * (2 * n + 1))
                                                   for n in range(num_teeth - 1)])
                     upper_comb.align(pos_electrode).valign(pos_electrode, opposite=True, bottom=False)
                     lower_comb.align(shuttle).valign(shuttle, opposite=True)
@@ -375,25 +390,24 @@ class NemsAnchor(Pattern):
                 if attach_comb:
                     raise AttributeError('Must specify pos_electrode_dim if attach_comb is True')
                 pads.append(shuttle)
-            if neg_electrode_dim is not None:
+            if gnd_electrode_dim is not None:
                 # moving alignment to account for bottom spring
-                neg_electrode_left = Box(neg_electrode_dim).halign(
+                gnd_electrode_left = Box(gnd_electrode_dim).halign(
                     bottom_spring, opposite=True).valign(bottom_spring)
-                neg_electrode_right = Box(neg_electrode_dim).halign(
+                gnd_electrode_right = Box(gnd_electrode_dim).halign(
                     bottom_spring, left=False, opposite=True).valign(bottom_spring)
-                patterns.extend([neg_electrode_left, neg_electrode_right])
-                pads.extend([neg_electrode_left, neg_electrode_right])
+                patterns.extend([gnd_electrode_left, gnd_electrode_right])
+                pads.extend([gnd_electrode_left, gnd_electrode_right])
+                gnd_pads = [gnd_electrode_left, gnd_electrode_right]
 
         super(NemsAnchor, self).__init__(*patterns)
+        self.pads, self.springs, self.shuttle, self.comb = pads, springs, shuttle, comb
+        self.pos_pads, self.gnd_pads = pos_pads, gnd_pads
         shift = [-connector.center[0], -connector.bounds[1]]
         shift[1] -= -tether_connector[-1] if tether_connector is not None and straight_connector is None else 0
+        self.reference_patterns = self.pads + [self.shuttle] + self.springs
+        self.reference_patterns += [self.comb] if attach_comb else []
         self.translate(*shift)
-        self.pads = [pad.translate(*shift) for pad in pads]
-        self.pos_pads = self.pads[:1]
-        self.neg_pads = self.pads[1:]
-        self.springs = [s.translate(*shift) for s in springs]
-        self.shuttle = shuttle.translate(*shift) if pos_electrode_dim is not None else shuttle
-        self.comb = comb.translate(*shift) if comb is not None else comb
         for idx, pad in enumerate(self.pads):
             self.port[f'c{idx}'] = Port(*pad.center, -np.pi)
             self.port[f'd{idx}'] = Port(*pad.center)
@@ -478,37 +492,35 @@ class MemsMonitorCoupler(Pattern):
 
 
 class LateralNemsPSFull(Multilayer):
-    def __init__(self, ps: LateralNemsPS, top_anchor: NemsAnchor,
+    def __init__(self, ps: LateralNemsPS, anchor: NemsAnchor,
                  metal_via: Via, pad_via: Via, trace_w: float,
-                 pos_box_w: float, gnd_box_h: float,
+                 pos_box_w: float, gnd_box_h: float, clearout_box_dim: Dim2,
                  ridge: str, rib: str, shuttle_dope: str,
                  spring_dope: str, pad_dope: str, pos_metal: str, gnd_metal: str,
-                 clearout: str, clearout_box_dim: Dim2,
-                 bot_anchor: Optional[NemsAnchor] = None):
-        """
+                 clearout: str):
+        """Full multilayer phase shifter design
 
         Args:
             ps: phase shifter
-            top_anchor: top anchor (None in pull-in case)
-            metal_via: metal via
-            pad_via: pad via
+            anchor: top anchor (None in pull-in case)
+            metal_via: metal via (metal to metal)
+            pad_via: pad via (silicon to metal)
             trace_w: trace width
             pos_box_w: Extension for the positive box
             gnd_box_h: Extension for the negative box
+            clearout_box_dim: clearout box dimension aligned in the center
             ridge: ridge layer
             rib: rib layer
             shuttle_dope: shuttle dope layer
             spring_dope: spring dope layer
             pad_dope: pad dope layer
-            clearout: str
             pos_metal: pos terminal layer
             gnd_metal: gnd terminal layer
+            clearout: clearout layer
         """
-        bot_anchor = top_anchor if bot_anchor is None else bot_anchor
         self.config = {
             'ps': ps.config,
-            'top_anchor': top_anchor.config,
-            'bot_anchor': bot_anchor.config,
+            'anchor': anchor.config,
             'metal_via': metal_via.config,
             'pad_via': pad_via.config,
             'trace_w': trace_w,
@@ -520,26 +532,30 @@ class LateralNemsPSFull(Multilayer):
             'spring_dope': spring_dope,
             'pad_dope': pad_dope
         }
-        top = copy(top_anchor).translate(*ps.port['t0'].xy)
-        bot = copy(bot_anchor).flip().translate(*ps.port['t1'].xy)
+        top = anchor.copy.put(ps.port['fin0'])
+        bot = anchor.copy.put(ps.port['fin1'])
         full_ps = Pattern(top, bot, ps)
         vias = metal_via.pattern_to_layer + pad_via.pattern_to_layer
-        dopes = [top.shuttle.dope(shuttle_dope), bot.shuttle.dope(shuttle_dope)] + \
-                [s.dope(spring_dope) for s in top.springs + bot.springs] + \
-                [s.dope(pad_dope) for s in top.pads + bot.pads]
+        dopes = [s.dope(shuttle_dope) for s in [top.shuttle, bot.shuttle] if shuttle_dope is not None] + \
+                [s.dope(spring_dope) for s in top.springs + bot.springs if spring_dope is not None] + \
+                [s.dope(pad_dope) for s in top.pads + bot.pads if pad_dope is not None]
         metals = []
-        if top.neg_pads:
-            neg = Pattern(*(top.neg_pads + bot.neg_pads))
-            neg_box = Box(neg.size).difference(Box((neg.size[0] - 2 * trace_w,
-                                                    neg.size[1] - trace_w + gnd_box_h))).align(neg).valign(neg,
-                                                                                                           bottom=False)
-            metals.append(neg_box)
-        elif top.pos_pads:
+        if top.gnd_pads and gnd_metal is not None:
+            gnd = Pattern(*(top.gnd_pads + bot.gnd_pads))
+            # gnd_box = Box(gnd.size).difference(
+            #     Box((gnd.size[0] - 2 * trace_w, gnd.size[1] - trace_w + gnd_box_h))
+            # ).align(gnd).valign(gnd, bottom=False)
+            gnd_box.align()
+            metals.append((gnd_box, gnd_metal))
+        elif top.pos_pads and pos_metal is not None:
             pos = Pattern(*(top.pos_pads + bot.pos_pads))
-            pos_box = Box(pos.size).difference(Box((pos.size[0] - 2 * trace_w,
-                                                    pos.size[1] - trace_w + pos_box_w))).align(pos)
-            metals.append(pos_box)
-        super(LateralNemsPSFull, self).__init__([(full_ps, ridge), (ps.rib_brim, rib)] + vias + dopes + metals)
+            pos_box = Box(pos.size).difference(
+                Box((pos.size[0] - 2 * trace_w, pos.size[1] - trace_w + pos_box_w))
+            ).align(pos)
+            metals.append((pos_box, pos_metal))
+        rib_brim = [(rb, rib) for rb in ps.rib_brim if rib is not None]
+        # , (Box(clearout_box_dim).align(ps), clearout)
+        super(LateralNemsPSFull, self).__init__([(full_ps, ridge)] + rib_brim + vias + dopes + metals)
 
 
 class NemsMillerNode(Pattern):
@@ -582,8 +598,8 @@ class NemsMillerNode(Pattern):
         pad_y = ud_connector_dim[1] + ud_pad_dim[1] / 2
         pads += [Box(ud_pad_dim).align(nanofins[0]).translate(dy=-pad_y)]
         connector = Box(ud_connector_dim).align(pads[0])
-        connectors += [copy(connector).valign(pads[0], bottom=True, opposite=True).halign(pads[0]),
-                       copy(connector).valign(pads[0], bottom=True, opposite=True).halign(pads[0], left=False)]
+        connectors += [connector.copy.valign(pads[0], bottom=True, opposite=True).halign(pads[0]),
+                       connector.copy.valign(pads[0], bottom=True, opposite=True).halign(pads[0], left=False)]
 
         nanofin_x = lr_nanofin_w / 2 + lr_gap_w + upper_interaction_l / 2 + bend_radius + waveguide_w / 2
         pad_x = lr_connector_dim[0] + lr_pad_dim[0] / 2
@@ -594,11 +610,11 @@ class NemsMillerNode(Pattern):
         pads += [Box(lr_pad_dim).align(nanofins[1]).translate(dx=-pad_x, dy=0),
                  Box(lr_pad_dim).align(nanofins[2]).translate(dx=pad_x, dy=0)]
         connector = Box(lr_connector_dim).align(pads[1])
-        connectors += [copy(connector).halign(pads[1], left=True, opposite=True).valign(pads[1]),
-                       copy(connector).halign(pads[1], left=True, opposite=True).valign(pads[1], bottom=False)]
+        connectors += [connector.copy.halign(pads[1], left=True, opposite=True).valign(pads[1]),
+                       connector.copy.halign(pads[1], left=True, opposite=True).valign(pads[1], bottom=False)]
         connector = Box(lr_connector_dim).align(pads[2])
-        connectors += [copy(connector).halign(pads[2], left=False, opposite=True).valign(pads[2]),
-                       copy(connector).halign(pads[2], left=False, opposite=True).valign(pads[2], bottom=False)]
+        connectors += [connector.copy.halign(pads[2], left=False, opposite=True).valign(pads[2]),
+                       connector.copy.halign(pads[2], left=False, opposite=True).valign(pads[2], bottom=False)]
 
         super(NemsMillerNode, self).__init__(*([dc] + nanofins + connectors + pads))
         self.dc, self.connectors, self.nanofins, self.pads = dc, connectors, nanofins, pads

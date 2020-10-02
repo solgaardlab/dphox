@@ -195,7 +195,7 @@ class AIMNazca:
         c = NemsAnchor(fin_dim=fin_dim, shuttle_dim=shuttle_dim,
                        spring_dim=spring_dim, straight_connector=straight_connector,
                        tether_connector=tether_connector, pos_electrode_dim=pos_electrode_dim,
-                       neg_electrode_dim=neg_electrode_dim, attach_comb=attach_comb,
+                       gnd_electrode_dim=neg_electrode_dim, attach_comb=attach_comb,
                        include_fin_dummy=include_fin_dummy)
         pads, dopes = [], []
         if pos_electrode_dim is not None:

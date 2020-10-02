@@ -82,32 +82,18 @@ class Multilayer:
         ax.set_ylim((b[1], b[3]))
         ax.set_aspect('equal')
 
-    def to_trimesh_scene(self, layer_to_zrange: Dict[str, Tuple[float, float]],
-                         layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad'):
-        meshes = []
-        for layer, zrange in layer_to_zrange.items():
-            zmin, zmax = zrange
-            layer_meshes = [
-                trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
-                for poly in self.layer_to_pattern[layer]]
-            mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
-            mesh.visual.vertex_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
-            meshes.append(mesh)
-        return trimesh.Scene(meshes)
-
     def to_trimesh_dict(self, layer_to_zrange: Dict[str, Tuple[float, float]],
                         process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
                         layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad'):
         meshes = {}
         if process_extrusion is not None:
-            layer_to_extrusion = self.build_extrusion_layers(layer_to_zrange, process_extrusion)
+            layer_to_extrusion = self.build_layers(layer_to_zrange, process_extrusion)
             for layer, pattern_zrange in layer_to_extrusion.items():
                 try:
                     zmin, zmax = pattern_zrange[1]
                     layer_meshes = [
                         trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
                         for poly in pattern_zrange[0]]
-                    # TODO(): Do not want to use trimesh Booleans
                     mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
                     mesh.visual.vertex_colors = visual.random_color() \
                         if layer_to_color is None else layer_to_color[layer]
@@ -115,22 +101,28 @@ class Multilayer:
                 except KeyError:
                     print(f"No zranges given for the layer {layer}")
             return meshes
+        else:
+            for layer, pattern in self.layer_to_pattern.items():
+                try:
+                    zmin, zmax = layer_to_zrange[layer]
+                    layer_meshes = [
+                        trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
+                        for poly in pattern]
+                    mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
+                    mesh.visual.vertex_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
+                    meshes[layer] = mesh
+                except KeyError:
+                    print(f"No zranges given for the layer {layer}")
+            return meshes
 
-        for layer, pattern in self.layer_to_pattern.items():
-            try:
-                zmin, zmax = layer_to_zrange[layer]
-                layer_meshes = [
-                    trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
-                    for poly in pattern]
-                mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
-                mesh.visual.vertex_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
-                meshes[layer] = mesh
-            except KeyError:
-                print(f"No zranges given for the layer {layer}")
-        return meshes
+    def to_trimesh_scene(self, layer_to_zrange: Dict[str, Tuple[float, float]],
+                         process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
+                         layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad'):
+        meshes = self.to_trimesh_dict(layer_to_zrange, process_extrusion, layer_to_color, engine)
+        return trimesh.Scene(meshes.values())
 
-    def build_extrusion_layers(self, layer_to_zrange: Dict[str, Tuple[float, float]],
-                               process_extrusion: Dict[str, List[Tuple[str, str, str]]]):
+    def build_layers(self, layer_to_zrange: Dict[str, Tuple[float, float]],
+                     process_extrusion: Dict[str, List[Tuple[str, str, str]]]):
         layer_to_extrusion = {}
         layers = self.layer_to_pattern.keys()
         layer_to_pattern_processed = self.layer_to_pattern.copy()
@@ -151,7 +143,7 @@ class Multilayer:
                     if other_layer in layers:
                         pattern = Pattern(layer_to_pattern_processed[layer]).boolean_operation(
                             Pattern(layer_to_pattern_processed[other_layer]), operation
-                        ).pattern
+                        ).shapely
                     else:
                         pattern = layer_to_pattern_processed[layer]
                     if pattern.geoms:
@@ -197,6 +189,9 @@ class Via(Multilayer):
         boundary = Box((via_pattern.size[0] + 2 * boundary_grow,
                         via_pattern.size[1] + 2 * boundary_grow)).align((0, 0)).halign(0)
         via_pattern.align(boundary)
-        super(Via, self).__init__([(via_pattern, via), (boundary, top_metal), (copy(boundary), bot_metal)])
+        layers = [(via_pattern, via)]
+        layers += [(boundary, top_metal)] if top_metal is not None else []
+        layers += [(copy(boundary), bot_metal)] if bot_metal is not None else []
+        super(Via, self).__init__(layers)
         self.port['a0'] = Port(self.bounds[0], 0, np.pi)
         self.port['b0'] = Port(self.bounds[2], 0)
