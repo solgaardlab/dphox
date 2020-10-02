@@ -114,9 +114,10 @@ class Port:
         self.x = x
         self.y = y
         self.a = a
+        self.a_deg = a * 180 / np.pi
         self.xy = (x, y)
         self.xya = (x, y, a)
-        self.xya_nazca = (x, y, a * 180 / np.pi)
+        self.xya_deg = (x, y, a * 180 / np.pi)
 
 
 class Pattern:
@@ -146,6 +147,7 @@ class Pattern:
         self.call_union = call_union
         self.shapely = self._shapely()
         self.port: Dict[str, Port] = {}
+        self.reference_patterns: List[Pattern] = []
 
     @classmethod
     def from_shapely(cls, shapely_pattern: Union[Polygon, GeometryCollection]) -> "Pattern":
@@ -171,7 +173,8 @@ class Pattern:
             An array of indicators of whether a volumetric image contains the mask
 
         """
-        x_, y_ = np.mgrid[0:grid_spacing[0] * shape[0]:grid_spacing[0], 0:grid_spacing[1] * shape[1]:grid_spacing[1]]
+        x_, y_ = np.mgrid[0:grid_spacing[0] * shape[0]:grid_spacing[0],
+                          0:grid_spacing[1] * shape[1]:grid_spacing[1]]
 
         return contains(self.shapely, x_, y_)
 
@@ -220,6 +223,9 @@ class Pattern:
         """
         self.polys = [translate(path, dx, dy) for path in self.polys]
         self.shapely = self._shapely()
+        # any patterns in the element should also be translated
+        for pattern in self.reference_patterns:
+            pattern.translate(dx, dy)
         return self
 
     def align(self, c: Union["Pattern", Tuple[float, float]]) -> "Pattern":
@@ -273,10 +279,11 @@ class Pattern:
         self.translate(dy=p - y)
         return self
 
-    def flip(self, horiz: bool = False) -> "Pattern":
-        """Flip the component across center
+    def flip(self, center: Dim2 = (0, 0), horiz: bool = False) -> "Pattern":
+        """Flip the component across a center point (default (0, 0))
 
         Args:
+            center:
             horiz: do horizontal flip, otherwise vertical flip
 
         Returns:
@@ -286,12 +293,16 @@ class Pattern:
         new_polys = []
         for poly in self.polys:
             points = np.asarray(poly.exterior.coords.xy)
-            new_points = np.stack((-points[0], points[1])) if horiz else np.stack((points[0], -points[1]))
+            new_points = np.stack((-points[0] + 2 * center[0], points[1])) if horiz \
+                else np.stack((points[0], -points[1] + 2 * center[1]))
             new_polys.append(Polygon(new_points.T))
         self.polys = new_polys
+        # any patterns in this pattern should also be flipped
+        for pattern in self.reference_patterns:
+            pattern.flip(center, horiz)
         return self
 
-    def rotate(self, angle: float, origin: str = 'center') -> "Pattern":
+    def rotate(self, angle: float, origin: str = (0, 0)) -> "Pattern":
         """Runs Shapely's rotate operation on the geometry
 
         Args:
@@ -304,6 +315,9 @@ class Pattern:
         """
         self.shapely = rotate(self.shapely, angle, origin)
         self.polys = [poly for poly in self.shapely]
+        # any patterns in this pattern should also be rotated
+        for pattern in self.reference_patterns:
+            pattern.rotate(angle, origin)
         return self
 
     @property
@@ -369,7 +383,7 @@ class Pattern:
             for poly in self.polys:
                 nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
             for name, port in self.port.items():
-                nd.Pin(name).put(*port.xya_nazca)
+                nd.Pin(name).put(*port.xya_deg)
             nd.put_stub()
         return cell
 
@@ -385,7 +399,7 @@ class Pattern:
         return [(pattern, metal_layer) for pattern, metal_layer in patterns]
 
     def dope(self, dope_layer: str, dope_grow: float = 0.1):
-        return copy(self).offset(dope_grow), dope_layer
+        return self.copy.offset(dope_grow), dope_layer
 
     def clearout_box(self, clearout_layer: str, clearout_etch_stop_layer: str,
                      dim: Tuple[float, float], clearout_etch_stop_grow: float = 0.5,
@@ -396,7 +410,7 @@ class Pattern:
         return [(box, clearout_layer), (box_grow, clearout_etch_stop_layer)]
 
     def put(self, port: Port):
-        return self.rotate(port.a).translate(port.x, port.y)
+        return self.rotate(port.a_deg).translate(port.x, port.y)
 
 
 # class GroupedPattern(Pattern):
