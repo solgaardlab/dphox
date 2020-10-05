@@ -23,11 +23,7 @@ class Multilayer:
     def __init__(self, pattern_to_layer: List[Tuple[Union[Pattern, Path, gy.Polygon, gy.FlexPath, Polygon],
                                                     Union[int, str]]]):
         self.pattern_to_layer = pattern_to_layer
-        self._pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
-                                  for comp, layer in pattern_to_layer}
-        self.layer_to_pattern = self._layer_to_pattern()
-        # TODO: temporary way to assign ports
-        self.port = dict(sum([list(pattern.port.items()) for pattern, _ in pattern_to_layer], []))
+        self.layer_to_pattern, self.port = self._init_multilayer()
 
     @classmethod
     def from_nazca_cell(cls, cell: nd.Cell):
@@ -50,6 +46,67 @@ class Multilayer:
         bbox = self.gdspy_cell().get_bounding_box()
         return bbox[0][0], bbox[0][1], bbox[1][0], bbox[1][1]
 
+    @property
+    def center(self) -> Dim2:
+        """
+
+        Returns:
+            Center for the component
+
+        """
+        b = self.bounds  # (minx, miny, maxx, maxy)
+        return (b[2] + b[0]) / 2, (b[3] + b[1]) / 2  # (avgx, avgy)
+
+    def align(self, c: Union["Pattern", Tuple[float, float]]) -> "Multilayer":
+        """Align center of pattern
+
+        Args:
+            c: A pattern (align to the pattern's center) or a center point for alignment
+
+        Returns:
+            Aligned pattern
+
+        """
+        old_x, old_y = self.center
+        center = c if isinstance(c, tuple) else c.center
+        self.translate(center[0] - old_x, center[1] - old_y)
+        return self
+
+    def translate(self, dx: float, dy: float) -> "Multilayer":
+        """Translate the multilayer by translating all of the patterns within it individually
+
+        Args:
+            dx: translation in x
+            dy: translation in y
+
+        Returns:
+
+        """
+        for pattern, _ in self.pattern_to_layer:
+            pattern.translate(dx, dy)
+        self.layer_to_pattern, self.port = self._init_multilayer()
+        return self
+
+    def rotate(self, angle: float, origin: str = (0, 0)) -> "Multilayer":
+        """Rotate the multilayer by rotating all of the patterns within it individually
+
+        Args:
+            angle: rotation angle
+            origin: origin of rotation
+
+        Returns:
+            Rotated pattern
+
+        """
+        for pattern, _ in self.pattern_to_layer:
+            pattern.rotate(angle, origin)
+        self.layer_to_pattern, self.port = self._init_multilayer()
+        return self
+
+    @property
+    def copy(self) -> "Multilayer":
+        return copy(self)
+
     def gdspy_cell(self, cell_name: str = 'dummy') -> gy.Cell:
         cell = gy.Cell(cell_name, exclude_from_current=(cell_name == 'dummy'))
         for pattern, layer in self._pattern_to_layer.items():
@@ -63,16 +120,20 @@ class Multilayer:
                 for poly in pattern.polys:
                     nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
             for name, port in self.port.items():
-                nd.Pin(name).put(*port.xya_nazca)
+                nd.Pin(name).put(*port.xya_deg)
             nd.put_stub()
         return cell
 
-    def _layer_to_pattern(self) -> Dict[Union[int, str], MultiPolygon]:
+    def _init_multilayer(self) -> Tuple[Dict[Union[int, str], MultiPolygon], Dict[str, Port]]:
+        self._pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
+                                  for comp, layer in self.pattern_to_layer}
         layer_to_polys = defaultdict(list)
         for component, layer in self._pattern_to_layer.items():
             layer_to_polys[layer].extend(component.polys)
         pattern_dict = {layer: MultiPolygon(polys) for layer, polys in layer_to_polys.items()}
-        return pattern_dict
+        # TODO: temporary way to assign ports
+        port = dict(sum([list(pattern.port.items()) for pattern, _ in self.pattern_to_layer], []))
+        return pattern_dict, port
 
     def plot(self, ax, layer_to_color: Dict[Union[int, str], Union[Dim3, str]], alpha: float = 0.5):
         for layer, pattern in self.layer_to_pattern.items():
@@ -129,15 +190,15 @@ class Multilayer:
         for step, operations in process_extrusion.items():
             for layer_relation in operations:
                 layer, other_layer, operation = layer_relation
-                if 'DOPE' in step and operation == 'intersection':
+                if 'dope' in step and operation == 'intersection':
                     # make a new layer for each doping intersection
-                    new_layer = layer + '_' + other_layer
+                    # new_layer = layer + '_' + other_layer
                     zmin, zmax = layer_to_zrange[other_layer]
                     z0, z1 = layer_to_zrange[layer]
                     # TODO(): how to deal with different depth doping currently not addressed
                     new_zrange = (max(zmax - (z1 - z0), zmin), zmax)
                 else:
-                    new_layer = layer
+                    # new_layer = layer
                     new_zrange = layer_to_zrange[layer]
                 if layer in layers:
                     if other_layer in layers:
@@ -147,8 +208,8 @@ class Multilayer:
                     else:
                         pattern = layer_to_pattern_processed[layer]
                     if pattern.geoms:
-                        layer_to_pattern_processed[new_layer] = pattern
-                        layer_to_extrusion[new_layer] = (pattern, new_zrange)
+                        layer_to_pattern_processed[layer] = pattern
+                        layer_to_extrusion[layer] = (pattern, new_zrange)
         return layer_to_extrusion
 
     def fill_material(self, layer_name: str, growth: float, centered_layer: str = None):
@@ -163,17 +224,16 @@ class Multilayer:
         self.pattern_to_layer.append((fill, layer_name))
         self._pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
                                   for comp, layer in self.pattern_to_layer}
-        self.layer_to_pattern = self._layer_to_pattern()
+        self.layer_to_pattern, self.port = self._init_multilayer()
         return [(fill, layer_name)]
 
 
 class Via(Multilayer):
-    def __init__(self, via_dim: Dim2, boundary_grow: float, top_metal: str, bot_metal: str, via: str,
-                 pitch: float = 0, shape: Optional[Shape2] = None):
+    def __init__(self, via_dim: Dim2, boundary_grow: float, metal: Union[str, List[str]],
+                 via: Union[str, List[str]], pitch: float = 0, shape: Optional[Shape2] = None):
         self.via_dim = via_dim
         self.boundary_grow = boundary_grow
-        self.top_metal = top_metal
-        self.bot_metal = bot_metal
+        self.metal = metal
         self.via = via
         self.pitch = pitch
         self.shape = shape
@@ -189,9 +249,15 @@ class Via(Multilayer):
         boundary = Box((via_pattern.size[0] + 2 * boundary_grow,
                         via_pattern.size[1] + 2 * boundary_grow)).align((0, 0)).halign(0)
         via_pattern.align(boundary)
-        layers = [(via_pattern, via)]
-        layers += [(boundary, top_metal)] if top_metal is not None else []
-        layers += [(copy(boundary), bot_metal)] if bot_metal is not None else []
+        layers = []
+        if isinstance(via, list):
+            layers += [(via_pattern.copy, layer) for layer in via]
+        elif isinstance(via, str):
+            layers += [(via_pattern, via)]
+        if isinstance(metal, list):
+            layers += [(boundary.copy, layer) for layer in metal]
+        elif isinstance(metal, str):
+            layers += [(boundary, metal)]
         super(Via, self).__init__(layers)
         self.port['a0'] = Port(self.bounds[0], 0, np.pi)
         self.port['b0'] = Port(self.bounds[2], 0)

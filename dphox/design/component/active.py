@@ -390,6 +390,7 @@ class NemsAnchor(Pattern):
                 if attach_comb:
                     raise AttributeError('Must specify pos_electrode_dim if attach_comb is True')
                 pads.append(shuttle)
+                pos_pads.append(shuttle)
             if gnd_electrode_dim is not None:
                 # moving alignment to account for bottom spring
                 gnd_electrode_left = Box(gnd_electrode_dim).halign(
@@ -420,8 +421,8 @@ class GndWaveguide(Pattern):
         around an (optionally) tapered waveguide.
 
         Args:
-            waveguide_w:
-            length:
+            waveguide_w: waveguide width
+            length: length of waveguide
             gnd_contact_dim:
             rib_brim_w:
             gnd_connector_dim:
@@ -493,7 +494,7 @@ class MemsMonitorCoupler(Pattern):
 
 class LateralNemsPSFull(Multilayer):
     def __init__(self, ps: LateralNemsPS, anchor: NemsAnchor,
-                 metal_via: Via, pad_via: Via, trace_w: float,
+                 gnd_via: Via, pos_via: Via, trace_w: float,
                  pos_box_w: float, gnd_box_h: float, clearout_box_dim: Dim2,
                  ridge: str, rib: str, shuttle_dope: str,
                  spring_dope: str, pad_dope: str, pos_metal: str, gnd_metal: str,
@@ -503,8 +504,8 @@ class LateralNemsPSFull(Multilayer):
         Args:
             ps: phase shifter
             anchor: top anchor (None in pull-in case)
-            metal_via: metal via (metal to metal)
-            pad_via: pad via (silicon to metal)
+            gnd_via: gnd ``Via`` connection
+            pos_via: pos ``Via`` connection
             trace_w: trace width
             pos_box_w: Extension for the positive box
             gnd_box_h: Extension for the negative box
@@ -521,8 +522,8 @@ class LateralNemsPSFull(Multilayer):
         self.config = {
             'ps': ps.config,
             'anchor': anchor.config,
-            'metal_via': metal_via.config,
-            'pad_via': pad_via.config,
+            'pos_via': pos_via.config,
+            'gnd_via': gnd_via.config,
             'trace_w': trace_w,
             'ridge': ridge,
             'rib': rib,
@@ -535,27 +536,31 @@ class LateralNemsPSFull(Multilayer):
         top = anchor.copy.put(ps.port['fin0'])
         bot = anchor.copy.put(ps.port['fin1'])
         full_ps = Pattern(top, bot, ps)
-        vias = metal_via.pattern_to_layer + pad_via.pattern_to_layer
+        vias = []
         dopes = [s.dope(shuttle_dope) for s in [top.shuttle, bot.shuttle] if shuttle_dope is not None] + \
                 [s.dope(spring_dope) for s in top.springs + bot.springs if spring_dope is not None] + \
                 [s.dope(pad_dope) for s in top.pads + bot.pads if pad_dope is not None]
         metals = []
         if top.gnd_pads and gnd_metal is not None:
-            gnd = Pattern(*(top.gnd_pads + bot.gnd_pads))
-            # gnd_box = Box(gnd.size).difference(
-            #     Box((gnd.size[0] - 2 * trace_w, gnd.size[1] - trace_w + gnd_box_h))
-            # ).align(gnd).valign(gnd, bottom=False)
-            gnd_box.align()
+            gnd_pads = top.gnd_pads + bot.gnd_pads
+            gnd = Pattern(*gnd_pads)
+            gnd_box = Box((gnd.size[0], gnd.size[1] + gnd_box_h)).align(gnd).valign(gnd, bottom=False)
+            gnd_box = gnd_box.difference(Box((gnd.size[0] - 2 * trace_w,
+                                              gnd.size[1] - trace_w + gnd_box_h)).align(gnd).valign(gnd, bottom=False))
             metals.append((gnd_box, gnd_metal))
-        elif top.pos_pads and pos_metal is not None:
-            pos = Pattern(*(top.pos_pads + bot.pos_pads))
-            pos_box = Box(pos.size).difference(
-                Box((pos.size[0] - 2 * trace_w, pos.size[1] - trace_w + pos_box_w))
-            ).align(pos)
+            vias.extend(sum([gnd_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
+        if top.pos_pads and pos_metal is not None:
+            pos_pads = top.pos_pads + bot.pos_pads
+            pos = Pattern(*pos_pads)
+            pos_box = Box((pos.size[0] + 2 * pos_box_w, pos.size[1])).align(pos)
+            pos_box = pos_box.difference(
+                Box((pos.size[0] - 2 * trace_w + 2 * pos_box_w,
+                     pos.size[1] - 2 * trace_w)).align(pos_box))
             metals.append((pos_box, pos_metal))
+            vias.extend(sum([pos_via.copy.align(pad).pattern_to_layer for pad in pos_pads], []))
         rib_brim = [(rb, rib) for rb in ps.rib_brim if rib is not None]
-        # , (Box(clearout_box_dim).align(ps), clearout)
-        super(LateralNemsPSFull, self).__init__([(full_ps, ridge)] + rib_brim + vias + dopes + metals)
+        super(LateralNemsPSFull, self).__init__([(full_ps, ridge),
+                                                 (Box(clearout_box_dim).align(ps), clearout)] + rib_brim + vias + dopes + metals)
 
 
 class NemsMillerNode(Pattern):
