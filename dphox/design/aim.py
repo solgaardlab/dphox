@@ -85,7 +85,7 @@ class AIMNazca:
                 nd.Pin('b0').put(tdc.pin['b0'])
                 nd.Pin('a1').put(tdc.pin['a1'])
                 nd.Pin('b1').put(tdc.pin['b1'])
-                tdc.raise_pins(['gnd0_l_0', 'gnd0_u_0', 'gnd0_l_1', 'gnd0_u_1'])
+                tdc.raise_pins(['gnd_l', 'gnd_r', 'pos_l', 'pos_r'])
         return self.tdc_node(diff_ps, cell) if diff_ps is not None else cell
 
     def nems_ps(self, anchor: nd.Cell, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 90,
@@ -99,15 +99,15 @@ class AIMNazca:
                 metal_extension: float = 10,
                 name: str = 'nems_ps') -> nd.Cell:
         c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
-                          num_taper_evaluations=num_taper_evaluations, pad_dim=pad_dim,
+                          num_taper_evaluations=num_taper_evaluations,
                           fin_end_bend_dim=fin_adiabatic_bend_dim, gnd_connector_idx=gnd_connector_idx,
                           gap_taper=gap_taper, wg_taper=wg_taper, end_ls=end_ls, end_taper=end_taper,
                           taper_l=taper_l, boundary_taper=boundary_taper, gnd_connector=gnd_connector)
-        pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
+        # pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
         clearout = c.clearout_box(clearout_layer='clearout', clearout_etch_stop_layer='snam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
-        device = Multilayer([(c, 'seam')] + pad_to_layer + clearout + ridge_etch)
+        device = Multilayer([(c, 'seam')] + clearout + ridge_etch)
 
         with nd.Cell(name) as cell:
             ps = device.nazca_cell('ps').put()
@@ -215,11 +215,6 @@ class AIMNazca:
             pl = ps.put()
             nd.Pin('a0').put(pl.pin['a0'])
             nd.Pin('b0').put(pl.pin['b0'])
-            # if 'v0' in pl.pin:
-            #     nd.Pin('c2').put(pl.pin['c0'])
-            #     nd.Pin('c3').put(pl.pin['c1'])
-            #     nd.Pin('v2').put(pl.pin['v0'])
-            #     nd.Pin('v3').put(pl.pin['v1'])
             pu = ps.put(0, interport_w)
             nd.Pin('a1').put(pu.pin['a0'])
             nd.Pin('b1').put(pu.pin['b0'])
@@ -231,44 +226,29 @@ class AIMNazca:
                 nd.Pin('gnd1').put(pu.pin['gnd1'])
         return cell
 
-    def mzi_arms(self, lower_arm: List[Union[nd.Cell, float]] = None,
-                 upper_arm: List[Union[nd.Cell, float]] = None, interport_w: float = 50,
+    def mzi_arms(self, lower_arm: List[Union[nd.Cell, float, Multilayer]] = None,
+                 upper_arm: List[Union[nd.Cell, float, Multilayer]] = None, interport_w: float = 50,
                  name: str = 'mzi_arm'):
+        def _put_device(dev: Union[nd.Cell, float, Multilayer]):
+            if isinstance(dev, (float, int)):
+                return self.waveguide_ic.strt(dev).put()
+            elif isinstance(dev, Multilayer):
+                device = dev.nazca_cell(f'{name}_dev').put()
+                device.raise_pins(['gnd_l', 'pos_l', 'gnd_r', 'pos_r'])
+                return device
+            else:
+                return dev.put()
+
         with nd.Cell(name) as cell:
-            pins_to_raise = ['pos0', 'pos1', 'gnd0', 'gnd1']
-
-            i_l = 0
-            l_device = self.waveguide_ic.strt(lower_arm[0]).put()\
-                if isinstance(lower_arm[0], (float, int)) else lower_arm[0].put()
-            if bool(set(pins_to_raise) & set(l_device.pin)):  # using this to sqush nazca yelling
-                lower_pins = [f'pos0_l_{i_l}', f'pos1_l_{i_l}', f'gnd0_l_{i_l}', f'gnd1_l_{i_l}']
-                l_device.raise_pins(pins_to_raise, lower_pins)
-                i_l += 1
+            l_devices = [_put_device(dev) for dev in lower_arm]
+            nd.cp.goto(0, interport_w)
+            u_devices = [_put_device(dev) for dev in upper_arm]
+            l_device, u_device = l_devices[0], u_devices[0]
             nd.Pin('a0').put(l_device.pin['a0'])
-            for lower_device in lower_arm[1:]:
-                l_device = self.waveguide_ic.strt(lower_device).put() if isinstance(lower_device, (
-                    float, int)) else lower_device.put()
-                if bool(set(pins_to_raise) & set(l_device.pin)):
-                    lower_pins = [f'pos0_l_{i_l}', f'pos1_l_{i_l}', f'gnd0_l_{i_l}', f'gnd1_l_{i_l}']
-                    l_device.raise_pins(pins_to_raise, lower_pins)
-                    i_l += 1
-
-            i_u = 0
-            u_device = self.waveguide_ic.strt(upper_arm[0]).put(0, interport_w, flip=True) if isinstance(upper_arm[0], (
-                float, int)) else upper_arm[0].put(0, interport_w, flip=True)
-            if bool(set(pins_to_raise) & set(u_device.pin)):
-                upper_pins = [f'pos0_u_{i_u}', f'pos1_u_{i_u}', f'gnd0_u_{i_u}', f'gnd1_u_{i_u}']
-                u_device.raise_pins(pins_to_raise, upper_pins)
-                i_u += 1
             nd.Pin('a1').put(u_device.pin['a0'])
-            for upper_device in upper_arm[1:]:
-                u_device = self.waveguide_ic.strt(upper_device).put(flip=True) if isinstance(upper_device, (
-                    float, int)) else upper_device.put(flip=True)
-                if bool(set(pins_to_raise) & set(u_device.pin)):
-                    upper_pins = [f'pos0_u_{i_u}', f'pos1_u_{i_u}', f'gnd0_u_{i_u}', f'gnd1_u_{i_u}']
-                    u_device.raise_pins(pins_to_raise, upper_pins)
-                    i_u += 1
 
+            # Use waveguide to complete the arm in case of unequal lengths
+            l_device, u_device = l_devices[-1], u_devices[-1]
             lx, ly, la = l_device.pin['b0'].xya()
             ux, uy, ua = u_device.pin['b0'].xya()
             fill_length = abs(lx - ux)
@@ -518,84 +498,7 @@ class AIMNazca:
                     internal_ps = diff_ps.put(upper_sampler.pin['b0'])
             else:
                 internal_ps = diff_ps.put(first_dc.pin['b0'])
-            if 'gnd0' in internal_ps.pin:
-                nd.Pin('gnd0').put(internal_ps.pin['gnd0'])
-                nd.Pin('gnd1').put(internal_ps.pin['gnd1'])
-            if 'pos0' in internal_ps.pin:
-                nd.Pin('pos0').put(internal_ps.pin['pos0'])
-                nd.Pin('pos1').put(internal_ps.pin['pos1'])
-            second_dc = dc.put(internal_ps.pin['b0'])
-            if tap_external is not None:
-                upper_sampler = tap_external.put(second_dc.pin['b0'])
-                lower_sampler = tap_external.put(second_dc.pin['b1'])
-                nd.Pin('b0').put(upper_sampler.pin['b0'])
-                nd.Pin('b1').put(lower_sampler.pin['b0'])
-            else:
-                nd.Pin('b0').put(second_dc.pin['b0'])
-                nd.Pin('b1').put(second_dc.pin['b1'])
-            if grating is not None:
-                grating.put(node.pin['b0'].x, node.pin['b0'].y, -90)
-            if detector is not None:
-                if detector_loopback_params is not None:
-                    self.waveguide_ic.bend(detector_loopback_params[0], 180).put(node.pin['b1'])
-                    self.waveguide_ic.strt(detector_loopback_params[1]).put()
-                    d = detector.put()
-                    nd.Pin('p1').put(d.pin['p'])
-                    nd.Pin('n1').put(d.pin['n'])
-                    self.waveguide_ic.bend(detector_loopback_params[0], -180).put(node.pin['b0'])
-                    self.waveguide_ic.strt(detector_loopback_params[1]).put()
-                    d = detector.put()
-                    nd.Pin('p2').put(d.pin['p'])
-                    nd.Pin('n2').put(d.pin['n'])
-                else:
-                    d = detector.put(node.pin['b1'], flip=True)
-                    nd.Pin('p1').put(d.pin['p'])
-                    nd.Pin('n1').put(d.pin['n'])
-                    d = detector.put(node.pin['b0'])
-                    nd.Pin('p2').put(d.pin['p'])
-                    nd.Pin('n2').put(d.pin['n'])
-            nd.put_stub()
-        return node
-
-    def mzi_node_test(self, mzi_arms: nd.Cell, dc: nd.Cell, tap_internal: Optional[nd.Cell] = None,
-                      tap_external: Optional[nd.Cell] = None, name: Optional[str] = 'test_mzi',
-                      include_input_ps: bool = False, grating: Optional[nd.Cell] = None,
-                      detector: Optional[nd.Cell] = None,
-                      detector_loopback_params: Dim2 = None, sep: float = 0):
-        with nd.Cell(name=name) as node:
-            if include_input_ps:
-                input_ps = mzi_arms.put()
-                first_dc = dc.put(input_ps.pin['b0'])
-                nd.Pin('a0').put(input_ps.pin['a0'])
-                nd.Pin('a1').put(input_ps.pin['a1'])
-            else:
-                first_dc = dc.put()
-                nd.Pin('a0').put(first_dc.pin['a0'])
-                nd.Pin('a1').put(first_dc.pin['a1'])
-            if tap_internal is not None:
-                upper_sampler = tap_internal.put(first_dc.pin['b0'])
-                lower_sampler = tap_internal.put(first_dc.pin['b1'])
-                if sep > 0:
-                    conn = self.waveguide_ic.strt(sep).put(upper_sampler.pin['b0'])
-                    self.waveguide_ic.strt(sep).put(lower_sampler.pin['b0'])
-                    internal_ps = mzi_arms.put(conn.pin['b0'])
-                else:
-                    internal_ps = mzi_arms.put(upper_sampler.pin['b0'])
-            else:
-                internal_ps = mzi_arms.put(first_dc.pin['b0'])
-
-            internal_gnd_pins = [key for key in internal_ps.pin.keys() if
-                                 key.split('d')[0] == 'gn']  # creates a list of the multiple gnds
-            internal_pos_pins = [key for key in internal_ps.pin.keys() if
-                                 key.split('s')[0] == 'po']  # creates a list of the multiple pos
-            internal_ps.raise_pins(internal_gnd_pins + internal_pos_pins)
-
-            if 'gnd0' in internal_ps.pin:
-                nd.Pin('gnd0').put(internal_ps.pin['gnd0'])
-                nd.Pin('gnd1').put(internal_ps.pin['gnd1'])
-            if 'pos0' in internal_ps.pin:
-                nd.Pin('pos0').put(internal_ps.pin['pos0'])
-                nd.Pin('pos1').put(internal_ps.pin['pos1'])
+            internal_ps.raise_pins(['gnd_l', 'pos_l', 'gnd_r', 'pos_r'])
             second_dc = dc.put(internal_ps.pin['b0'])
             if tap_external is not None:
                 upper_sampler = tap_external.put(second_dc.pin['b0'])
@@ -644,11 +547,7 @@ class AIMNazca:
             else:
                 nd.Pin('b0').put(_tdc.pin['b0'])
                 nd.Pin('b1').put(_tdc.pin['b1'])
-            if 'v0' in _tdc.pin:
-                nd.Pin('gnd0').put(_tdc.pin['gnd0'])
-                nd.Pin('gnd1').put(_tdc.pin['gnd1'])
-                nd.Pin('pos0').put(_tdc.pin['pos0'])
-                nd.Pin('pos1').put(_tdc.pin['pos1'])
+            _tdc.raise_pins(['gnd_l', 'pos_l', 'gnd_r', 'pos_r'])
             if detector is not None:
                 if detector_loopback_radius > 0:
                     self.waveguide_ic.bend(detector_loopback_radius, 180).put(node.pin['b1'])
@@ -766,9 +665,31 @@ class AIMNazca:
         device = Multilayer([(c, 'seam')])
         return device.nazca_cell('delay_line')
 
+    def test_column(self, device_list: List[nd.Cell], tapline: nd.Cell, col_name: str,
+                    autoroute_node_detector: Callable, dc: Union[nd.Cell, List[nd.Cell]] = None):
+        with nd.Cell(col_name) as test_column:
+            line = tapline.put()
+            detector = self.pdk_cells['cl_band_photodetector_digital']
+            for i, device in enumerate(device_list):
+                # all structures for a tap line should be specified here
+                if dc is not None:
+                    _dc = dc if isinstance(dc, nd.Cell) else dc[i]
+                    if _dc is not None:
+                        node = self.mzi_node(device, _dc, include_input_ps=False,
+                                             name=f'mzi_{col_name}_{i}').put(line.pin[f'a{2 * i + 1}'])
+                    else:
+                        node = device.put(line.pin[f'a{2 * i + 1}'])
+                else:
+                    node = device.put(line.pin[f'a{2 * i + 1}'])
+                node.raise_pins(['gnd_l', 'pos_l'], [f'gnd{i}', f'pos{i}'])
+                d1 = detector.put(node.pin['b0'])
+                d2 = detector.put(node.pin['b1'], flip=True)
+                autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])
+                nd.Pin(f'd{i}').put(node.pin['b0'])  # this is useful for autorouting the gnd path
+            nd.Pin('in').put(line.pin['in'])
+            nd.Pin('out').put(line.pin['out'])
+        return test_column
+
 
 def _mzi_angle(waveguide_w: float, gap_w: float, interport_w: float, radius: float):
     return np.arccos(1 - (interport_w - gap_w - waveguide_w) / 4 / radius) * 180 / np.pi
-
-
-
