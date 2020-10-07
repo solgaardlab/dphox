@@ -105,22 +105,48 @@ class Multilayer:
 
     @property
     def copy(self) -> "Multilayer":
+        """Return a copy of this layer for repeated use
+
+        Returns:
+            A deep copy of this layer
+
+        """
         return copy(self)
 
     def gdspy_cell(self, cell_name: str = 'dummy') -> gy.Cell:
+        """
+
+        Args:
+            cell_name: Cell name
+
+        Returns:
+            A GDSPY cell
+
+        """
         cell = gy.Cell(cell_name, exclude_from_current=(cell_name == 'dummy'))
         for pattern, layer in self._pattern_to_layer.items():
             for poly in pattern.polys:
                 cell.add(gy.Polygon(np.asarray(poly.exterior.coords.xy).T, layer=layer))
         return cell
 
-    def nazca_cell(self, cell_name: str) -> nd.Cell:
+    def nazca_cell(self, cell_name: str, callback: Optional[Callable] = None) -> nd.Cell:
+        """Turn this multilayer into a Nazca cell
+
+        Args:
+            cell_name: Cell name
+            callback: Callback function to call using Nazca (adding pins, other structures)
+
+        Returns:
+            A Nazca cell
+        """
         with nd.Cell(cell_name) as cell:
             for pattern, layer in self._pattern_to_layer.items():
                 for poly in pattern.polys:
                     nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
             for name, port in self.port.items():
                 nd.Pin(name).put(*port.xya_deg)
+            if callback is not None:
+                callback()
             nd.put_stub()
         return cell
 
