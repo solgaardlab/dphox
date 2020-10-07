@@ -1,11 +1,15 @@
 from .component import *
 
+# Solgaard lab AIM PDK
+
+aim_phaseshift_l = 90
+aim_interaction_l = 100
+
 aim_ps = LateralNemsPS(
     waveguide_w=0.48,
     nanofin_w=0.22,
-    phaseshift_l=90,
+    phaseshift_l=aim_phaseshift_l,
     gap_w=0.10,
-    pad_dim=None,
     num_taper_evaluations=100,
     gnd_connector=(2, 0.2, 3),
     taper_l=0,
@@ -21,11 +25,11 @@ aim_ps = LateralNemsPS(
 aim_tdc = LateralNemsTDC(
     waveguide_w=0.48,
     nanofin_w=0.22,
-    interaction_l=100,
+    interaction_l=aim_interaction_l,
     dc_gap_w=0.2,
     beam_gap_w=0.1,
     bend_dim=(10, 24.66),
-    pad_dim=(2, 2, 2, 0.75),
+    gnd_wg=(2, 2, 2, 0.75),
     use_radius=True,
     dc_end_l=0,
     dc_taper_ls=None,
@@ -66,7 +70,7 @@ aim_pull_in_full_ps = LateralNemsFull(
     trace_w=4,
     pos_box_w=12,
     gnd_box_h=10,
-    clearout_dim=(90, 3),
+    clearout_dim=(aim_phaseshift_l, 3),
     dope_expand=0.25,
     dope_grow=0.1,
     ridge='seam',
@@ -77,14 +81,16 @@ aim_pull_in_full_ps = LateralNemsFull(
     pos_metal='m2am',
     gnd_metal='m1am',
     clearout_layer='clearout',
-    clearout_etch_stop_layer='snam',
+    clearout_etch_stop_layer='snam'
 )
 
-aim_pull_in_full_tdc = aim_pull_in_full_ps.update(tdc=aim_tdc)
+aim_pull_in_full_tdc = aim_pull_in_full_ps.update(tdc=aim_tdc,
+                                                  clearout_dim=(aim_interaction_l, 3))
 
 aim_pull_apart_full_ps = aim_pull_in_full_ps.update(anchor=aim_pull_apart_anchor,
-                                                    clearout_dim=(90, 12.5))
+                                                    clearout_dim=(aim_phaseshift_l, 12.5))
 
-aim_pull_apart_full_tdc = aim_pull_apart_full_ps.update(tdc=aim_tdc)
+aim_pull_apart_full_tdc = aim_pull_apart_full_ps.update(tdc=aim_tdc,
+                                                        clearout_dim=(aim_interaction_l, 12.5))
 
 

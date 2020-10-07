@@ -17,7 +17,7 @@ AIR = Material('Air', (0, 0, 0), 1)
 class LateralNemsPS(Pattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float,
                  gap_w: float, taper_l: float, fin_end_bend_dim: Dim2, gnd_connector: Optional[Dim3] = None,
-                 end_ls: Tuple[float] = (0,), num_taper_evaluations: int = 100, pad_dim: Optional[Dim3] = None,
+                 end_ls: Tuple[float] = (0,), num_taper_evaluations: int = 100,
                  gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
                  boundary_taper: Optional[Tuple[float, ...]] = None,
                  end_taper: Optional[Tuple[Tuple[float, ...]]] = None, gnd_connector_idx: int = -1):
@@ -32,7 +32,6 @@ class LateralNemsPS(Pattern):
             taper_l: taper length at start and end (including fins)
             end_ls: end waveguide lengths (not including fins)
             num_taper_evaluations: number of taper evaluations (see gdspy)
-            pad_dim: silicon handle xy size followed by distance between pad and fin to actuate
             gap_taper: gap taper polynomial params (recommend same as wg_taper)
             wg_taper: wg taper polynomial params (recommend same as gap_taper)
             end_taper: end taper for the transition into the phase shifter region
@@ -46,10 +45,10 @@ class LateralNemsPS(Pattern):
         self.end_ls = end_ls
         self.end_taper = end_taper
         self.num_taper_evaluations = num_taper_evaluations
-        self.pad_dim = pad_dim
         self.gap_taper = gap_taper
         self.wg_taper = wg_taper
         self.boundary_taper = boundary_taper
+        self.fin_end_bend_dim = fin_end_bend_dim
 
         if not phaseshift_l >= 2 * taper_l:
             raise ValueError(f'Require interaction_l >= 2 * taper_l but got {phaseshift_l} < {2 * taper_l}')
@@ -82,24 +81,14 @@ class LateralNemsPS(Pattern):
                 ]
             else:
                 nanofin_ends = []
-            pads = []
-            if pad_dim is not None:
-                pad = Box(pad_dim[:2]).align(wg)
-                pad_y = nanofin_w + pad_dim[2] + pad_dim[1] / 2
-                pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
-            patterns = [wg] + pads + nanofins + nanofin_ends
+            patterns = [wg] + nanofins + nanofin_ends
         else:
             wg_taper = (wg_taper,) if end_taper is None else (*end_taper, wg_taper)
             wg = Waveguide(waveguide_w, taper_ls=(*end_ls, taper_l), taper_params=wg_taper,
                            length=phaseshift_l + 2 * np.sum(end_ls),
                            num_taper_evaluations=num_taper_evaluations, slot_dim=(phaseshift_l, gap_w),
                            slot_taper_ls=(taper_l,), slot_taper_params=(gap_taper,))
-            pads = []
-            if pad_dim is not None:
-                pad = Box(pad_dim[:2]).align(wg)
-                pad_y = pad_dim[2] + pad_dim[1] / 2
-                pads += [copy(pad).translate(dx=0, dy=-pad_y), copy(pad).translate(dx=0, dy=pad_y)]
-            patterns = [wg] + pads
+            patterns = [wg]
 
         rib_brim = []
 
@@ -131,7 +120,7 @@ class LateralNemsPS(Pattern):
             patterns.extend(rib_brim + [gnd_connection])
 
         super(LateralNemsPS, self).__init__(*patterns, call_union=False)
-        self.waveguide, self.pads, self.nanofins, self.rib_brim = wg, pads, nanofins, rib_brim
+        self.waveguide, self.nanofins, self.rib_brim = wg, nanofins, rib_brim
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)
         self.port['a0'] = Port(0, 0, -np.pi)
@@ -161,12 +150,12 @@ class LateralNemsPS(Pattern):
 
 class LateralNemsTDC(Pattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, dc_gap_w: float, beam_gap_w: float, bend_dim: Dim2,
-                 interaction_l: float, fin_end_bend_dim: Dim2, dc_taper_ls: Tuple[float, ...] = None,
+                 interaction_l: float, fin_end_bend_dim: Dim2, gnd_wg: Dim4,
+                 dc_taper_ls: Tuple[float, ...] = None,
                  dc_taper: Optional[Tuple[Tuple[float, ...]]] = None,
                  beam_taper: Optional[Tuple[Tuple[float, ...]]] = None,
                  boundary_taper: Optional[Tuple[Tuple[float, ...]]] = None,
-                 end_bend_dim: Optional[Dim3] = None, dc_end_l: float = 0,
-                 pad_dim: Optional[Dim4] = None, use_radius: bool = True):
+                 end_bend_dim: Optional[Dim3] = None, dc_end_l: float = 0, use_radius: bool = True):
         """NEMS tunable directional coupler
 
         Args:
@@ -176,26 +165,27 @@ class LateralNemsTDC(Pattern):
             beam_gap_w: gap between the nanofin and the TDC waveguides
             bend_dim: see DC
             interaction_l: interaction length
+            fin_end_bend_dim: adiabatic transition for the fin end bend dim
+            gnd_wg: ground waveguide dimensions
             dc_taper_ls: DC taper lengths
             dc_taper: tapering of the boundary of the directional coupler
             beam_taper: tapering of the lower boundary of the fin
             boundary_taper: tapering of the upper boundary of the fin (currently not implemented)
             end_bend_dim: If specified, places an additional end bend (see DC)
             dc_end_l: End length for the directional coupler
-            pad_dim: If specified, silicon gnd pad xy size followed by connector dimensions (distance to guide, width)
             use_radius: use radius (see DC)
-             fin_adiabatic_bend_dim: Dim2,
         """
         self.waveguide_w = waveguide_w
         self.nanofin_w = nanofin_w
         self.interaction_l = interaction_l
         self.dc_gap_w = dc_gap_w
         self.beam_gap_w = beam_gap_w
-        self.pad_dim = pad_dim
         self.use_radius = use_radius
         self.dc_end_l = dc_end_l
         self.dc_taper = dc_taper
         self.dc_taper_ls = dc_taper_ls
+        self.fin_end_bend_dim = fin_end_bend_dim
+        self.gnd_wg = gnd_wg
 
         dc = DC(bend_dim=bend_dim, waveguide_w=waveguide_w, gap_w=dc_gap_w,
                 coupler_boundary_taper_ls=dc_taper_ls, coupler_boundary_taper=dc_taper,
@@ -231,20 +221,20 @@ class LateralNemsTDC(Pattern):
         patterns = [dc] + nanofins + connectors + pads + [nanofin_ends]
 
         # TODO(Nate): make the brim connector to ground standard for 220nm, rework the taper helpers
-        if pad_dim is not None:
+        if gnd_wg is not None:
             brim_l, brim_taper = get_linear_adiabatic(min_width=waveguide_w, max_width=1, aggressive=True)
             brim_taper = cubic_taper(brim_taper[1])
-            gnd_contact_dim = pad_dim[2:]
+            gnd_contact_dim = gnd_wg[2:]
 
             if not bend_dim[1] > 2 * bend_dim[0] + 2 * brim_l:
                 raise ValueError(
                     f'Not enough room in s-bend to ground waveguide segment of length'
                     f'{bend_dim[1] - 2 * bend_dim[0]} need at least {2 * brim_l + gnd_contact_dim[-1]}')
 
-            if not (pad_dim[0] + (waveguide_w / 2 + np.sum(brim_taper) / 2 + gnd_contact_dim[0])) < bend_dim[0]:
+            if not (gnd_wg[0] + (waveguide_w / 2 + np.sum(brim_taper) / 2 + gnd_contact_dim[0])) < bend_dim[0]:
                 raise ValueError(
                     f'Not enough room in s-bend to ground waveguide with bend_dim[0] of {bend_dim[0]}'
-                    f'need at least {(pad_dim[0] + (waveguide_w / 2 + np.sum(brim_taper) / 2 + gnd_contact_dim[0]))}')
+                    f'need at least {(gnd_wg[0] + (waveguide_w / 2 + np.sum(brim_taper) / 2 + gnd_contact_dim[0]))}')
 
             rib_brim, gnd_connections, pads = [], [], []
             dx_brim = bend_dim[0]
@@ -266,9 +256,9 @@ class LateralNemsTDC(Pattern):
                         gnd_connections.append(
                             Box(gnd_contact_dim[:2]).translate(dx=x - waveguide_w / 2 - gnd_contact_dim[0], dy=y))
                     pads.append(
-                        Box(pad_dim[:2]).align(rib_brim[-1]).halign(gnd_connections[-1],
-                                                                    left=flip_x,
-                                                                    opposite=True))
+                        Box(gnd_wg[:2]).align(rib_brim[-1]).halign(gnd_connections[-1],
+                                                                   left=flip_x,
+                                                                   opposite=True))
                 flip_x = not flip_x
             rib_brim = [Pattern(poly) for brim in rib_brim for poly in (brim.shapely - dc.shapely)]
             patterns += gnd_connections + rib_brim + pads
@@ -314,7 +304,7 @@ class NemsAnchor(Pattern):
         self.straight_connector = straight_connector
         self.tether_connector = tether_connector
         self.pos_electrode_dim = pos_electrode_dim
-        self.neg_electrode_dim = gnd_electrode_dim
+        self.gnd_electrode_dim = gnd_electrode_dim
         patterns, pads, springs, pos_pads, gnd_pads = [], [], [], [], []
 
         spring_dim = fin_dim if not spring_dim else spring_dim
@@ -510,21 +500,30 @@ class LateralNemsFull(Multilayer):
             clearout_layer: clearout layer
             clearout_etch_stop_layer: clearout etch stop layer
         """
-        device_name = 'tdc' if device.__name__ == 'LateralNemsTDC' else 'ps'
-        self.config = {
+        device_name = 'tdc' if device.__class__.__name__ == 'LateralNemsTDC' else 'ps'
+        self.trace_w = trace_w
+        self.ridge = ridge
+        self.rib = rib
+        self.pos_metal = pos_metal
+        self.gnd_metal = gnd_metal
+        self.shuttle_dope = shuttle_dope
+        self.spring_dope = spring_dope
+        self.pad_dope = pad_dope
+        self.pos_box_w = pos_box_w
+        self.gnd_box_h = gnd_box_h
+        self.dope_grow = dope_grow
+        self.dope_expand = dope_expand
+        self.clearout_layer = clearout_layer
+        self.clearout_etch_stop_layer = clearout_etch_stop_layer
+
+        self.config = copy(self.__dict__)
+        self.config.update({
             device_name: device.config,
             'anchor': anchor.config,
             'pos_via': pos_via.config,
             'gnd_via': gnd_via.config,
-            'trace_w': trace_w,
-            'ridge': ridge,
-            'rib': rib,
-            'pos_metal': pos_metal,
-            'gnd_metal': gnd_metal,
-            'shuttle_dope': shuttle_dope,
-            'spring_dope': spring_dope,
-            'pad_dope': pad_dope
-        }
+        })
+
         top = anchor.copy.put(device.port['fin0'])
         bot = anchor.copy.put(device.port['fin1'])
         full = Pattern(top, bot, device)
@@ -540,9 +539,9 @@ class LateralNemsFull(Multilayer):
         if top.gnd_pads and gnd_metal is not None:
             gnd_pads = top.gnd_pads + bot.gnd_pads
             gnd = Pattern(*gnd_pads)
-            gnd_box = Box((gnd.size[0], gnd.size[1] + gnd_box_h)).align(gnd).valign(gnd, bottom=False)
+            gnd_box = Box((gnd.size[0], gnd.size[1] + 2 * gnd_box_h)).align(gnd)
             gnd_box = gnd_box.difference(Box((gnd.size[0] - 2 * trace_w,
-                                              gnd.size[1] - trace_w + gnd_box_h)).align(gnd).valign(gnd, bottom=False))
+                                              gnd.size[1] - 2 * trace_w + 2 * gnd_box_h)).align(gnd))
             metals.append((gnd_box, gnd_metal))
             vias.extend(sum([gnd_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
             port['gnd_l'] = Port(gnd_box.bounds[0], gnd_box.bounds[1] + trace_w / 2, -np.pi)
@@ -558,7 +557,7 @@ class LateralNemsFull(Multilayer):
             vias.extend(sum([pos_via.copy.align(pad).pattern_to_layer for pad in pos_pads], []))
             port['pos_l'] = Port(pos_box.bounds[0], pos_box.center[1], -np.pi)
             port['pos_r'] = Port(pos_box.bounds[2], pos_box.center[1], 0)
-        if device.__name__ == 'LateralNemsTDC':
+        if device.__class__.__name__ == 'LateralNemsTDC':
             pass
         rib_brim = [(rb, rib) for rb in device.rib_brim if rib is not None]
         clearout = full.clearout_box(clearout_layer, clearout_etch_stop_layer, clearout_dim)
@@ -587,8 +586,12 @@ class LateralNemsFull(Multilayer):
         Returns:
 
         """
-        config = self.config
+        config = copy(self.config)
         config.update(kwargs)
+        if 'tdc' in kwargs and 'ps' in config:
+            del config['ps']
+        if 'ps' in kwargs and 'tdc' in config:
+            del config['tdc']
         if not new:
             self.__init__(**_handle_config(config))
             return self

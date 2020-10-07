@@ -64,7 +64,7 @@ class AIMNazca:
                  diff_ps: Optional[nd.Cell] = None, name: str = 'nems_tdc') -> nd.Cell:
         c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
                            interaction_l=interaction_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
-                           bend_dim=bend_dim, pad_dim=pad_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
+                           bend_dim=bend_dim, gnd_wg=pad_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
                            dc_taper=dc_taper, beam_taper=beam_taper, fin_end_bend_dim=fin_adiabatic_bend_dim,
                            dc_end_l=dc_end_l)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])

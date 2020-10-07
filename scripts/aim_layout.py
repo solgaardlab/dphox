@@ -219,7 +219,9 @@ pull_apart_gap = [
 
 # Motivation: reduce the waveguide width to encourage more phase shift per unit length in center
 pull_apart_taper = [
-    chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_apart_anchor, **pull_apart_taper_dict(taper_change, taper_length), name=f'ps_taper_{taper_change}_{taper_length}')],
+    chip.mzi_arms([delay_line_50, chip.nems_ps(anchor=pull_apart_anchor,
+                                               **pull_apart_taper_dict(taper_change, taper_length),
+                                               name=f'ps_taper_{taper_change}_{taper_length}')],
                   [delay_line_200],
                   interport_w=test_interport_w,
                   name=f'pull_apart_taper_{taper_change}_{taper_length}')
@@ -269,16 +271,14 @@ pull_in_fin = [
     for nanofin_w in (0.15, 0.2, 0.22) for gap_w in (0.1, 0.15)]
 
 
-# TODO(Nate): hone in on the best ranges to get an operational device
-
 '''
 Pull-apart TDC
 '''
 
 pull_apart_gap_tdc = []  # Captured below
 
-# Motivation: Symmtric TDC requires very small critical dimensions and
-# the aymmtric case requires a wider gap for mode purtubation and
+# Motivation: Symmetric TDC requires very small critical dimensions and
+# the asymmetric case requires a wider gap for mode pertubation and
 # realistically better care in length but this is a test case
 # tapers are the only way to reach these aggressive goals
 
@@ -322,7 +322,7 @@ pull_in_taper_tdc += [chip.nems_tdc(interaction_l=test_tdc_interaction_l_extr, a
 pull_in_fin_tdc = []
 
 
-# Motivation: Test sructures necessary for reference meaurements
+# Motivation: Test structures necessary for reference meaurements
 
 delay_arms = chip.mzi_arms([delay_line_50, gnd_wg],
                            [delay_line_200, gnd_wg],

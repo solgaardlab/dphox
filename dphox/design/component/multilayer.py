@@ -263,7 +263,7 @@ class Via(Multilayer):
         self.via = via
         self.pitch = pitch
         self.shape = shape
-        self.config = self.__dict__
+        self.config = copy(self.__dict__)
 
         via_pattern = Box(via_dim)
         if pitch > 0 and shape is not None:
