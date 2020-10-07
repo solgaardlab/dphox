@@ -226,6 +226,8 @@ class Pattern:
         # any patterns in the element should also be translated
         for pattern in self.reference_patterns:
             pattern.translate(dx, dy)
+        for name, port in self.port.items():
+            self.port[name] = Port(port.x + dx, port.y + dy, port.a)
         return self
 
     def align(self, c: Union["Pattern", Tuple[float, float]]) -> "Pattern":
@@ -412,24 +414,7 @@ class Pattern:
     def put(self, port: Port):
         return self.rotate(port.a_deg).translate(port.x, port.y)
 
-
-# class GroupedPattern(Pattern):
-#     def __init__(self, *patterns: Pattern, call_union: bool = True, raise_ports: bool = False):
-#         super(GroupedPattern, self).__init__(*sum([list(pattern.polys) for pattern in patterns], []),
-#                                              call_union=call_union)
-#         self.patterns = patterns
-#         self.port = dict(sum([list(pattern.port.items()) for pattern in patterns], [])) if raise_ports else {}
-
-
 # TODO(nate): find a better place for these functions
-
-
-def pattern_recover(polygon_or_collection):
-    if isinstance(polygon_or_collection, Polygon):
-        collection = MultiPolygon(polygons=[polygon_or_collection])
-    else:
-        collection = MultiPolygon([g for g in polygon_or_collection.geoms if isinstance(g, Polygon)])
-    return Pattern(collection)
 
 
 def cubic_taper(change_w, off: bool = False) -> Tuple[float, ...]:
@@ -450,8 +435,7 @@ def is_adiabatic(taper_params, init_width: float = 0.48, wavelength: float = 1.5
 
 
 def get_linear_adiabatic(min_width: float = 0.48, max_width: float = 1, wavelength: float = 1.55,
-                         neff_max: float = 2.75,
-                         num_points: int = 100, min_to_max: bool = True, aggressive: bool = False):
+                         neff_max: float = 2.75, min_to_max: bool = True, aggressive: bool = False):
     taper_params = (0, max_width - min_width) if min_to_max else (0, min_width - max_width)
     taper_l = 1.1 * abs(max_width - min_width) / np.arctan(wavelength / (2 * max_width * neff_max)) \
         if aggressive else 2 * abs(max_width - min_width) / np.arctan(wavelength / (2 * max_width * neff_max))

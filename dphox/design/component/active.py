@@ -10,13 +10,13 @@ try:
 except ImportError:
     pass
 
-from simphox.device import ModeDevice, MaterialBlock, SILICON, NITRIDE, OXIDE, dispersion_sweep, Material
+from simphox.device import ModeDevice, MaterialBlock, SILICON, Material
 AIR = Material('Air', (0, 0, 0), 1)
 
 
 class LateralNemsPS(Pattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float,
-                 gap_w: float, taper_l: float, fin_adiabatic_bend_dim: Dim2, gnd_connector: Optional[Dim3] = None,
+                 gap_w: float, taper_l: float, fin_end_bend_dim: Dim2, gnd_connector: Optional[Dim3] = None,
                  end_ls: Tuple[float] = (0,), num_taper_evaluations: int = 100, pad_dim: Optional[Dim3] = None,
                  gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
                  boundary_taper: Optional[Tuple[float, ...]] = None,
@@ -28,7 +28,7 @@ class LateralNemsPS(Pattern):
             phaseshift_l: phase shift length
             gap_w: gap width (initial, before tapering)
             gnd_connector: tuple of the form (rib_brim_w, connectorx, connectory)
-            fin_adiabatic_bend_dim: adiabatic fin bending
+            fin_end_bend_dim: adiabatic fin bending
             taper_l: taper length at start and end (including fins)
             end_ls: end waveguide lengths (not including fins)
             num_taper_evaluations: number of taper evaluations (see gdspy)
@@ -71,8 +71,8 @@ class LateralNemsPS(Pattern):
                                  length=phaseshift_l,
                                  num_taper_evaluations=num_taper_evaluations).align(wg).shapely
             nanofins = [Pattern(poly) for poly in (boundary - gap_path)]
-            if fin_adiabatic_bend_dim is not None:
-                nanofin_adiabatic = Pattern(Path(nanofin_w).sbend(fin_adiabatic_bend_dim))
+            if fin_end_bend_dim is not None:
+                nanofin_adiabatic = Pattern(Path(nanofin_w).sbend(fin_end_bend_dim))
                 nanofin_height = waveguide_w / 2 + _gap_w + nanofin_w / 2
                 nanofin_ends = [
                     nanofin_adiabatic.copy.translate(nanofins[0].bounds[2], nanofin_height),
@@ -161,7 +161,7 @@ class LateralNemsPS(Pattern):
 
 class LateralNemsTDC(Pattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, dc_gap_w: float, beam_gap_w: float, bend_dim: Dim2,
-                 interaction_l: float, fin_adiabatic_bend_dim: Dim2, dc_taper_ls: Tuple[float, ...] = None,
+                 interaction_l: float, fin_end_bend_dim: Dim2, dc_taper_ls: Tuple[float, ...] = None,
                  dc_taper: Optional[Tuple[Tuple[float, ...]]] = None,
                  beam_taper: Optional[Tuple[Tuple[float, ...]]] = None,
                  boundary_taper: Optional[Tuple[Tuple[float, ...]]] = None,
@@ -215,20 +215,11 @@ class LateralNemsTDC(Pattern):
         else:
             box_w = (nanofin_w + beam_gap_w + waveguide_w) * 2 + dc_gap_w
             gap_taper_wg_w = (beam_gap_w + waveguide_w) * 2 + dc_gap_w
-            # nanofin_box = Box((interaction_l, box_w)).align(dc).pattern
             nanofin_box = Waveguide(box_w, interaction_l, dc_taper_ls, boundary_taper).align(dc).shapely
             gap_taper_wg = Waveguide(gap_taper_wg_w, interaction_l, dc_taper_ls, beam_taper).align(dc).shapely
             nanofins = [Pattern(poly) for poly in (nanofin_box - gap_taper_wg)]
 
-            ######### NATE: trying to taper fins of TDC ###################
-            # boundary = Waveguide(box_w, taper_params=beam_taper, taper_ls=dc_taper_ls,
-            #                      length=interaction_l).center_align(dc).pattern
-            # gap_path = Waveguide(gap_taper_wg_w, taper_params=beam_taper, taper_ls=dc_taper_ls,
-            #                      length=interaction_l).center_align(dc).pattern
-            # nanofins = [Pattern(poly) for poly in (boundary - gap_path)]
-            ######### NATE: trying to taper center of TDC ###################
-
-        nanofin_adiabatic = Pattern(Path(nanofin_w).sbend(fin_adiabatic_bend_dim))
+        nanofin_adiabatic = Pattern(Path(nanofin_w).sbend(fin_end_bend_dim))
         nanofin_height = (nanofin_w / 2 + beam_gap_w + waveguide_w) + dc_gap_w / 2
         nanofin_ends = Pattern(
             nanofin_adiabatic.copy.translate(nanofins[0].bounds[2], nanofin_height),
@@ -263,17 +254,17 @@ class LateralNemsTDC(Pattern):
             for x in (min_x + dx_brim, max_x - dx_brim):
                 for y in (min_y + dy_brim, max_y - dy_brim):
                     flip_y = not flip_y
-                    rib_brim.append(Waveguide(waveguide_w, taper_ls=(brim_l,), taper_params=(brim_taper,),
-                                              length=2 * brim_l + gnd_contact_dim[-1], rotate_angle=np.pi / 2).translate(dx=x,
-                                                                                                                         dy=y - brim_l))
+                    rib_brim.append(
+                        Waveguide(
+                            waveguide_w, taper_ls=(brim_l,),
+                            taper_params=(brim_taper,), length=2 * brim_l + gnd_contact_dim[-1],
+                            rotate_angle=np.pi / 2).translate(dx=x, dy=y - brim_l)
+                    )
                     if flip_x:
-                        gnd_connections.append(
-                            Box(gnd_contact_dim[:2]).translate(dx=x + waveguide_w / 2,
-                                                               dy=y))
+                        gnd_connections.append(Box(gnd_contact_dim[:2]).translate(dx=x + waveguide_w / 2, dy=y))
                     else:
                         gnd_connections.append(
-                            Box(gnd_contact_dim[:2]).translate(dx=x - waveguide_w / 2 - gnd_contact_dim[0],
-                                                               dy=y))
+                            Box(gnd_contact_dim[:2]).translate(dx=x - waveguide_w / 2 - gnd_contact_dim[0], dy=y))
                     pads.append(
                         Box(pad_dim[:2]).align(rib_brim[-1]).halign(gnd_connections[-1],
                                                                     left=flip_x,
@@ -283,18 +274,17 @@ class LateralNemsTDC(Pattern):
             patterns += gnd_connections + rib_brim + pads
         super(LateralNemsTDC, self).__init__(*patterns, call_union=False)
         self.dc, self.connectors, self.pads, self.nanofins = dc, connectors, pads, nanofins
-        if pad_dim is not None:
-            self.gnd_connections, self.rib_brim = gnd_connections, rib_brim
+        self.gnd_connections, self.rib_brim = gnd_connections, rib_brim
         self.port = self.dc.port
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w + self.dc_gap_w / 2 + self.beam_gap_w))
         center = np.asarray(self.center)
-        self.port['t0'] = Port(*(center + dy))
-        self.port['t1'] = Port(*(center - dy))
+        self.port['fin0'] = Port(*(center + dy))
+        self.port['fin1'] = Port(*(center - dy), np.pi)
+        # TODO(): deprecate this once metal boxes are added via dphox instead of nazca.
         gnd_labels = ['gnd0_l_0', 'gnd0_u_0', 'gnd0_l_1', 'gnd0_u_1']
         angle = 0
         for gnd_label, pad in zip(gnd_labels, pads):
-            center = pad.center
-            self.port[gnd_label] = Port(*(center), a=angle)
+            self.port[gnd_label] = Port(*pad.center, a=angle)
             angle += np.pi
 
 
@@ -492,24 +482,24 @@ class MemsMonitorCoupler(Pattern):
         self.pads = pads[:1]
 
 
-class LateralNemsPSFull(Multilayer):
-    def __init__(self, ps: LateralNemsPS, anchor: NemsAnchor,
+class LateralNemsFull(Multilayer):
+    def __init__(self, device: Union[LateralNemsPS, LateralNemsTDC], anchor: NemsAnchor,
                  gnd_via: Via, pos_via: Via, trace_w: float,
-                 pos_box_w: float, gnd_box_h: float, clearout_box_dim: Dim2,
+                 pos_box_w: float, gnd_box_h: float, clearout_dim: Dim2, dope_grow: float, dope_expand: float,
                  ridge: str, rib: str, shuttle_dope: str,
                  spring_dope: str, pad_dope: str, pos_metal: str, gnd_metal: str,
-                 clearout: str):
-        """Full multilayer phase shifter design
+                 clearout_layer: str, clearout_etch_stop_layer: str):
+        """Full multilayer NEMS design assuming positive and ground pads defined in silicon layer
 
         Args:
-            ps: phase shifter
+            device: phase shifter or tunable directional coupler
             anchor: top anchor (None in pull-in case)
             gnd_via: gnd ``Via`` connection
             pos_via: pos ``Via`` connection
             trace_w: trace width
             pos_box_w: Extension for the positive box
             gnd_box_h: Extension for the negative box
-            clearout_box_dim: clearout box dimension aligned in the center
+            clearout_dim: clearout box dimension aligned in the center
             ridge: ridge layer
             rib: rib layer
             shuttle_dope: shuttle dope layer
@@ -517,10 +507,12 @@ class LateralNemsPSFull(Multilayer):
             pad_dope: pad dope layer
             pos_metal: pos terminal layer
             gnd_metal: gnd terminal layer
-            clearout: clearout layer
+            clearout_layer: clearout layer
+            clearout_etch_stop_layer: clearout etch stop layer
         """
+        device_name = 'tdc' if device.__name__ == 'LateralNemsTDC' else 'ps'
         self.config = {
-            'ps': ps.config,
+            device_name: device.config,
             'anchor': anchor.config,
             'pos_via': pos_via.config,
             'gnd_via': gnd_via.config,
@@ -533,14 +525,18 @@ class LateralNemsPSFull(Multilayer):
             'spring_dope': spring_dope,
             'pad_dope': pad_dope
         }
-        top = anchor.copy.put(ps.port['fin0'])
-        bot = anchor.copy.put(ps.port['fin1'])
-        full_ps = Pattern(top, bot, ps)
+        top = anchor.copy.put(device.port['fin0'])
+        bot = anchor.copy.put(device.port['fin1'])
+        full = Pattern(top, bot, device)
         vias = []
-        dopes = [s.dope(shuttle_dope) for s in [top.shuttle, bot.shuttle] if shuttle_dope is not None] + \
-                [s.dope(spring_dope) for s in top.springs + bot.springs if spring_dope is not None] + \
-                [s.dope(pad_dope) for s in top.pads + bot.pads if pad_dope is not None]
+        dopes = [s.expand(dope_expand).dope(shuttle_dope, dope_grow)
+                 for s in [top.shuttle, bot.shuttle] if shuttle_dope is not None] + \
+                [s.expand(dope_expand).dope(shuttle_dope, dope_grow)
+                 for s in top.springs + bot.springs if spring_dope is not None] + \
+                [s.expand(dope_expand).dope(shuttle_dope, dope_grow)
+                 for s in top.pads + bot.pads if pad_dope is not None]
         metals = []
+        port = {}
         if top.gnd_pads and gnd_metal is not None:
             gnd_pads = top.gnd_pads + bot.gnd_pads
             gnd = Pattern(*gnd_pads)
@@ -549,6 +545,8 @@ class LateralNemsPSFull(Multilayer):
                                               gnd.size[1] - trace_w + gnd_box_h)).align(gnd).valign(gnd, bottom=False))
             metals.append((gnd_box, gnd_metal))
             vias.extend(sum([gnd_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
+            port['gnd_l'] = Port(gnd_box.bounds[0], gnd_box.bounds[1] + trace_w / 2, -np.pi)
+            port['gnd_r'] = Port(gnd_box.bounds[2], gnd_box.bounds[1] + trace_w / 2, 0)
         if top.pos_pads and pos_metal is not None:
             pos_pads = top.pos_pads + bot.pos_pads
             pos = Pattern(*pos_pads)
@@ -558,9 +556,44 @@ class LateralNemsPSFull(Multilayer):
                      pos.size[1] - 2 * trace_w)).align(pos_box))
             metals.append((pos_box, pos_metal))
             vias.extend(sum([pos_via.copy.align(pad).pattern_to_layer for pad in pos_pads], []))
-        rib_brim = [(rb, rib) for rb in ps.rib_brim if rib is not None]
-        super(LateralNemsPSFull, self).__init__([(full_ps, ridge),
-                                                 (Box(clearout_box_dim).align(ps), clearout)] + rib_brim + vias + dopes + metals)
+            port['pos_l'] = Port(pos_box.bounds[0], pos_box.center[1], -np.pi)
+            port['pos_r'] = Port(pos_box.bounds[2], pos_box.center[1], 0)
+        if device.__name__ == 'LateralNemsTDC':
+            pass
+        rib_brim = [(rb, rib) for rb in device.rib_brim if rib is not None]
+        clearout = full.clearout_box(clearout_layer, clearout_etch_stop_layer, clearout_dim)
+        super(LateralNemsFull, self).__init__([(full, ridge)] + clearout + rib_brim + vias + dopes + metals)
+        self.port = port
+
+    @classmethod
+    def from_config(cls, config):
+        """Initialize via configuration dictionary (useful for importing from a JSON file)
+
+        Args:
+            config:
+
+        Returns:
+
+        """
+        return cls(**_handle_config(config))
+
+    def update(self, new: bool = True, **kwargs):
+        """Update this config with a new set of parameters
+
+        Args:
+            new: Return new instance instead of updating
+            **kwargs: all of the arguments to update
+
+        Returns:
+
+        """
+        config = self.config
+        config.update(kwargs)
+        if not new:
+            self.__init__(**_handle_config(config))
+            return self
+        else:
+            return LateralNemsFull(**_handle_config(config))
 
 
 class NemsMillerNode(Pattern):
@@ -653,3 +686,27 @@ class NemsMillerNode(Pattern):
 #         return self.input_ports + np.asarray((self.size[0], 0))
 
 
+def _handle_config(config):
+    anchor = NemsAnchor(**config['anchor']) if isinstance(config['anchor'], dict) else config['anchor']
+    pos_via = Via(**config['pos_via']) if isinstance(config['pos_via'], dict) else config['pos_via']
+    gnd_via = Via(**config['gnd_via']) if isinstance(config['gnd_via'], dict) else config['gnd_via']
+    for key in ('anchor', 'pos_via', 'gnd_via'):
+        del config[key]
+    if 'tdc' in config:
+        device = LateralNemsTDC(**config['tdc']) if isinstance(config['tdc'], dict) else config['tdc']
+        del config['tdc']
+        # TODO(sunil): can't have both ps and tdc in the config, should be a warning.
+        if 'ps' in config:
+            del config['ps']
+    elif 'ps' in config:
+        device = LateralNemsPS(**config['ps']) if isinstance(config['ps'], dict) else config['ps']
+        del config['ps']
+    else:
+        raise AttributeError('Config not supported')
+    return {
+        'device': device,
+        'anchor': anchor,
+        'pos_via': pos_via,
+        'gnd_via': gnd_via,
+        **config
+    }

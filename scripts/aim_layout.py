@@ -116,10 +116,8 @@ tdc_anchor_extr = chip.nems_anchor(shuttle_dim=(test_tdc_interaction_l_extr, 5),
 tdc = chip.nems_tdc(anchor=tdc_anchor, bend_dim=(test_tdc_radius, test_tdc_bend_dim))
 gnd_wg = chip.gnd_wg()
 ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap_detector, sep))
-ps_no_anchor = chip.nems_ps()
 alignment_mark = chip.alignment_mark()
 alignment_mark_small = chip.alignment_mark((50, 5))
-gnd_wg = chip.gnd_wg()
 grating = chip.pdk_cells['cl_band_vertical_coupler_si']
 detector = chip.pdk_cells['cl_band_photodetector_digital']
 
@@ -187,8 +185,6 @@ def pull_apart_taper_dict(taper_change: float, taper_length: float):
 
 def pull_in_dict(phaseshift_l: float = pull_in_phaseshift_l, taper_change: float = None, taper_length: float = None,
                  clearout_dim: Optional[float] = None):
-    # DOne: modify this to taper the pull-in fin adiabatically using rib_brim_taper
-    # Became irrelevant with new ps class structure
     clearout_dim = (phaseshift_l, 3) if clearout_dim is None else clearout_dim
     if taper_change is None or taper_length is None:
         return dict(
@@ -432,7 +428,6 @@ bend_exp_names = [f'bends_{br}_{i}' for i in [2, 4, 8] for br in [1, 2.5, 5]]
 bend_exp_names += [f'bends_10_{i}' for i in [2, 3]]
 # bend_exp_names += [f'bends_15_{i}' for i in [2, 3]]
 reference_devices += [bend_exp(name=bend_exp_name) for bend_exp_name in bend_exp_names]
-print(len(reference_devices))
 
 
 def tether_ps(phaseshift_l=tether_phaseshift_l, taper_l=5, taper_change=-0.05, delay_line: bool = True):
@@ -935,7 +930,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
     ]
 
     eu_bp_test_m1_idx = np.hstack([np.arange(*r) for r in eu_bp_port_tests_m1])
-    pad_assignments = [(2, 2), (2, 0), (4, 2), (5, 0),
+    pad_assignments = [(2, 2), (2, 0), (4, 2), (6, 1),
                        (8, 1), (8, 2), (13, 0), (13, 1),
                        (13, 2), (17, 2), (18, 1), (18, 2),
                        (23, 0), (22, 2), (25, 0), (27, 1), (27, 2),
