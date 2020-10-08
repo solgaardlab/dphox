@@ -64,7 +64,7 @@ class DC(Pattern):
                                        taper_ls=coupler_boundary_taper_ls).align(current_dc)
             center_wg = Box((interaction_l, waveguide_w)).align(current_dc.center)
             dc_interaction = Pattern(copy(center_wg).translate(dy=-gap_w / 2 - waveguide_w / 2),
-                                            copy(center_wg).translate(dy=gap_w / 2 + waveguide_w / 2))
+                                     copy(center_wg).translate(dy=gap_w / 2 + waveguide_w / 2))
             cuts = dc_interaction.shapely - outer_boundary.shapely
             # hacky way to make sure polygons are completely separated
             dc_without_interaction = current_dc.shapely - Box((dc_interaction.size[0],
@@ -318,119 +318,53 @@ class AlignmentCross(Pattern):
 
 
 class DelayLine(Pattern):
-    def __init__(self, waveguide_width, delay_length, bend_radius, straight_length, number_bend_pairs=1):
-        # TODO(Nate): Add typing hints to parameters
+    def __init__(self, waveguide_width: float, delay_length: float, bend_radius: float, straight_length: float,
+                 number_bend_pairs: int = 1, flip: bool = False):
         """
         Delay Line
         Args:
+            waveguide_width: the waveguide width
             delay_length: the delay line length increase over the straight length
             bend_radius: the bend radius of turns in the squiggle delay line
-            straight_length: the camaparative straight segment this matches
+            straight_length: the comparative straight segment this matches
+            flip: whether to flip the usual direction of the delay line
         """
         self.waveguide_width = waveguide_width
         self.delay_length = delay_length
         self.bend_radius = bend_radius
         self.straight_length = straight_length
+        self.number_bend_pairs = number_bend_pairs
+        self.flip = flip
 
-        total_path_length = straight_length + delay_length
         if ((2 * np.pi + 4) * number_bend_pairs + np.pi - 4) * bend_radius >= delay_length:
             raise ValueError(
                 f"Bends alone exceed the delay length {delay_length}"
                 f"reduce the bend radius or the number of bend pairs")
         segment_length = (delay_length - ((2 * np.pi + 4) * number_bend_pairs + np.pi - 4) * bend_radius) / (
-                    2 * number_bend_pairs)
+                2 * number_bend_pairs)
         extra_length = straight_length - 4 * bend_radius - segment_length
         if extra_length <= 0:
             raise ValueError(
-                f"The delay line does not fit in the horaizontal distance of"
+                f"The delay line does not fit in the horizontal distance of"
                 f"{straight_length} increase the number of bend pairs")
         height = (4 * number_bend_pairs - 2) * bend_radius
         p = Path(waveguide_width)
         p.segment(length=bend_radius)
         p.segment(length=segment_length)
 
+        bend_dir = -1 if flip else 1
+
         for count in range(number_bend_pairs):
-            p.turn(radius=bend_radius, angle='ll')
+            p.turn(radius=bend_radius, angle=np.pi * bend_dir)
             p.segment(length=segment_length)
-            p.turn(radius=bend_radius, angle='rr')
+            p.turn(radius=bend_radius, angle=-np.pi * bend_dir)
             p.segment(length=segment_length)
         p.segment(length=bend_radius)
-        p.turn(radius=bend_radius, angle='r')
+        p.turn(radius=bend_radius, angle=-np.pi / 2 * bend_dir)
         p.segment(length=height)
-        p.turn(radius=bend_radius, angle='l')
+        p.turn(radius=bend_radius, angle=np.pi / 2 * bend_dir)
         p.segment(length=extra_length)
 
         super(DelayLine, self).__init__(p)
         self.port['a0'] = Port(0, 0, -np.pi)
-        # self.port['b0'] = Port(self.size[0], 0) #odd bug where the starting x position is -0.22966)
         self.port['b0'] = Port(self.bounds[2], 0)
-
-
-# TODO: remove this later and fix the actual issue
-class DCQuickFix(Pattern):
-    def __init__(self, bend_dim: Dim2, waveguide_w: float, gap_w: float, interaction_l: float,
-                 coupler_boundary_taper_ls: Tuple[float, ...] = (0,),
-                 coupler_boundary_taper: Optional[Tuple[Tuple[float, ...]]] = None,
-                 end_bend_dim: Optional[Dim3] = None, use_radius: bool = False):
-        """Directional coupler
-
-        Args:
-            bend_dim: if use_radius is True (bend_radius, bend_height), else (bend_width, bend_height)
-            waveguide_w: waveguide width
-            gap_w: gap between the waveguides
-            interaction_l: interaction length
-            coupler_boundary_taper_ls: coupler boundary tapers length
-            coupler_boundary_taper: coupler boundary taper params
-            end_bend_dim: If specified, places an additional end bend (see DC)
-            use_radius: use radius to define bends
-        """
-        self.bend_dim = bend_dim
-        self.waveguide_w = waveguide_w
-        self.interaction_l = interaction_l
-        self.gap_w = gap_w
-        self.end_bend_dim = end_bend_dim
-        self.use_radius = use_radius
-        self.coupler_boundary_taper_ls = coupler_boundary_taper_ls
-        self.coupler_boundary_taper = coupler_boundary_taper
-
-        interport_distance = waveguide_w + 2 * bend_dim[1] + gap_w
-        if end_bend_dim:
-            interport_distance += 2 * end_bend_dim[1]
-
-        lower_path = Path(waveguide_w).dc(bend_dim, interaction_l, end_l=0, end_bend_dim=end_bend_dim,
-                                          use_radius=use_radius)
-        upper_path = Path(waveguide_w).dc(bend_dim, interaction_l, end_l=0, end_bend_dim=end_bend_dim,
-                                          inverted=True, use_radius=use_radius)
-        upper_path.translate(dx=0, dy=interport_distance)
-
-        if coupler_boundary_taper is not None and np.sum(coupler_boundary_taper_ls) > 0:
-            current_dc = Pattern(upper_path, lower_path)
-            outer_boundary = Waveguide(waveguide_w=2 * waveguide_w + gap_w, length=interaction_l,
-                                       taper_params=coupler_boundary_taper,
-                                       taper_ls=coupler_boundary_taper_ls).align(current_dc)
-            center_wg = Box((interaction_l, waveguide_w)).align(current_dc.center)
-            dc_interaction = Pattern(copy(center_wg).translate(dy=-gap_w / 2 - waveguide_w / 2),
-                                            copy(center_wg).translate(dy=gap_w / 2 + waveguide_w / 2))
-
-            cuts = dc_interaction.shapely - outer_boundary.shapely
-
-            # hacky way to make sure polygons are completely separated
-            dc_without_interaction = current_dc.shapely - Box((dc_interaction.size[0],
-                                                               dc_interaction.size[1] * 2)).align(current_dc).shapely
-            paths = [dc_without_interaction, dc_interaction.shapely - cuts]
-        else:
-            paths = lower_path, upper_path
-        super(DCQuickFix, self).__init__(*paths)
-        self.lower_path, self.upper_path = Pattern(lower_path), Pattern(upper_path)
-        self.port['a0'] = Port(0, 0, -np.pi)
-        self.port['a1'] = Port(0, interport_distance, -np.pi)
-        self.port['b0'] = Port(self.size[0], 0)
-        self.port['b1'] = Port(self.size[0], interport_distance)
-
-    @property
-    def interaction_points(self) -> np.ndarray:
-        bl = np.asarray(self.center) - np.asarray((self.interaction_l, self.waveguide_w + self.gap_w)) / 2
-        tl = bl + np.asarray((0, self.waveguide_w + self.gap_w))
-        br = bl + np.asarray((self.interaction_l, 0))
-        tr = tl + np.asarray((self.interaction_l, 0))
-        return np.vstack((bl, tl, br, tr))

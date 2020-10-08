@@ -17,7 +17,7 @@ AIR = Material('Air', (0, 0, 0), 1)
 class LateralNemsPS(Pattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float,
                  gap_w: float, taper_l: float, fin_end_bend_dim: Dim2, gnd_connector: Optional[Dim3] = None,
-                 end_ls: Tuple[float] = (0,), num_taper_evaluations: int = 100,
+                 gnd_pad_dim: Optional[Dim2] = None, end_ls: Tuple[float] = (0,), num_taper_evaluations: int = 100,
                  gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
                  boundary_taper: Optional[Tuple[float, ...]] = None,
                  end_taper: Optional[Tuple[Tuple[float, ...]]] = None, gnd_connector_idx: int = -1):
@@ -28,6 +28,7 @@ class LateralNemsPS(Pattern):
             phaseshift_l: phase shift length
             gap_w: gap width (initial, before tapering)
             gnd_connector: tuple of the form (rib_brim_w, connectorx, connectory)
+            gnd_pad_dim: add a pad to the ground connector
             fin_end_bend_dim: adiabatic fin bending
             taper_l: taper length at start and end (including fins)
             end_ls: end waveguide lengths (not including fins)
@@ -49,6 +50,9 @@ class LateralNemsPS(Pattern):
         self.wg_taper = wg_taper
         self.boundary_taper = boundary_taper
         self.fin_end_bend_dim = fin_end_bend_dim
+        self.gnd_pad_dim = gnd_pad_dim
+        self.gnd_connector = gnd_connector
+        self.gnd_connector_idx = gnd_connector_idx
 
         if not phaseshift_l >= 2 * taper_l:
             raise ValueError(f'Require interaction_l >= 2 * taper_l but got {phaseshift_l} < {2 * taper_l}')
@@ -90,7 +94,7 @@ class LateralNemsPS(Pattern):
                            slot_taper_ls=(taper_l,), slot_taper_params=(gap_taper,))
             patterns = [wg]
 
-        rib_brim = []
+        rib_brim, gnd_pads = [], []
 
         gnd_connector_idx = len(end_ls) - 1 if gnd_connector_idx == -1 else gnd_connector_idx
         rib_brim_x = float(np.sum(end_ls[:gnd_connector_idx]))
@@ -108,19 +112,27 @@ class LateralNemsPS(Pattern):
             rib_brims = [copy(rib_brim).translate(rib_brim_x),
                          copy(rib_brim).flip(horiz=True).translate(wg.size[0] - rib_brim_x)]
 
-            gnd_connection = Pattern(
+            gnd_connections = [
                 Box(gnd_connector[1:]).align(rib_brims[0]).valign(rib_brim, bottom=True, opposite=True),
                 Box(gnd_connector[1:]).align(rib_brims[0]).valign(rib_brim, bottom=False, opposite=True),
                 Box(gnd_connector[1:]).align(rib_brims[1]).valign(rib_brim, bottom=True, opposite=True),
                 Box(gnd_connector[1:]).align(rib_brims[1]).valign(rib_brim, bottom=False, opposite=True)
-            )
+            ]
+
+            if gnd_pad_dim is not None:
+                gnd_pads += [
+                    Box(gnd_pad_dim).align(rib_brims[0]).valign(gnd_connections[0], bottom=True, opposite=True),
+                    Box(gnd_pad_dim).align(rib_brims[0]).valign(gnd_connections[1], bottom=False, opposite=True),
+                    Box(gnd_pad_dim).align(rib_brims[1]).valign(gnd_connections[2], bottom=True, opposite=True),
+                    Box(gnd_pad_dim).align(rib_brims[1]).valign(gnd_connections[3], bottom=False, opposite=True)
+                ]
 
             rib_brim = Pattern(*rib_brims)
             rib_brim = [Pattern(poly) for poly in rib_brim.shapely - wg.shapely]
-            patterns.extend(rib_brim + [gnd_connection])
+            patterns.extend(rib_brim + gnd_connections + gnd_pads)
 
         super(LateralNemsPS, self).__init__(*patterns, call_union=False)
-        self.waveguide, self.nanofins, self.rib_brim = wg, nanofins, rib_brim
+        self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads = wg, nanofins, rib_brim, gnd_pads
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)
         self.port['a0'] = Port(0, 0, -np.pi)
@@ -294,12 +306,6 @@ class LateralNemsTDC(Pattern):
         center = np.asarray(self.center)
         self.port['fin0'] = Port(*(center + dy))
         self.port['fin1'] = Port(*(center - dy), np.pi)
-        # TODO(): deprecate this once metal boxes are added via dphox instead of nazca.
-        gnd_labels = ['gnd0_l_0', 'gnd0_u_0', 'gnd0_l_1', 'gnd0_u_1']
-        angle = 0
-        for gnd_label, pad in zip(gnd_labels, gnd_wg_pads):
-            self.port[gnd_label] = Port(*pad.center, a=angle)
-            angle += np.pi
 
     def update(self, new: bool = True, **kwargs):
         """Update this class with a new set of parameters using config
@@ -339,7 +345,6 @@ class NemsAnchor(Pattern):
             attach_comb: attach a comb drive to the shuttle (only if pos_electrode_dim specified!)
             tooth_dim: (length, width, inter-tooth gap)
         """
-        # TODO(): remove tooth_dim hardcoding
         self.fin_dim = fin_dim
         self.spring_dim = spring_dim
         self.shuttle_dim = shuttle_dim
@@ -347,6 +352,10 @@ class NemsAnchor(Pattern):
         self.tether_connector = tether_connector
         self.pos_electrode_dim = pos_electrode_dim
         self.gnd_electrode_dim = gnd_electrode_dim
+        self.include_fin_dummy = include_fin_dummy
+        self.attach_comb = attach_comb
+        self.tooth_dim = tooth_dim
+
         patterns, pads, springs, pos_pads, gnd_pads = [], [], [], [], []
 
         spring_dim = fin_dim if not spring_dim else spring_dim
@@ -429,9 +438,7 @@ class NemsAnchor(Pattern):
                 pads.extend([gnd_electrode_left, gnd_electrode_right])
                 gnd_pads = [gnd_electrode_left, gnd_electrode_right]
 
-
-
-        super(NemsAnchor, self).__init__(*patterns)
+        super(NemsAnchor, self).__init__(*patterns, call_union=False)
         self.pads, self.springs, self.shuttle, self.comb = pads, springs, shuttle, comb
         self.pos_pads, self.gnd_pads = pos_pads, gnd_pads
         shift = [-connector.center[0], -connector.bounds[1]]
@@ -605,38 +612,52 @@ class LateralNemsFull(Multilayer):
                  for s in top.pads + bot.pads if pad_dope is not None]
         metals = []
         port = {}
-        if top.gnd_pads and gnd_metal is not None:
-            gnd_pads = top.gnd_pads + bot.gnd_pads
+        gnd_pads = []
+        if gnd_metal is not None:
+            if top.gnd_pads:
+                gnd_pads = top.gnd_pads + bot.gnd_pads
+            elif device.__class__.__name__ == 'LateralNemsPS' and anchor.gnd_electrode_dim is None:
+                if not device.gnd_pads:
+                    raise ValueError('No ground pads available...')
+                gnd_pads = device.gnd_pads
+        if gnd_pads:
             gnd = Pattern(*gnd_pads)
             gnd_box = Box((gnd.size[0], gnd.size[1] + 2 * gnd_box_h)).align(gnd)
-            gnd_box = gnd_box.difference(Box((gnd.size[0] - 2 * trace_w,
-                                              gnd.size[1] - 2 * trace_w + 2 * gnd_box_h)).align(gnd))
+            gnd_box = Pattern(
+                gnd_box.difference(Box((gnd.size[0] - 2 * trace_w, gnd.size[1] + 2 * gnd_box_h)).align(gnd)),
+                gnd_box.difference(Box((gnd.size[0], gnd.size[1] - 2 * trace_w + 2 * gnd_box_h)).align(gnd)),
+            )
             metals.append((gnd_box, gnd_metal))
             vias.extend(sum([gnd_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
-            port['gnd_l'] = Port(gnd_box.bounds[0], gnd_box.bounds[1] + trace_w / 2, -np.pi)
-            port['gnd_r'] = Port(gnd_box.bounds[2], gnd_box.bounds[1] + trace_w / 2, 0)
+            port['gnd_l'] = Port(gnd_box.bounds[0] + trace_w / 2, gnd_box.bounds[3], np.pi / 2)
+            port['gnd_r'] = Port(gnd_box.bounds[2] - trace_w / 2, gnd_box.bounds[3], np.pi / 2)
         if top.pos_pads and pos_metal is not None:
             pos_pads = top.pos_pads + bot.pos_pads
             pos = Pattern(*pos_pads)
             pos_box = Box((pos.size[0] + 2 * pos_box_w, pos.size[1])).align(pos)
-            pos_box = pos_box.difference(
-                Box((pos.size[0] - 2 * trace_w + 2 * pos_box_w,
-                     pos.size[1] - 2 * trace_w)).align(pos_box))
+            pos_box = Pattern(
+                pos_box.difference(Box((pos.size[0] - 2 * trace_w + 2 * pos_box_w, pos.size[1])).align(pos)),
+                pos_box.difference(Box((pos.size[0] + 2 * pos_box_w, pos.size[1] - 2 * trace_w)).align(pos)),
+            )
             metals.append((pos_box, pos_metal))
             vias.extend(sum([pos_via.copy.align(pad).pattern_to_layer for pad in pos_pads], []))
             port['pos_l'] = Port(pos_box.bounds[0], pos_box.center[1], -np.pi)
             port['pos_r'] = Port(pos_box.bounds[2], pos_box.center[1], 0)
+        # TODO(sunil): make a name attribute for each pattern instead?
         if device.__class__.__name__ == 'LateralNemsTDC':
             gnd_pads = device.gnd_wg_pads
             gnd = Pattern(*gnd_pads)
             gnd_box = Box((gnd.size[0], gnd.size[1])).align(gnd)
-            gnd_box = gnd_box.difference(Box((gnd.size[0] - 2 * trace_w,
-                                              gnd.size[1] - 2 * trace_w)).align(gnd))
+            gnd_box = Pattern(
+                gnd_box.difference(Box((gnd.size[0] - 2 * trace_w, gnd.size[1])).align(gnd)),
+                gnd_box.difference(Box((gnd.size[0], gnd.size[1] - 2 * trace_w)).align(gnd)),
+            )
             metals.append((gnd_box, gnd_metal))
             vias.extend(sum([gnd_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
             if anchor.gnd_electrode_dim is None:
-                port['gnd_l'] = Port(gnd_box.bounds[0], gnd_box.bounds[1] + trace_w / 2, -np.pi)
-                port['gnd_r'] = Port(gnd_box.bounds[2], gnd_box.bounds[1] + trace_w / 2, 0)
+                port['gnd_l'] = Port(gnd_box.bounds[0] + trace_w / 2, gnd_box.bounds[3], np.pi / 2)
+                port['gnd_r'] = Port(gnd_box.bounds[2] - trace_w / 2, gnd_box.bounds[3], np.pi / 2)
+
 
         rib_brim = [(rb, rib) for rb in device.rib_brim if rib is not None]
         clearout = full.clearout_box(clearout_layer, clearout_etch_stop_layer, clearout_dim)

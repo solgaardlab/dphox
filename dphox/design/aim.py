@@ -386,8 +386,9 @@ class AIMNazca:
         return dc.nazca_cell('dc', layer='seam'), dc.upper_path.nazca_cell('bendy_dc_dummy', layer='seam')
 
     def custom_dc_taper(self, waveguide_w: float = 0.48, bend_dim: Dim2 = (20, 50.78 / 2), gap_w: float = 0.3,
-                  interaction_l: float = 37.8, end_bend_dim: Optional[Dim3] = None,
-                  use_radius: bool = True, taper_ls= (1,), coupler_boundary_taper = (0, 0.02)) -> Tuple[nd.Cell, nd.Cell]:
+                        interaction_l: float = 37.8, end_bend_dim: Optional[Dim3] = None,
+                        use_radius: bool = True, taper_ls=(1,), coupler_boundary_taper=(0, 0.02)) -> Tuple[
+        nd.Cell, nd.Cell]:
         dc = DC(bend_dim, waveguide_w, gap_w, interaction_l, taper_ls, coupler_boundary_taper, end_bend_dim, use_radius)
         return dc.nazca_cell('dc', layer='seam'), dc.upper_path.nazca_cell('bendy_dc_dummy', layer='seam')
 
@@ -659,14 +660,16 @@ class AIMNazca:
         for layer, mesh in trimeshes.items():
             mesh.export('{}_{}.stl'.format(cell.cell_name, layer))
 
-    def delay_line(self, waveguide_width=0.48, delay_length=50, bend_radius=5, straight_length=25, number_bend_pairs=1):
-        c = DelayLine(waveguide_width=waveguide_width, delay_length=delay_length, bend_radius=bend_radius,
-                      straight_length=straight_length, number_bend_pairs=number_bend_pairs)
-        device = Multilayer([(c, 'seam')])
-        return device.nazca_cell('delay_line')
+    def delay_line(self, waveguide_width: float = 0.48, delay_length: float = 50,
+                   bend_radius: float = 5, straight_length: float = 25, number_bend_pairs: int = 1,
+                   flip: bool = False):
+        return DelayLine(waveguide_width=waveguide_width, delay_length=delay_length,
+                         bend_radius=bend_radius, straight_length=straight_length,
+                         number_bend_pairs=number_bend_pairs, flip=flip).nazca_cell('delay_line', 'seam')
 
     def test_column(self, device_list: List[nd.Cell], tapline: nd.Cell, col_name: str,
-                    autoroute_node_detector: Callable, dc: Union[nd.Cell, List[nd.Cell]] = None):
+                    autoroute_node_detector: Callable, dc: Union[nd.Cell, List[nd.Cell]] = None,
+                    left_pad_orientation: bool = True):
         with nd.Cell(col_name) as test_column:
             line = tapline.put()
             detector = self.pdk_cells['cl_band_photodetector_digital']
@@ -681,7 +684,7 @@ class AIMNazca:
                         node = device.put(line.pin[f'a{2 * i + 1}'])
                 else:
                     node = device.put(line.pin[f'a{2 * i + 1}'])
-                node.raise_pins(['gnd_l', 'pos_l'], [f'gnd{i}', f'pos{i}'])
+                node.raise_pins(['gnd_r', 'pos_r' if left_pad_orientation else 'pos_l'], [f'gnd{i}', f'pos{i}'])
                 d1 = detector.put(node.pin['b0'])
                 d2 = detector.put(node.pin['b1'], flip=True)
                 autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])

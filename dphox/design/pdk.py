@@ -8,7 +8,8 @@ aim_interaction_l_pull_apart = 100
 aim_interaction_l_pull_in = 50
 aim_end_l = 5  # single taper at the end
 clearout_h_pull_in = 3
-clearout_h_pull_apart = 10
+clearout_h_pull_apart_ps = 11
+clearout_h_pull_apart_tdc = 11.88
 tether_phaseshift_l = 75
 tether_interaction_l = 100
 
@@ -18,7 +19,7 @@ aim_ps_pull_apart = LateralNemsPS(
     phaseshift_l=aim_phaseshift_l_pull_apart,
     gap_w=0.10,
     num_taper_evaluations=100,
-    gnd_connector=(2, 0.2, 3),
+    gnd_connector=(2, 0.2, 5),
     taper_l=0,
     end_ls=(aim_end_l,),
     gap_taper=None,
@@ -29,7 +30,8 @@ aim_ps_pull_apart = LateralNemsPS(
     gnd_connector_idx=-1
 )
 
-aim_ps_pull_in = aim_ps_pull_apart.update(phaseshift_l=aim_phaseshift_l_pull_in)
+aim_ps_pull_in = aim_ps_pull_apart.update(phaseshift_l=aim_phaseshift_l_pull_in,
+                                          gnd_pad_dim=(3, 4))
 
 aim_tdc_pull_apart = LateralNemsTDC(
     waveguide_w=0.48,
@@ -79,8 +81,8 @@ aim_pull_in_full_ps = LateralNemsFull(
     gnd_via=Via((0.4, 0.4), 0.1, metal='m1am', via='cbam', shape=(2, 2), pitch=1),
     pos_via=Via((0.4, 0.4), 0.1, metal=['m1am', 'm2am'], via=['cbam', 'v1am'], shape=(20, 2), pitch=1),
     trace_w=4,
-    pos_box_w=12,
-    gnd_box_h=10,
+    pos_box_w=8,
+    gnd_box_h=0,
     clearout_dim=(aim_phaseshift_l_pull_in, clearout_h_pull_in),
     dope_expand=0.25,
     dope_grow=0.1,
@@ -96,12 +98,12 @@ aim_pull_in_full_ps = LateralNemsFull(
 )
 
 aim_tether_anchor_tdc = aim_pull_apart_anchor.update(
-    fin_dim=(tether_interaction_l, 0.4),
-    shuttle_dim=(5, 2),
     spring_dim=(tether_interaction_l + 5, 0.22),
+    pos_electrode_dim=(tether_interaction_l - 5, 4, 0.5),
+    fin_dim=(tether_interaction_l, 0.4),
+    shuttle_dim=(10, 2),
     straight_connector=None,
     tether_connector=(2, 1, 0.5, 1),
-    pos_electrode_dim=(tether_interaction_l - 5, 4, 0.5),
     gnd_electrode_dim=(3, 3),
     include_fin_dummy=False
 )
@@ -109,21 +111,26 @@ aim_tether_anchor_tdc = aim_pull_apart_anchor.update(
 aim_tether_anchor_ps = aim_tether_anchor_tdc.update(
     shuttle_dim=(10, 2),
     spring_dim=(tether_phaseshift_l + 10, 0.22),
-    pos_electrode_dim=(tether_phaseshift_l, 4, 0.5)
+    pos_electrode_dim=(tether_phaseshift_l, 4, 0.5),
+    fin_dim=(tether_phaseshift_l, 0.22)
 )
 
 aim_pull_in_full_tdc = aim_pull_in_full_ps.update(tdc=aim_tdc_pull_in,
-                                                  clearout_dim=(aim_interaction_l_pull_in, clearout_h_pull_in))
+                                                  clearout_dim=(aim_interaction_l_pull_in, clearout_h_pull_in),
+                                                  gnd_box_h=10,
+                                                  pos_box_w=12)
 
 aim_pull_apart_full_ps = aim_pull_in_full_ps.update(anchor=aim_pull_apart_anchor,
                                                     ps=aim_ps_pull_apart,
                                                     clearout_dim=(aim_phaseshift_l_pull_apart,
-                                                                  clearout_h_pull_apart))
+                                                                  clearout_h_pull_apart_ps),
+                                                    gnd_box_h=10,
+                                                    pos_box_w=18)
 
 aim_pull_apart_full_tdc = aim_pull_apart_full_ps.update(
     tdc=aim_tdc_pull_apart,
     clearout_dim=(aim_interaction_l_pull_apart - 10,
-                  clearout_h_pull_apart))
+                  clearout_h_pull_apart_tdc))
 
 
 aim_tether_ps = aim_ps_pull_apart.update(
@@ -147,10 +154,10 @@ aim_tether_tdc = aim_tdc_pull_apart.update(
 aim_tether_full_ps = aim_pull_apart_full_ps.update(
     anchor=aim_tether_anchor_ps,
     ps=aim_tether_ps,
-    clearout_dim=(tether_phaseshift_l + 5, clearout_h_pull_apart))
+    clearout_dim=(tether_phaseshift_l + 5, clearout_h_pull_apart_ps + 2))
 
 aim_tether_full_tdc = aim_pull_apart_full_tdc.update(
     anchor=aim_tether_anchor_tdc,
     tdc=aim_tether_tdc,
-    clearout_dim=(tether_interaction_l - 5, clearout_h_pull_apart))
+    clearout_dim=(tether_interaction_l - 5, clearout_h_pull_apart_tdc))
 
