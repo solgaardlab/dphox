@@ -34,12 +34,12 @@ class Box(Pattern):
     def striped(self, stripe_w: float, pitch: Optional[Dim2] = None):
         pitch = (stripe_w * 2, stripe_w * 2) if pitch is None else pitch
         patterns = [self.hollow(stripe_w)]
-        if pitch[0] > 0 and not pitch[0] > self.size[0]:
+        if pitch[0] > 0 and not 3 * pitch[1] >= self.size[0]:
             xs = np.mgrid[self.bounds[0] + pitch[0]:self.bounds[2]:pitch[0]]
-            patterns += [Box((stripe_w, self.size[1])).halign(x) for x in xs]
-        if pitch[1] > 0 and not pitch[1] > self.size[1]:
+            patterns.append(Pattern(*[Box((stripe_w, self.size[1])).halign(x) for x in xs]).align(patterns[0]))
+        if pitch[1] > 0 and not 3 * pitch[1] >= self.size[1]:
             ys = np.mgrid[self.bounds[1] + pitch[1]:self.bounds[3]:pitch[1]]
-            patterns += [Box((self.size[0], stripe_w)).valign(y) for y in ys]
+            patterns.append(Pattern(*[Box((self.size[0], stripe_w)).valign(y) for y in ys]).align(patterns[0]))
         return Pattern(*patterns, call_union=False)
 
 

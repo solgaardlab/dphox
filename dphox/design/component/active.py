@@ -362,38 +362,39 @@ class NemsAnchor(Pattern):
         patterns, pads, springs, pos_pads, gnd_pads = [], [], [], [], []
 
         spring_dim = fin_dim if not spring_dim else spring_dim
-        connector = Box(shuttle_dim).translate()
-        shuttle = connector.copy
+        shuttle = Box(shuttle_dim).translate()
         comb = None
+        connector = shuttle.copy
         if tether_connector is not None and straight_connector is None:
             s = tether_connector
             loop = Pattern(Path(fin_dim[1]).sbend((s[0], s[1])).segment(fin_dim[0]).sbend((s[0], -s[1])))
             straight = Box((shuttle_dim[0], s[-2]))
-            straight.align(connector).valign(connector, bottom=False, opposite=True)
+            straight.align(shuttle).valign(shuttle, bottom=False, opposite=True)
             loop.align(straight).valign(straight, bottom=False, opposite=True)
-            connector = Pattern(shuttle, straight, loop)
+            connector = Pattern(straight, loop)
+            patterns.append(connector)
         elif straight_connector is not None:
             straight = Box(straight_connector)
             fin_connectors = [
-                straight.copy.halign(connector).valign(connector, bottom=False,
+                straight.copy.halign(shuttle).valign(shuttle, bottom=False,
                                                        opposite=True),
-                straight.copy.halign(connector, left=False,
-                                     opposite=False).valign(connector,
+                straight.copy.halign(shuttle, left=False,
+                                     opposite=False).valign(shuttle,
                                                             bottom=False,
                                                             opposite=True),
             ]
             patterns.extend(fin_connectors)
-            fat = Box((shuttle_dim[0], straight_connector[1])).align(connector).valign(
-                connector, opposite=True)
+            fat = Box((shuttle_dim[0], straight_connector[1])).align(shuttle).valign(
+                shuttle, opposite=True)
             if include_fin_dummy and not attach_comb:
                 # this is the mirror image dummy for mechanics
-                dummy_fin = Box(fin_dim).align(connector).valign(fat, opposite=False, bottom=False)
+                dummy_fin = Box(fin_dim).align(shuttle).valign(fat, opposite=False, bottom=False)
                 patterns.append(dummy_fin)
                 end_connector = Pattern(dummy_fin, fat)
             else:
                 end_connector = fat
 
-            connector = Pattern(connector,
+            connector = Pattern(shuttle,
                                 *fin_connectors,
                                 end_connector
                                 )
@@ -403,7 +404,7 @@ class NemsAnchor(Pattern):
             bottom_spring = Box(spring_dim).align(shuttle).valign(shuttle, bottom=False, opposite=True)
             if pos_electrode_dim is not None:
                 pos_alignment_pattern = connector if include_fin_dummy and not attach_comb else top_spring
-                pos_electrode = Box((pos_electrode_dim[0], pos_electrode_dim[1])).align(top_spring).valign(
+                pos_electrode = Box(pos_electrode_dim[:2]).align(top_spring).valign(
                     pos_alignment_pattern, opposite=True).translate(dy=pos_electrode_dim[2])
                 patterns.append(pos_electrode)
                 pads.append(pos_electrode)
@@ -424,13 +425,16 @@ class NemsAnchor(Pattern):
                     lower_comb.align(shuttle).valign(shuttle, opposite=True)
                     comb = Pattern(upper_comb, lower_comb)
                     patterns.append(comb)
+                if straight_connector is not None:
+                    shuttle = Box((shuttle_dim[0], shuttle_dim[1] + straight_connector[1])).valign(shuttle)
             else:
                 if attach_comb:
                     raise AttributeError('Must specify pos_electrode_dim if attach_comb is True')
+                if straight_connector is not None:
+                    shuttle = Box((shuttle_dim[0], shuttle_dim[1] + straight_connector[1])).valign(shuttle)
                 pads.append(shuttle.copy)
                 pos_pads.append(pads[-1])
-            if straight_connector is not None:
-                shuttle = Box((shuttle_dim[0], shuttle_dim[1] + straight_connector[1])).valign(shuttle)
+
             patterns.append(shuttle if shuttle_stripe_w == 0 else shuttle.striped(shuttle_stripe_w))
 
             if gnd_electrode_dim is not None:

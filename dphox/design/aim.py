@@ -54,103 +54,6 @@ class AIMNazca:
         self.v1_via_8 = Via((0.4, 0.4), 0.15, shape=(1, 8), pitch=1,
                             metal=['m1am', 'm2am'], via='v1am').nazca_cell('v1_via_8')
 
-    def nems_tdc(self, waveguide_w: float = 0.48, nanofin_w: float = 0.22,
-                 interaction_l: float = 100, dc_gap_w: float = 0.2, beam_gap_w: float = 0.1,
-                 bend_dim: Dim2 = (10, 24.66), pad_dim: Dim4 = (2, 2, 2, 0.75), anchor: nd.Cell = None,
-                 use_radius: bool = True, clearout_box_dim: Dim2 = (100, 2.5), dc_taper_ls: Tuple[float, ...] = None,
-                 dc_taper=None, beam_taper=None, clearout_etch_stop_grow: float = 0.5,
-                 dope_grow: float = 0.25, dope_expand: float = 0.1, fin_adiabatic_bend_dim: Optional[Dim2] = (2, 1),
-                 dc_end_l: float = 0, metal_extension: float = 3,
-                 diff_ps: Optional[nd.Cell] = None, name: str = 'nems_tdc') -> nd.Cell:
-        c = LateralNemsTDC(waveguide_w=waveguide_w, nanofin_w=nanofin_w,
-                           interaction_l=interaction_l, dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w,
-                           bend_dim=bend_dim, gnd_wg=pad_dim, use_radius=use_radius, dc_taper_ls=dc_taper_ls,
-                           dc_taper=dc_taper, beam_taper=beam_taper, fin_end_bend_dim=fin_adiabatic_bend_dim,
-                           dc_end_l=dc_end_l)
-        pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
-        clearout = c.clearout_box(clearout_layer='clearout', clearout_etch_stop_layer='snam',
-                                  clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
-        ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
-        dopes = [p.expand(dope_expand).dope('pppam', dope_grow) for p in c.pads]
-        device = Multilayer([(c, 'seam')] + pad_to_layer + clearout + ridge_etch + dopes)
-        if anchor is None:
-            cell = device.nazca_cell(name)
-        else:
-            with nd.Cell(name) as cell:
-                tdc = device.nazca_cell('tdc').put()
-                top_anchor = anchor.put(tdc.pin['fin0'])
-                bottom_anchor = anchor.put(tdc.pin['fin1'])
-                self.metal_box(top_anchor, bottom_anchor, interaction_l, m2_extension=metal_extension)
-                nd.Pin('a0').put(tdc.pin['a0'])
-                nd.Pin('b0').put(tdc.pin['b0'])
-                nd.Pin('a1').put(tdc.pin['a1'])
-                nd.Pin('b1').put(tdc.pin['b1'])
-                tdc.raise_pins(['gnd_l', 'gnd_r', 'pos_l', 'pos_r'])
-        return self.tdc_node(diff_ps, cell) if diff_ps is not None else cell
-
-    def nems_ps(self, anchor: nd.Cell, waveguide_w: float = 0.48, nanofin_w: float = 0.22, phaseshift_l: float = 90,
-                gap_w: float = 0.10, pad_dim: Optional[Dim3] = None, clearout_box_dim: Dim2 = (90, 13.8),
-                clearout_etch_stop_grow: float = 0.5, num_taper_evaluations: int = 100,
-                tap_sep: Optional[Tuple[nd.Cell, float]] = None,
-                gnd_connector: Optional[Dim3] = (2, 0.2, 3), taper_l: float = 0, end_ls: Tuple[float, ...] = (5,),
-                gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
-                boundary_taper: Optional[Tuple[float, ...]] = None, fin_adiabatic_bend_dim: Optional[Dim2] = (2, 1),
-                end_taper: Optional[Tuple[Tuple[float, ...], ...]] = ((0, -0.08),), gnd_connector_idx: int = -1,
-                metal_extension: float = 10,
-                name: str = 'nems_ps') -> nd.Cell:
-        c = LateralNemsPS(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l, gap_w=gap_w,
-                          num_taper_evaluations=num_taper_evaluations,
-                          fin_end_bend_dim=fin_adiabatic_bend_dim, gnd_connector_idx=gnd_connector_idx,
-                          gap_taper=gap_taper, wg_taper=wg_taper, end_ls=end_ls, end_taper=end_taper,
-                          taper_l=taper_l, boundary_taper=boundary_taper, gnd_connector=gnd_connector)
-        clearout = c.clearout_box(clearout_layer='clearout', clearout_etch_stop_layer='snam',
-                                  clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
-        ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
-        device = Multilayer([(c, 'seam')] + clearout + ridge_etch)
-
-        with nd.Cell(name) as cell:
-            ps = device.nazca_cell('ps').put()
-            top_anchor = anchor.put(ps.pin['fin0'])
-            bottom_anchor = anchor.put(ps.pin['fin1'])
-            self.metal_box(top_anchor, bottom_anchor, phaseshift_l, m2_extension=metal_extension)
-            nd.Pin('a0').put(ps.pin['a0'])
-            if tap_sep is not None:
-                tap, sep = tap_sep
-                self.waveguide_ic.strt(sep).put(ps.pin['b0'])
-                t = tap.put()
-                nd.Pin('b0').put(t.pin['b0'])
-            else:
-                nd.Pin('b0').put(ps.pin['b0'])
-        return cell
-
-    def metal_box(self, top_anchor: nd.Instance, bottom_anchor: nd.Instance, length: float, m2_extension: float = 4):
-        has_c1 = 'c1' in top_anchor.pin
-        m2_radius = (top_anchor.pin['c0'].y - bottom_anchor.pin['c0'].y) / 2
-        self.m2_ic.strt(length / 2 + m2_extension * has_c1).put(top_anchor.pin['c0'])
-        self.m2_ic.bend(m2_radius, 180).put()
-        x = self.m2_ic.strt(length + 2 * m2_extension * has_c1).put()
-        nd.Pin('pos0').put(x.pin['a0'])
-        nd.Pin('pos1').put(x.pin['b0'])
-        self.m2_ic.bend(m2_radius, 180).put()
-        self.m2_ic.strt(length / 2 + m2_extension * has_c1).put()
-        if has_c1:
-            interpad_distance_x = top_anchor.pin['c1'].x - top_anchor.pin['c2'].x
-            interpad_distance_y = top_anchor.pin['c2'].y - bottom_anchor.pin['c2'].y + 2
-            m1_radius = (top_anchor.bbox[3] - top_anchor.pin['c1'].y) + 4
-            self.m1_ic.bend(m1_radius, 90).put(top_anchor.pin['c1'].x, top_anchor.pin['c1'].y, 90)
-            v0 = nd.cp.get_xya()
-            self.m1_ic.strt(interpad_distance_x - m1_radius * 2).put()
-            v1 = nd.cp.get_xya()
-            self.m1_ic.bend(m1_radius, 90).put()
-            self.v1_via_4.put(*v0)
-            self.v1_via_4.put(*v1)
-            nd.Pin('gnd0').put(v0[0], v0[1], 360)
-            nd.Pin('gnd1').put(*v1)
-            self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c1'].x, bottom_anchor.pin['c1'].y - 1, 90)
-            self.m2_ic.strt(interpad_distance_y).put(bottom_anchor.pin['c2'].x, bottom_anchor.pin['c2'].y - 1, 90)
-            for pin in (top_anchor.pin['c1'], top_anchor.pin['c2'], bottom_anchor.pin['c1'], bottom_anchor.pin['c2']):
-                self.v1_via.put(pin)
-
     def gnd_wg(self, waveguide_w: float = 0.48, length: float = 13, gnd_contact_dim: Optional[Dim2] = (2, 2),
                rib_brim_w: float = 1.5, gnd_connector_dim: Optional[Dim2] = (1, 2),
                flip: bool = False, dope_grow: float = 0.25, name='gnd_wg') -> nd.Cell:
@@ -184,32 +87,6 @@ class AIMNazca:
             nd.put_stub()
         return autoroute_turn
 
-    def nems_anchor(self, fin_dim: Dim2 = (100, 0.15), shuttle_dim: Dim2 = (50, 2),
-                    spring_dim: Dim2 = None, straight_connector: Optional[Dim2] = (0.25, 1),
-                    tether_connector: Optional[Dim4] = (3, 1, 0.5, 1),
-                    pos_electrode_dim: Optional[Dim3] = (90, 4, 0.5),
-                    neg_electrode_dim: Optional[Dim2] = (3, 4), dope_expand: float = 0.25, attach_comb: bool = False,
-                    dope_grow: float = 0.1, include_fin_dummy: bool = True, name: str = 'nems_anchor'):
-        c = NemsAnchor(fin_dim=fin_dim, shuttle_dim=shuttle_dim,
-                       spring_dim=spring_dim, straight_connector=straight_connector,
-                       tether_connector=tether_connector, pos_electrode_dim=pos_electrode_dim,
-                       gnd_electrode_dim=neg_electrode_dim, attach_comb=attach_comb,
-                       include_fin_dummy=include_fin_dummy)
-        pads, dopes = [], []
-        if pos_electrode_dim is not None:
-            if neg_electrode_dim is None:
-                raise ValueError('must specify neg_electrode_dim if pos_electrode_dim specified but got None')
-            pads.extend(sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads[:1]], []))
-            pads.extend(sum([pad.metal_contact(('cbam', 'm1am')) for pad in c.pads[1:]], []))
-            dopes.extend([p.expand(dope_expand).dope('pppam', dope_grow) for p in c.pads])
-            dopes.extend([p.expand(dope_expand).dope('pdam', dope_grow) for p in c.springs])
-            dopes.append(c.shuttle.expand(dope_expand).dope('pdam', dope_grow))
-        else:
-            pads.extend(c.shuttle.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')))
-            dopes.extend([p.expand(dope_expand).dope('pppam', dope_grow) for p in c.pads])
-        device = Multilayer([(c, 'seam')] + pads + dopes)
-        return device.nazca_cell(name)
-
     def device_array(self, device_list: List[nd.Cell], interport_w: float = 40, name: str = 'device_array'):
         with nd.Cell(name) as cell:
             for i, device in enumerate(device_list):
@@ -224,7 +101,8 @@ class AIMNazca:
                 return self.waveguide_ic.strt(dev).put()
             elif isinstance(dev, Multilayer):
                 device = dev.nazca_cell(f'{name}_dev').put()
-                device.raise_pins(['gnd_l', 'pos_l', 'gnd_r', 'pos_r'])
+                if 'gnd_r' in device.pin:
+                    device.raise_pins(['gnd_l', 'pos_l', 'gnd_r', 'pos_r'])
                 return device
             else:
                 return dev.put()
@@ -242,7 +120,8 @@ class AIMNazca:
                 return self.waveguide_ic.strt(dev).put()
             elif isinstance(dev, Multilayer):
                 device = dev.nazca_cell(f'{name}_dev').put()
-                device.raise_pins(['gnd_l', 'pos_l', 'gnd_r', 'pos_r'])
+                if 'gnd_r' in device.pin:
+                    device.raise_pins(['gnd_l', 'pos_l', 'gnd_r', 'pos_r'])
                 return device
             else:
                 return dev.put()
@@ -495,7 +374,8 @@ class AIMNazca:
                     internal_ps = diff_ps.put(upper_sampler.pin['b0'])
             else:
                 internal_ps = diff_ps.put(first_dc.pin['b0'])
-            internal_ps.raise_pins(['gnd_l', 'pos_l', 'gnd_r', 'pos_r'])
+            if 'gnd_r' in internal_ps.pin:
+                internal_ps.raise_pins(['gnd_l', 'pos_l', 'gnd_r', 'pos_r'])
             second_dc = dc.put(internal_ps.pin['b0'])
             if tap_external is not None:
                 upper_sampler = tap_external.put(second_dc.pin['b0'])
@@ -681,7 +561,8 @@ class AIMNazca:
                         node = device.put(line.pin[f'a{2 * i + 1}'])
                 else:
                     node = device.put(line.pin[f'a{2 * i + 1}'])
-                node.raise_pins(['gnd_r', 'pos_r' if left_pad_orientation else 'pos_l'], [f'gnd{i}', f'pos{i}'])
+                if 'gnd_r' in node.pin:
+                    node.raise_pins(['gnd_r', 'pos_r' if left_pad_orientation else 'pos_l'], [f'gnd{i}', f'pos{i}'])
                 d1 = detector.put(node.pin['b0'])
                 d2 = detector.put(node.pin['b1'], flip=True)
                 autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])

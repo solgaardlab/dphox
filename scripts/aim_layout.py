@@ -107,7 +107,7 @@ tdc = aim_pull_apart_full_tdc.nazca_cell('test_tdc')
 gnd_wg = chip.gnd_wg()
 mesh_ps = chip.device_linked([aim_pull_apart_full_ps, sep, tap_detector])
 alignment_mark = chip.alignment_mark()
-alignment_mark_small = chip.alignment_mark((50, 5))
+alignment_mark_small = chip.alignment_mark((50, 5), name='alignment_mark_small')
 grating = chip.pdk_cells['cl_band_vertical_coupler_si']
 detector = chip.pdk_cells['cl_band_photodetector_digital']
 
@@ -611,9 +611,9 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         i, j = closest_pair[1]
         idx = closest_pair[0]
         chip.m2_ic.strt(100 * (2 - j), width=8).put(bp_array_nems.pin[f'u{i},{j}'])
-        chip.m2_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
+        chip.m2_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=4, width=8).put()
         chip.m2_ic.strt(100 * (2 - j), width=19).put(bp_array_thermal.pin[f'u{i},{j}'])
-        chip.m2_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=19).put()
+        chip.m2_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=4, width=19).put()
         # TODO: Add M1 layer to thermal gnd blocks to push down resistance
         # chip.v1_via_4.put()
 
@@ -778,9 +778,9 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             chip.m2_ic.bend_strt_bend_p2p(d1.pin['n'], autoroute_nems_anode.pin['a6'], radius=4).put()
             chip.m2_ic.bend_strt_bend_p2p(d2.pin['p'], autoroute_nems_cathode.pin['a5'], radius=4).put()
             chip.m2_ic.bend_strt_bend_p2p(d1.pin['p'], autoroute_nems_cathode.pin['a6'], radius=4).put()
-            chip.m1_ic.bend_strt_bend_p2p(ts.pin['gnd_l'], autoroute_nems_gnd.pin['a5'], radius=4).put()
-            chip.m2_ic.bend_strt_bend_p2p(ts.pin['pos_l'], autoroute_nems_pos.pin['a6'], radius=4).put()
-            chip.v1_via_4.put(ts.pin['gnd_l'], flop=True)
+            chip.m1_ic.bend_strt_bend_p2p(dev.pin['gnd_l'], autoroute_nems_gnd.pin['a5'], radius=4).put()
+            chip.m2_ic.bend_strt_bend_p2p(dev.pin['pos_l'], autoroute_nems_pos.pin['a6'], radius=4).put()
+            chip.v1_via_4.put(dev.pin['gnd_l'], flop=True)
 
             # mesh tap test
             test_tap = tap_detector.put(output_interposer.pin['a6'].x - 40,
