@@ -12,6 +12,11 @@ except ImportError:
 
 
 class Box(Pattern):
+    """Box with default center at origin
+
+    Args:
+        box_dim: Box dimension (box width, box height)
+    """
     def __init__(self, box_dim: Dim2):
         self.box_dim = box_dim
         super(Box, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2))
@@ -19,6 +24,23 @@ class Box(Pattern):
     def expand(self, grow: float):
         big_box_dim = (self.box_dim[0] + grow, self.box_dim[1] + grow)
         return Pattern(Path(big_box_dim[1]).segment(big_box_dim[0]).translate(dx=0, dy=big_box_dim[1] / 2)).align(self)
+
+    def hollow(self, thickness: float):
+        return Pattern(
+            self.difference(Box((self.box_dim[0] - 2 * thickness, self.box_dim[1])).align(self)),
+            self.difference(Box((self.box_dim[0], self.box_dim[1] - 2 * thickness)).align(self)),
+        )
+
+    def striped(self, stripe_w: float, pitch: Optional[Dim2] = None):
+        pitch = (stripe_w * 2, stripe_w * 2) if pitch is None else pitch
+        patterns = [self.hollow(stripe_w)]
+        if pitch[0] > 0 and not pitch[0] > self.size[0]:
+            xs = np.mgrid[self.bounds[0] + pitch[0]:self.bounds[2]:pitch[0]]
+            patterns += [Box((stripe_w, self.size[1])).halign(x) for x in xs]
+        if pitch[1] > 0 and not pitch[1] > self.size[1]:
+            ys = np.mgrid[self.bounds[1] + pitch[1]:self.bounds[3]:pitch[1]]
+            patterns += [Box((self.size[0], stripe_w)).valign(y) for y in ys]
+        return Pattern(*patterns, call_union=False)
 
 
 class DC(Pattern):

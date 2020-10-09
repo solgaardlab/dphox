@@ -103,7 +103,6 @@ class AIMNazca:
                           fin_end_bend_dim=fin_adiabatic_bend_dim, gnd_connector_idx=gnd_connector_idx,
                           gap_taper=gap_taper, wg_taper=wg_taper, end_ls=end_ls, end_taper=end_taper,
                           taper_l=taper_l, boundary_taper=boundary_taper, gnd_connector=gnd_connector)
-        # pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
         clearout = c.clearout_box(clearout_layer='clearout', clearout_etch_stop_layer='snam',
                                   clearout_etch_stop_grow=clearout_etch_stop_grow, dim=clearout_box_dim)
         ridge_etch = [(brim, 'ream') for brim in c.rib_brim]
@@ -165,9 +164,10 @@ class AIMNazca:
 
     def autoroute_turn(self, n: Union[int, List, np.ndarray], level: int = 1,
                        period: float = 50, final_period: float = 20, width: float = 8,
-                       connector_x: float = 0, connector_y: float = 0, turn_radius: float = 0, overlap: float = 0):
+                       connector_x: float = 0, connector_y: float = 0, turn_radius: float = 0, overlap: float = 0,
+                       name: str = 'autoroute_turn'):
         mt_ic = self.m1_ic if level == 1 else self.m2_ic
-        with nd.Cell(f'autoroute_turn_{period}_{final_period}') as autoroute_turn:
+        with nd.Cell(f'{name}_{period}_{final_period}_{connector_x}_{connector_y}') as autoroute_turn:
             route_arr = np.ones(n) if isinstance(n, int) else np.asarray(n)
             route_num = 0
             for m, route_idx in enumerate(route_arr):
@@ -210,20 +210,28 @@ class AIMNazca:
         device = Multilayer([(c, 'seam')] + pads + dopes)
         return device.nazca_cell(name)
 
-    def double_ps(self, ps: nd.Cell, interport_w: float = 40, name: str = 'double_ps'):
+    def device_array(self, device_list: List[nd.Cell], interport_w: float = 40, name: str = 'device_array'):
         with nd.Cell(name) as cell:
-            pl = ps.put()
-            nd.Pin('a0').put(pl.pin['a0'])
-            nd.Pin('b0').put(pl.pin['b0'])
-            pu = ps.put(0, interport_w)
-            nd.Pin('a1').put(pu.pin['a0'])
-            nd.Pin('b1').put(pu.pin['b0'])
-            if 'pos0' in pu.pin:  # equivalent to "raising pins" but not all phase shifters have these pins...
-                nd.Pin('pos0').put(pu.pin['pos0'])
-                nd.Pin('pos1').put(pu.pin['pos1'])
-            if 'gnd0' in pu.pin:
-                nd.Pin('gnd0').put(pu.pin['gnd0'])
-                nd.Pin('gnd1').put(pu.pin['gnd1'])
+            for i, device in enumerate(device_list):
+                dev = device.put(0, interport_w * i)
+                nd.Pin(f'a{i}').put(dev.pin['a0'])
+                nd.Pin(f'b{i}').put(dev.pin['b0'])
+        return cell
+
+    def device_linked(self, device_list: List[Union[nd.Cell, float, Multilayer]], name: str = 'device_linked'):
+        def _put_device(dev: Union[nd.Cell, float, Multilayer]):
+            if isinstance(dev, (float, int)):
+                return self.waveguide_ic.strt(dev).put()
+            elif isinstance(dev, Multilayer):
+                device = dev.nazca_cell(f'{name}_dev').put()
+                device.raise_pins(['gnd_l', 'pos_l', 'gnd_r', 'pos_r'])
+                return device
+            else:
+                return dev.put()
+        with nd.Cell(name) as cell:
+            devices = [_put_device(dev) for dev in device_list]
+            nd.Pin('a0').put(devices[0].pin['a0'])
+            nd.Pin('b0').put(devices[-1].pin['b0'])
         return cell
 
     def mzi_arms(self, lower_arm: List[Union[nd.Cell, float, Multilayer]] = None,
@@ -252,19 +260,14 @@ class AIMNazca:
             lx, ly, la = l_device.pin['b0'].xya()
             ux, uy, ua = u_device.pin['b0'].xya()
             fill_length = abs(lx - ux)
-            if ux > lx:
-                fill_pin = l_device.pin['b0']
-                wg_filler = self.waveguide_ic.strt(fill_length).put(fill_pin)
-                nd.Pin('b0').put(wg_filler.pin['b0'])
-                nd.Pin('b1').put(u_device.pin['b0'])
-            elif ux < lx:
-                fill_pin = u_device.pin['b0']
-                wg_filler = self.waveguide_ic.strt(fill_length).put(fill_pin)
+            if ux == lx:
                 nd.Pin('b0').put(l_device.pin['b0'])
-                nd.Pin('b1').put(wg_filler.pin['b0'])
+                nd.Pin('b1').put(u_device.pin['b0'])
             else:
-                nd.Pin('b0').put(l_device.pin['b0'])
-                nd.Pin('b1').put(u_device.pin['b0'])
+                fill_pin = l_device.pin['b0'] if ux > lx else u_device.pin['b0']
+                wg_filler = self.waveguide_ic.strt(fill_length).put(fill_pin)
+                nd.Pin('b0').put(wg_filler.pin['b0'] if ux > lx else l_device.pin['b0'])
+                nd.Pin('b1').put(u_device.pin['b0'] if ux > lx else wg_filler.pin['b0'])
         return cell
 
     def thermal_ps(self, tap_sep: Optional[Tuple[nd.Cell, float]] = None):
@@ -295,10 +298,10 @@ class AIMNazca:
         device = Multilayer([(c, 'seam')])
         return device.nazca_cell('waveguide')
 
-    def alignment_mark(self, dim: Dim2 = (100, 10)):
+    def alignment_mark(self, dim: Dim2 = (100, 10), name: str = 'alignment_mark'):
         c = AlignmentCross(dim)
         device = Multilayer([(c, 'm1am'), (c.copy, 'm2am'), (c.copy, 'mlam')])
-        return device.nazca_cell('alignment_mark')
+        return device.nazca_cell(name)
 
     def interposer(self, waveguide_w: float, n: int, period: float, radius: float,
                    trombone_radius: Optional[float] = None, num_trombones: int = 1,
@@ -380,17 +383,10 @@ class AIMNazca:
         return bond_pad_array
 
     def custom_dc(self, waveguide_w: float = 0.48, bend_dim: Dim2 = (20, 50.78 / 2), gap_w: float = 0.3,
-                  interaction_l: float = 37.8, end_bend_dim: Optional[Dim3] = None,
-                  use_radius: bool = True) -> Tuple[nd.Cell, nd.Cell]:
+                  interaction_l: float = 37.8, end_bend_dim: Optional[Dim3] = None, use_radius: bool = True,
+                  name: str = 'dc') -> Tuple[nd.Cell, nd.Cell]:
         dc = DC(bend_dim, waveguide_w, gap_w, interaction_l, (0,), None, end_bend_dim, use_radius)
-        return dc.nazca_cell('dc', layer='seam'), dc.upper_path.nazca_cell('bendy_dc_dummy', layer='seam')
-
-    def custom_dc_taper(self, waveguide_w: float = 0.48, bend_dim: Dim2 = (20, 50.78 / 2), gap_w: float = 0.3,
-                        interaction_l: float = 37.8, end_bend_dim: Optional[Dim3] = None,
-                        use_radius: bool = True, taper_ls=(1,), coupler_boundary_taper=(0, 0.02)) -> Tuple[
-        nd.Cell, nd.Cell]:
-        dc = DC(bend_dim, waveguide_w, gap_w, interaction_l, taper_ls, coupler_boundary_taper, end_bend_dim, use_radius)
-        return dc.nazca_cell('dc', layer='seam'), dc.upper_path.nazca_cell('bendy_dc_dummy', layer='seam')
+        return dc.nazca_cell(name, layer='seam'), dc.upper_path.nazca_cell(f'{name}_dummy', layer='seam')
 
     def pdk_dc(self, radius: float, interport_w: float) -> nd.Cell:
         with nd.Cell('mzi_bb') as cell:
@@ -452,11 +448,11 @@ class AIMNazca:
         return cell
 
     def triangular_mesh(self, n: int, node: nd.Cell, dummy: Optional[nd.Cell] = None,
-                        ps: Optional[nd.Cell] = None, interport_w: float = 50):
+                        ps: Optional[nd.Cell] = None, interport_w: float = 50, name: str = 'triangular_mesh'):
         num_straight = (n - 1) - np.hstack([np.arange(1, n), np.arange(n - 2, 0, -1)]) - 1
         n_layers = num_straight.size
         curr_x = 0
-        with nd.Cell(name=f'triangular_mesh_{n}') as triangular_mesh:
+        with nd.Cell(name=f'{name}_{n}') as triangular_mesh:
             for layer in range(n_layers):
                 for idx in range(n):
                     if (n + layer) % 2 == idx % 2 and num_straight[layer] < idx < n - 1:
@@ -583,8 +579,8 @@ class AIMNazca:
         return gratings
 
     def tap_line(self, n_taps: int, radius: float = 5, inter_tap_gap: float = 60,
-                 inter_wg_dist: float = 350):
-        with nd.Cell(name=f'tap_line_{n_taps}_{radius}_{inter_tap_gap}') as tap_line:
+                 inter_wg_dist: float = 350, name: str = 'tap_line'):
+        with nd.Cell(name=f'{name}_{n_taps}') as tap_line:
             inp = self.waveguide_ic.strt(0).put(0, 0, 90)
             nd.Pin('in').put(inp.pin['a0'])
             for idx in range(n_taps):
@@ -631,8 +627,8 @@ class AIMNazca:
         return dummy
 
     def mzi_dummy(self, ps: nd.Cell, dc_dummy: nd.Cell, tap_internal: Optional[nd.Cell] = None,
-                  tap_external: Optional[nd.Cell] = None, sep: float = 0):
-        with nd.Cell(name=f'tdc_dummy') as dummy:
+                  tap_external: Optional[nd.Cell] = None, sep: float = 0, name: str = 'mzi_dummy'):
+        with nd.Cell(name=name) as dummy:
             input_ps = ps.put()
             _dc_dummy = dc_dummy.put(input_ps.pin['b0'])
             if tap_internal is not None:
@@ -662,10 +658,11 @@ class AIMNazca:
 
     def delay_line(self, waveguide_width: float = 0.48, delay_length: float = 50,
                    bend_radius: float = 5, straight_length: float = 25, number_bend_pairs: int = 1,
-                   flip: bool = False):
+                   flip: bool = False, name: str = 'delay_line'):
         return DelayLine(waveguide_width=waveguide_width, delay_length=delay_length,
                          bend_radius=bend_radius, straight_length=straight_length,
-                         number_bend_pairs=number_bend_pairs, flip=flip).nazca_cell('delay_line', 'seam')
+                         number_bend_pairs=number_bend_pairs, flip=flip).nazca_cell(
+            name, 'seam')
 
     def test_column(self, device_list: List[nd.Cell], tapline: nd.Cell, col_name: str,
                     autoroute_node_detector: Callable, dc: Union[nd.Cell, List[nd.Cell]] = None,

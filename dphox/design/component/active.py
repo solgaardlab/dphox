@@ -330,7 +330,8 @@ class NemsAnchor(Pattern):
     def __init__(self, fin_dim: Dim2, shuttle_dim: Dim2, spring_dim: Dim2 = None,
                  straight_connector: Optional[Dim2] = None, tether_connector: Optional[Dim4] = None,
                  pos_electrode_dim: Optional[Dim3] = None, gnd_electrode_dim: Optional[Dim2] = None,
-                 include_fin_dummy: bool = False, attach_comb: bool = False, tooth_dim: Dim3 = (0.3, 3, 0.15)):
+                 include_fin_dummy: bool = False, attach_comb: bool = False, tooth_dim: Dim3 = (0.3, 3, 0.15),
+                 shuttle_stripe_w: float = 1):
         """NEMS anchor
 
         Args:
@@ -344,6 +345,7 @@ class NemsAnchor(Pattern):
             include_fin_dummy: include fin dummy for for mechanical support
             attach_comb: attach a comb drive to the shuttle (only if pos_electrode_dim specified!)
             tooth_dim: (length, width, inter-tooth gap)
+            shuttle_stripe_w:
         """
         self.fin_dim = fin_dim
         self.spring_dim = spring_dim
@@ -355,6 +357,7 @@ class NemsAnchor(Pattern):
         self.include_fin_dummy = include_fin_dummy
         self.attach_comb = attach_comb
         self.tooth_dim = tooth_dim
+        self.shuttle_stripe_w = shuttle_stripe_w
 
         patterns, pads, springs, pos_pads, gnd_pads = [], [], [], [], []
 
@@ -371,35 +374,37 @@ class NemsAnchor(Pattern):
             connector = Pattern(shuttle, straight, loop)
         elif straight_connector is not None:
             straight = Box(straight_connector)
+            fin_connectors = [
+                straight.copy.halign(connector).valign(connector, bottom=False,
+                                                       opposite=True),
+                straight.copy.halign(connector, left=False,
+                                     opposite=False).valign(connector,
+                                                            bottom=False,
+                                                            opposite=True),
+            ]
+            patterns.extend(fin_connectors)
             fat = Box((shuttle_dim[0], straight_connector[1])).align(connector).valign(
                 connector, opposite=True)
             if include_fin_dummy and not attach_comb:
                 # this is the mirror image dummy for mechanics
-                dummy_fin = Box(fin_dim).align(connector).valign(fat, opposite=True)
+                dummy_fin = Box(fin_dim).align(connector).valign(fat, opposite=False, bottom=False)
+                patterns.append(dummy_fin)
                 end_connector = Pattern(dummy_fin, fat)
             else:
                 end_connector = fat
 
             connector = Pattern(connector,
-                                straight.copy.halign(connector).valign(connector, bottom=False,
-                                                                       opposite=True),
-                                straight.copy.halign(connector, left=False,
-                                                     opposite=False).valign(connector,
-                                                                            bottom=False,
-                                                                            opposite=True),
+                                *fin_connectors,
                                 end_connector
                                 )
-        patterns.append(connector)
+
         if spring_dim is not None:
             top_spring = Box(spring_dim).align(shuttle).valign(shuttle, bottom=True, opposite=True)
             bottom_spring = Box(spring_dim).align(shuttle).valign(shuttle, bottom=False, opposite=True)
             if pos_electrode_dim is not None:
+                pos_alignment_pattern = connector if include_fin_dummy and not attach_comb else top_spring
                 pos_electrode = Box((pos_electrode_dim[0], pos_electrode_dim[1])).align(top_spring).valign(
-                    top_spring, opposite=True).translate(dy=pos_electrode_dim[2])
-                # fixing pos electrode alignment based on the existance of the dummy fin
-                if include_fin_dummy and not attach_comb:
-                    pos_electrode = Box((pos_electrode_dim[0], pos_electrode_dim[1])).align(connector).valign(
-                        connector, opposite=True).translate(dy=pos_electrode_dim[2])
+                    pos_alignment_pattern, opposite=True).translate(dy=pos_electrode_dim[2])
                 patterns.append(pos_electrode)
                 pads.append(pos_electrode)
                 pos_pads.append(pos_electrode)
@@ -419,15 +424,15 @@ class NemsAnchor(Pattern):
                     lower_comb.align(shuttle).valign(shuttle, opposite=True)
                     comb = Pattern(upper_comb, lower_comb)
                     patterns.append(comb)
-                if straight_connector is not None:
-                    shuttle = Box((shuttle_dim[0], shuttle_dim[1] + straight_connector[1])).valign(shuttle)
             else:
                 if attach_comb:
                     raise AttributeError('Must specify pos_electrode_dim if attach_comb is True')
-                if straight_connector is not None:
-                    shuttle = Box((shuttle_dim[0], shuttle_dim[1] + straight_connector[1])).valign(shuttle)
                 pads.append(shuttle.copy)
                 pos_pads.append(pads[-1])
+            if straight_connector is not None:
+                shuttle = Box((shuttle_dim[0], shuttle_dim[1] + straight_connector[1])).valign(shuttle)
+            patterns.append(shuttle if shuttle_stripe_w == 0 else shuttle.striped(shuttle_stripe_w))
+
             if gnd_electrode_dim is not None:
                 # moving alignment to account for bottom spring
                 gnd_electrode_left = Box(gnd_electrode_dim).halign(
@@ -622,11 +627,7 @@ class LateralNemsFull(Multilayer):
                 gnd_pads = device.gnd_pads
         if gnd_pads:
             gnd = Pattern(*gnd_pads)
-            gnd_box = Box((gnd.size[0], gnd.size[1] + 2 * gnd_box_h)).align(gnd)
-            gnd_box = Pattern(
-                gnd_box.difference(Box((gnd.size[0] - 2 * trace_w, gnd.size[1] + 2 * gnd_box_h)).align(gnd)),
-                gnd_box.difference(Box((gnd.size[0], gnd.size[1] - 2 * trace_w + 2 * gnd_box_h)).align(gnd)),
-            )
+            gnd_box = Box((gnd.size[0], gnd.size[1] + 2 * gnd_box_h)).hollow(trace_w).align(gnd)
             metals.append((gnd_box, gnd_metal))
             vias.extend(sum([gnd_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
             port['gnd_l'] = Port(gnd_box.bounds[0] + trace_w / 2, gnd_box.bounds[3], np.pi / 2)
@@ -634,11 +635,7 @@ class LateralNemsFull(Multilayer):
         if top.pos_pads and pos_metal is not None:
             pos_pads = top.pos_pads + bot.pos_pads
             pos = Pattern(*pos_pads)
-            pos_box = Box((pos.size[0] + 2 * pos_box_w, pos.size[1])).align(pos)
-            pos_box = Pattern(
-                pos_box.difference(Box((pos.size[0] - 2 * trace_w + 2 * pos_box_w, pos.size[1])).align(pos)),
-                pos_box.difference(Box((pos.size[0] + 2 * pos_box_w, pos.size[1] - 2 * trace_w)).align(pos)),
-            )
+            pos_box = Box((pos.size[0] + 2 * pos_box_w, pos.size[1])).hollow(trace_w).align(pos)
             metals.append((pos_box, pos_metal))
             vias.extend(sum([pos_via.copy.align(pad).pattern_to_layer for pad in pos_pads], []))
             port['pos_l'] = Port(pos_box.bounds[0], pos_box.center[1], -np.pi)
@@ -647,17 +644,12 @@ class LateralNemsFull(Multilayer):
         if device.__class__.__name__ == 'LateralNemsTDC':
             gnd_pads = device.gnd_wg_pads
             gnd = Pattern(*gnd_pads)
-            gnd_box = Box((gnd.size[0], gnd.size[1])).align(gnd)
-            gnd_box = Pattern(
-                gnd_box.difference(Box((gnd.size[0] - 2 * trace_w, gnd.size[1])).align(gnd)),
-                gnd_box.difference(Box((gnd.size[0], gnd.size[1] - 2 * trace_w)).align(gnd)),
-            )
+            gnd_box = Box((gnd.size[0], gnd.size[1])).hollow(trace_w).align(gnd)
             metals.append((gnd_box, gnd_metal))
             vias.extend(sum([gnd_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
             if anchor.gnd_electrode_dim is None:
                 port['gnd_l'] = Port(gnd_box.bounds[0] + trace_w / 2, gnd_box.bounds[3], np.pi / 2)
                 port['gnd_r'] = Port(gnd_box.bounds[2] - trace_w / 2, gnd_box.bounds[3], np.pi / 2)
-
 
         rib_brim = [(rb, rib) for rb in device.rib_brim if rib is not None]
         clearout = full.clearout_box(clearout_layer, clearout_etch_stop_layer, clearout_dim)

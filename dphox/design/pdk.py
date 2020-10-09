@@ -72,7 +72,8 @@ aim_pull_in_anchor = NemsAnchor(
     straight_connector=(0.25, 1),
     tether_connector=(3, 1, 0.5, 1),
     attach_comb=False,
-    include_fin_dummy=False
+    include_fin_dummy=False,
+    shuttle_stripe_w=0
 )
 
 aim_pull_in_full_ps = LateralNemsFull(
@@ -101,7 +102,7 @@ aim_tether_anchor_tdc = aim_pull_apart_anchor.update(
     spring_dim=(tether_interaction_l + 5, 0.22),
     pos_electrode_dim=(tether_interaction_l - 5, 4, 0.5),
     fin_dim=(tether_interaction_l, 0.4),
-    shuttle_dim=(10, 2),
+    shuttle_dim=(10, 3),
     straight_connector=None,
     tether_connector=(2, 1, 0.5, 1),
     gnd_electrode_dim=(3, 3),
@@ -109,7 +110,7 @@ aim_tether_anchor_tdc = aim_pull_apart_anchor.update(
 )
 
 aim_tether_anchor_ps = aim_tether_anchor_tdc.update(
-    shuttle_dim=(10, 2),
+    shuttle_dim=(10, 3),
     spring_dim=(tether_phaseshift_l + 10, 0.22),
     pos_electrode_dim=(tether_phaseshift_l, 4, 0.5),
     fin_dim=(tether_phaseshift_l, 0.22)

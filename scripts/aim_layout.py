@@ -96,49 +96,42 @@ via_y = -770
 
 dc = chip.custom_dc(bend_dim=(dc_radius, test_bend_dim))[0]
 dc_short = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_short), gap_w=test_gap_w_aggressive,
-                          interaction_l=test_interaction_l_aggressive)[0]
+                          interaction_l=test_interaction_l_aggressive, name='dc_short')[0]
 dc_aggressive = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_aggressive), gap_w=test_gap_w_aggressive,
-                               interaction_l=test_interaction_l_aggressive)[0]
-dc_invdes = chip.custom_dc_taper(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes), gap_w=test_gap_w_invdes,
-                                 interaction_l=test_interaction_l_invdes)[0]
+                               interaction_l=test_interaction_l_aggressive, name='dc_aggressive')[0]
+dc_invdes = chip.custom_dc(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes), gap_w=test_gap_w_invdes,
+                           interaction_l=test_interaction_l_invdes, name='dc_invdes')[0]
 mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
 tap_detector = chip.bidirectional_tap(10, mesh_bend=True)
-pull_apart_anchor = chip.nems_anchor()
-pull_apart_anchor_comb = chip.nems_anchor(attach_comb=True)
-pull_apart_anchor_extr = chip.nems_anchor(pos_electrode_dim=(test_tdc_interaction_l_extr, 4, 0.5),
-                                          fin_dim=(test_tdc_interaction_l_extr, 0.15), )
-pull_in_anchor = chip.nems_anchor(shuttle_dim=(40, 5), fin_dim=(50, 0.15),
-                                  pos_electrode_dim=None, neg_electrode_dim=None)
-tdc_anchor = chip.nems_anchor(shuttle_dim=(test_tdc_interaction_l, 5),
-                              pos_electrode_dim=None, neg_electrode_dim=None)
-tdc_anchor_extr = chip.nems_anchor(shuttle_dim=(test_tdc_interaction_l_extr, 5),
-                                   fin_dim=(test_tdc_interaction_l_extr, 0.15),
-                                   pos_electrode_dim=None, neg_electrode_dim=None)
-tdc = chip.nems_tdc(anchor=tdc_anchor, bend_dim=(test_tdc_radius, test_tdc_bend_dim))
+tdc = aim_pull_apart_full_tdc.nazca_cell('test_tdc')
 gnd_wg = chip.gnd_wg()
-ps = chip.nems_ps(anchor=pull_apart_anchor, tap_sep=(tap_detector, sep))
+mesh_ps = chip.device_linked([aim_pull_apart_full_ps, sep, tap_detector])
 alignment_mark = chip.alignment_mark()
 alignment_mark_small = chip.alignment_mark((50, 5))
 grating = chip.pdk_cells['cl_band_vertical_coupler_si']
 detector = chip.pdk_cells['cl_band_photodetector_digital']
 
-delay_line_50 = chip.delay_line()
-delay_line_200 = chip.delay_line(delay_length=200, straight_length=100, flip=True)
+delay_line_50 = chip.delay_line(name='delay_line_50')
+delay_line_200 = chip.delay_line(delay_length=200, straight_length=100, flip=True, name='delay_line_200')
 
 # Mesh generation
 
 thermal_ps = chip.thermal_ps((tap_detector, sep))
 dc_dummy = chip.waveguide(mesh_dc.pin['b0'].x - mesh_dc.pin['a0'].x)
-mzi_node_nems = chip.mzi_node(chip.double_ps(ps, mesh_interport_w, name='nems_double_ps'), mesh_dc)
-mzi_node_thermal = chip.mzi_node(chip.double_ps(thermal_ps, mesh_interport_w, name='thermal_double_ps'), mesh_dc)
-mzi_node_nems_detector = chip.mzi_node(chip.double_ps(ps, mesh_interport_w, name='nems_double_ps'), mesh_dc,
-                                       detector=chip.pdk_cells['cl_band_photodetector_digital'])
-mzi_node_thermal_detector = chip.mzi_node(chip.double_ps(thermal_ps, mesh_interport_w, name='thermal_double_ps'),
-                                          mesh_dc, detector=chip.pdk_cells['cl_band_photodetector_digital'])
-mzi_dummy_nems = chip.mzi_dummy(ps, dc_dummy)
-mzi_dummy_thermal = chip.mzi_dummy(thermal_ps, dc_dummy)
-nems_mesh = chip.triangular_mesh(5, mzi_node_nems, mzi_dummy_nems, ps, mesh_interport_w)
-thermal_mesh = chip.triangular_mesh(5, mzi_node_thermal, mzi_dummy_thermal, thermal_ps, mesh_interport_w)
+mzi_node_nems = chip.mzi_node(chip.device_array([mesh_ps] * 2, mesh_interport_w, name='nems_double_ps'), mesh_dc, name='nems_mzi')
+mzi_node_thermal = chip.mzi_node(chip.device_array([thermal_ps] * 2, mesh_interport_w, name='thermal_double_ps'), mesh_dc, name='thermal_mzi')
+mzi_node_nems_detector = chip.mzi_node(chip.device_array([mesh_ps] * 2, mesh_interport_w, name='nems_double_ps_test'), mesh_dc,
+                                       detector=chip.pdk_cells['cl_band_photodetector_digital'], name='nems_mzi_test')
+mzi_node_thermal_detector = chip.mzi_node(chip.device_array([thermal_ps] * 2, mesh_interport_w,
+                                                            name='thermal_double_ps_test'),
+                                          mesh_dc, detector=chip.pdk_cells['cl_band_photodetector_digital'],
+                                          name='thermal_mzi_test')
+mzi_dummy_nems = chip.mzi_dummy(mesh_ps, dc_dummy, name='mzi_dummy_nems')
+mzi_dummy_thermal = chip.mzi_dummy(thermal_ps, dc_dummy, name='mzi_dummy_thermal')
+nems_mesh = chip.triangular_mesh(5, mzi_node_nems, mzi_dummy_nems,
+                                 mesh_ps, mesh_interport_w, name='triangular_mesh_nems')
+thermal_mesh = chip.triangular_mesh(5, mzi_node_thermal, mzi_dummy_thermal,
+                                    thermal_ps, mesh_interport_w, name='triangular_mesh_thermal')
 
 grating_array = chip.grating_array(18, period=127, link_end_gratings_radius=10)
 
@@ -256,7 +249,7 @@ pull_apart_tdc_devices += [aim_pull_apart_full_tdc.update(
         dc_gap_w=0.125, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2),
         **tdc_taper(20, -0.52)
     ),
-    anchor=aim_pull_apart_anchor.update(shuttle_dim=(test_tdc_interaction_l_extr, 2),
+    anchor=aim_pull_apart_anchor.update(shuttle_dim=(test_tdc_interaction_l_extr, 3),
                                         fin_dim=(test_tdc_interaction_l_extr, 0.15)),
     clearout_dim=(test_tdc_interaction_l_extr, 2.5),
 )]
@@ -332,11 +325,11 @@ def bend_exp(name='bends_1_1'):
     with nd.Cell(name=name) as bend_exp:
         first_dc = dc.put()
         delay_line = chip.delay_line(delay_length=delay_length, straight_length=straight_length,
-                                     bend_radius=bend_radius)
-        l_arm = [delay_line for count in range(int(name.split('_')[-1]))]
+                                     bend_radius=bend_radius, name=f'delay_line_{name}')
+        l_arm = [delay_line for _ in range(int(name.split('_')[-1]))]
         mzi_arms = chip.mzi_arms(l_arm, [wg_filler, ],
                                  interport_w=test_interport_w,
-                                 name='bare_mzi_arms').put(first_dc.pin['b0'])
+                                 name=f'bare_mzi_arms_{name}').put(first_dc.pin['b0'])
         nd.Pin('a0').put(first_dc.pin['a0'])
         nd.Pin('a1').put(first_dc.pin['a1'])
         mzi_arms.raise_pins(['b0', 'b1'])
@@ -345,7 +338,6 @@ def bend_exp(name='bends_1_1'):
 
 bend_exp_names = [f'bends_{br}_{i}' for i in [2, 4, 8] for br in [1, 2.5, 5]]
 bend_exp_names += [f'bends_10_{i}' for i in [2, 3]]
-# bend_exp_names += [f'bends_15_{i}' for i in [2, 3]]
 vip_column += [bend_exp(name=bend_exp_name) for bend_exp_name in bend_exp_names]
 
 '''
@@ -381,7 +373,7 @@ tether = [
          ] + [
              aim_tether_full_tdc.update(tdc=aim_tether_tdc.update(interaction_l=test_tdc_interaction_l_extr),
                                         anchor=aim_tether_anchor_tdc.update(
-                                            shuttle_dim=(test_tdc_interaction_l_extr, 2),
+                                            shuttle_dim=(test_tdc_interaction_l_extr, 3),
                                             fin_dim=(test_tdc_interaction_l_extr, 0.22),
                                             pos_electrode_dim=(test_tdc_interaction_l_extr, 4, 0.5)
                                         ),
@@ -426,9 +418,9 @@ aggressive_column = [chip.mzi_arms([dev], [1], name=f'aggressive_{i}') if i < 14
 aggressive_column_dcs = [dc_short] * 6 + [dc_aggressive, dc_invdes, dc_aggressive, dc_invdes] + [dc_short] * 4 + [None] * 3
 
 # testing tap lines
-testing_tap_line = chip.tap_line(n_test)
-testing_tap_line_tdc = chip.tap_line(n_test, inter_wg_dist=200)
-testing_tap_line_aggressive = chip.tap_line(n_test, inter_wg_dist=310)
+testing_tap_line = chip.tap_line(n_test, name='tapline')
+testing_tap_line_tdc = chip.tap_line(n_test, inter_wg_dist=200, name='tapline_tdc')
+testing_tap_line_aggressive = chip.tap_line(n_test, inter_wg_dist=310, name='tapline_aggressive')
 
 test_columns = []
 
@@ -467,7 +459,7 @@ test_columns.append(
 )
 
 test_columns.append(
-    chip.test_column(tether_column, testing_tap_line, f'tether_0', autoroute_node_detector, dc=tether_dcs)
+    chip.test_column(tether_column, testing_tap_line, f'tether', autoroute_node_detector, dc=tether_dcs)
 )
 
 # TODO(sunil): dummy, replace with more variations!
@@ -672,10 +664,10 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
     for idx, assignment in tqdm(zip(eu_bp_test_m1_idx, pad_assignments)):
         i, j = assignment
         chip.v1_via_8.put(bp_array_nems.pin[f'u{i},{j}'])
-        chip.m1_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=8, width=8).put()
+        chip.m1_ic.bend_strt_bend_p2p(eu_array_nems.pin[f'o{idx}'], radius=4, width=8).put()
         chip.v1_via_8.put()
         chip.v1_via_8.put(bp_array_thermal.pin[f'u{i},{j}'])
-        chip.m1_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=8, width=8).put()
+        chip.m1_ic.bend_strt_bend_p2p(eu_array_thermal.pin[f'o{idx}'], radius=4, width=8).put()
         chip.v1_via_8.put()
 
     pin_num = 0
@@ -691,10 +683,12 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
 
     for layer in range(15):
         # autoroute
-        autoroute_nems_gnd = autoroute_4_nems_gnd.put(layer * mesh_layer_x + 8.05, 536, flop=True)
+        autoroute_nems_gnd = autoroute_4_nems_gnd.put(layer * mesh_layer_x + 8.05, 536.77, flop=True)
         autoroute_nems_pos = autoroute_4_nems_pos.put(layer * mesh_layer_x - 10, 550, flop=True)
         autoroute_nems_cathode = autoroute_4.put(layer * mesh_layer_x + 178, 542)
         autoroute_nems_anode = autoroute_4_extended.put(layer * mesh_layer_x + 178, 550)
+        for i in range(7):
+            chip.v1_via_4.put(autoroute_nems_gnd.pin[f'a{i}'], flop=True)
         autoroute_thermal_gnd = autoroute_8.put(layer * mesh_layer_x, 1228, flop=True, flip=True)
         autoroute_thermal_pos = autoroute_8_extended.put(layer * mesh_layer_x, 1218, flop=True, flip=True)
         autoroute_therm_cathode = autoroute_4.put(layer * mesh_layer_x + 178, 1208, flip=True)
@@ -784,6 +778,9 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             chip.m2_ic.bend_strt_bend_p2p(d1.pin['n'], autoroute_nems_anode.pin['a6'], radius=4).put()
             chip.m2_ic.bend_strt_bend_p2p(d2.pin['p'], autoroute_nems_cathode.pin['a5'], radius=4).put()
             chip.m2_ic.bend_strt_bend_p2p(d1.pin['p'], autoroute_nems_cathode.pin['a6'], radius=4).put()
+            chip.m1_ic.bend_strt_bend_p2p(ts.pin['gnd_l'], autoroute_nems_gnd.pin['a5'], radius=4).put()
+            chip.m2_ic.bend_strt_bend_p2p(ts.pin['pos_l'], autoroute_nems_pos.pin['a6'], radius=4).put()
+            chip.v1_via_4.put(ts.pin['gnd_l'], flop=True)
 
             # mesh tap test
             test_tap = tap_detector.put(output_interposer.pin['a6'].x - 40,
