@@ -778,9 +778,9 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             chip.m2_ic.bend_strt_bend_p2p(d1.pin['n'], autoroute_nems_anode.pin['a6'], radius=4).put()
             chip.m2_ic.bend_strt_bend_p2p(d2.pin['p'], autoroute_nems_cathode.pin['a5'], radius=4).put()
             chip.m2_ic.bend_strt_bend_p2p(d1.pin['p'], autoroute_nems_cathode.pin['a6'], radius=4).put()
-            chip.m1_ic.bend_strt_bend_p2p(dev.pin['gnd_l'], autoroute_nems_gnd.pin['a5'], radius=4).put()
-            chip.m2_ic.bend_strt_bend_p2p(dev.pin['pos_l'], autoroute_nems_pos.pin['a6'], radius=4).put()
-            chip.v1_via_4.put(dev.pin['gnd_l'], flop=True)
+            chip.m1_ic.bend_strt_bend_p2p(dev.pin['gnd_r'], autoroute_nems_gnd.pin['a5'], radius=4).put()
+            chip.m2_ic.bend_strt_bend_p2p(dev.pin['pos_r'], autoroute_nems_pos.pin['a6'], radius=4).put()
+            chip.v1_via_4.put(dev.pin['gnd_r'], flop=True)
 
             # mesh tap test
             test_tap = tap_detector.put(output_interposer.pin['a6'].x - 40,
