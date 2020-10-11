@@ -206,6 +206,7 @@ class AIMNazca:
     def bond_pad_array(self, n_pads: Shape2, pitch: Union[float, Dim2] = 100,
                        pad_dim: Dim2 = (40, 40), labels: Optional[np.ndarray] = None,
                        use_labels: bool = True, stagger_x_frac: float = 0, use_ml_only: bool = False):
+        # TODO(): move this out of aim.py
         pad_w, pad_l = pad_dim
         pitch = pitch if isinstance(pitch, tuple) else (pitch, pitch)
         with nd.Cell(name=f'bond_pad_array_{n_pads}_{pitch}') as bond_pad_array:
@@ -231,6 +232,7 @@ class AIMNazca:
         return bond_pad_array
 
     def eutectic_array(self, n_pads: Shape2, pitch: float = 20, width: float = 12, strip: bool = True):
+        # TODO(): move this out of aim.py
         def oct(w: float):
             a = w / (1 + np.sqrt(2)) / 2
             return [(w / 2, a), (a, w / 2), (-a, w / 2), (-w / 2, a),
@@ -449,27 +451,6 @@ class AIMNazca:
             nd.Polygon(nd.geom.box(*dim), layer='diam').put(bottom_left_corner[0],
                                                             bottom_left_corner[1] + dim[1] / 2)
         return dice_box
-
-    def drop_port_array(self, n: Union[int, List[int]], waveguide_w: float, period: float, final_taper_width: float):
-        with nd.Cell(name=f'drop_port_array_{n}_{period}') as drop_port_array:
-            idxs = np.arange(n) if isinstance(n, int) else n
-            for idx in idxs:
-                self.waveguide_ic.taper(length=50, width1=waveguide_w, width2=final_taper_width).put(0, period * float(
-                    idx))
-                self.waveguide_ic.bend(radius=10, angle=180, width=final_taper_width).put()
-        return drop_port_array
-
-    def tdc_dummy(self, ps: nd.Cell, dc_dummy: nd.Cell, tap: Optional[nd.Cell] = None):
-        with nd.Cell(name=f'tdc_dummy') as dummy:
-            input_ps = ps.put()
-            tdc_dummy = dc_dummy.put(input_ps.pin['b0'])
-            nd.Pin('a0').put(input_ps.pin['a0'])
-            if tap is not None:
-                lower_sampler = tap.put(tdc_dummy.pin['b0'])
-                nd.Pin('b0').put(lower_sampler.pin['b0'])
-            else:
-                nd.Pin('b0').put(tdc_dummy.pin['b0'])
-        return dummy
 
     def mzi_dummy(self, ps: nd.Cell, dc_dummy: nd.Cell, tap_internal: Optional[nd.Cell] = None,
                   tap_external: Optional[nd.Cell] = None, sep: float = 0, name: str = 'mzi_dummy'):

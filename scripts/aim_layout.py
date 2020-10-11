@@ -74,7 +74,7 @@ grating_array_xy = (600, 125)
 
 # spacing of test array probe pads
 test_pad_x = [tapline_x[0] - 80, tapline_x[1] - 80, tapline_x[2] - 250, tapline_x[3] - 250,
-              tapline_x[4] - 80, tapline_x[5] - 292, tapline_x[6] - 240, tapline_x[7] - 300]
+              tapline_x[4] - 80, tapline_x[5] - 372, tapline_x[6] - 240, tapline_x[7] - 300]
 
 # bond pad (testing)
 
@@ -366,7 +366,7 @@ tether = [
                     pos_electrode_dim=(psl, 4, 0.5),
                     fin_dim=(psl, 0.22)
                  ),
-                clearout_dim=(psl + 5, 12.88),
+                 clearout_dim=(psl + 5, 12.88),
              )
              for psl in (60, 80) for taper_l, taper_change in ((5, -0.05), (10, -0.1), (15, -0.1))
          ] + [
@@ -375,7 +375,7 @@ tether = [
                  anchor=aim_tether_anchor_tdc.update(
                     spring_dim=(il + 5, 0.22),
                     pos_electrode_dim=(il - 5, 4, 0.5),
-                    fin_dim=(il, 0.4),
+                    fin_dim=(il, 0.3),
                  ),
                  clearout_dim=(il + 5, 12.88),
              )
@@ -407,21 +407,27 @@ Motivation: Change the couplers to be shorter in this stack and test the resulti
 print('Defining aggressive structures...')
 
 aggressive = [
-                 aim_tether_full_ps.update(ps=aim_tether_ps.update(phaseshift_l=90,
-                                                                   taper_l=taper_l,
+                 aim_tether_full_ps.update(ps=aim_tether_ps.update(taper_l=taper_l,
                                                                    boundary_taper=cubic_taper(taper_change),
-                                                                   wg_taper=cubic_taper(-0.32),
-                                                                   gap_taper=cubic_taper(-0.32),
+                                                                   wg_taper=cubic_taper(-0.4),
+                                                                   gap_taper=cubic_taper(-0.4),
                                                                    ))
-                 for taper_l in (5, 10) for taper_change in (-0.25, -0.3, -0.35)  # slot variations
+                 for taper_l in (10,) for taper_change in (-0.25, -0.3, -0.35)  # slot variations
              ] + [aim_pull_apart_full_ps] * 2 + [aim_pull_in_full_ps] * 2 + [
-                 aim_tether_full_ps.update(ps=aim_tether_ps.update(phaseshift_l=100,
-                                                                   **ps_taper(taper_l, taper_change)))
-                 for taper_l, taper_change in
-                 ((10, -0.05), (15, -0.1), (20, -0.1), (25, -0.1))
+                 aim_tether_full_ps.update(
+                     ps=aim_tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
+                     anchor=aim_tether_anchor_tdc.update(
+                        spring_dim=(psl + 5, 0.22),
+                        pos_electrode_dim=(psl - 5, 4, 0.4),
+                        fin_dim=(psl, 0.3),
+                        shuttle_dim=(10, 1.5),
+                        shuttle_stripe_w=0
+                     )
+                 )
+                 for psl in (50, 70) for taper_l, taper_change in ((10, -0.05), (15, -0.1), (20, -0.1))
              ] + [
-    aim_tether_full_tdc.update(ps=aim_tether_tdc.update(**tdc_taper(taper_l, taper_change)))
-    for taper_l, taper_change in ((20, -0.32), (20, -0.42), (20, -0.52))
+                aim_tether_full_tdc.update(ps=aim_tether_tdc.update(**tdc_taper(taper_l, taper_change)))
+                for taper_l, taper_change in ((20, -0.32), (20, -0.42), (20, -0.52))
 ]
 aggressive_column = [chip.mzi_arms([dev], [1], name=f'aggressive_{i}') if i < 14
                      else dev.nazca_cell(f'aggressive_{i}') for i, dev in enumerate(aggressive)]

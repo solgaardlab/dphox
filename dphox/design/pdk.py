@@ -145,4 +145,4 @@ aim_tether_full_ps = aim_pull_apart_full_ps.update(
 aim_tether_full_tdc = aim_pull_apart_full_tdc.update(
     anchor=aim_tether_anchor_tdc,
     tdc=aim_tether_tdc,
-    clearout_dim=(tether_interaction_l - 5, clearout_h_pull_apart_tdc + 2))
+    clearout_dim=(tether_interaction_l + 5, clearout_h_pull_apart_tdc + 2))
