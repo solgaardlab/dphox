@@ -129,13 +129,15 @@ class Pattern:
             call_union: Do not call union
     """
 
-    def __init__(self, *patterns: Union[Path, gy.Polygon, gy.FlexPath, Polygon, MultiPolygon, "Pattern"],
+    def __init__(self, *patterns: Union[Path, gy.Polygon, gy.FlexPath, Polygon, MultiPolygon, "Pattern", np.ndarray],
                  call_union: bool = True):
         self.config = copy(self.__dict__)
         self.polys = []
         for pattern in patterns:
             if isinstance(pattern, Pattern):
                 self.polys += pattern.polys
+            elif isinstance(pattern, np.ndarray):
+                self.polys.append(Polygon(pattern))
             elif not isinstance(pattern, Polygon):
                 if isinstance(pattern, MultiPolygon):
                     patterns = list(pattern)
@@ -411,8 +413,32 @@ class Pattern:
         box_grow = box.offset(clearout_etch_stop_grow)
         return [(box, clearout_layer), (box_grow, clearout_etch_stop_layer)]
 
+    def replace(self, pattern: "Pattern", center: Optional[Dim2] = None, raise_port: bool = True):
+        pattern_bbox = Pattern(Path(pattern.size[1]).segment(pattern.size[0]))
+        align = self if center is None else center
+        diff = self.difference(pattern_bbox.align(align))
+        new_pattern = Pattern(diff, pattern.align(align), call_union=False)
+        if raise_port:
+            new_pattern.port = self.port
+        return new_pattern
+
     def put(self, port: Port):
         return self.rotate(port.a_deg).translate(port.x, port.y)
+
+    @classmethod
+    def from_gds(cls, filename):
+        """The top cell in a given GDS file is assigned to a pattern (not by spec, assumes single layer!)
+
+        Args:
+            filename: the GDS file for
+
+        Returns:
+
+        """
+        lib = gy.GdsLibrary(infile=filename)
+        main_cell = lib.top_level()[0]
+        return cls(*main_cell.get_polygons())
+
 
 # TODO(nate): find a better place for these functions
 

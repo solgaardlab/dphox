@@ -332,7 +332,7 @@ class NemsAnchor(Pattern):
                  pos_electrode_dim: Optional[Dim3] = None, gnd_electrode_dim: Optional[Dim2] = None,
                  include_fin_dummy: bool = False, attach_comb: bool = False, tooth_dim: Dim3 = (0.3, 3, 0.15),
                  shuttle_stripe_w: float = 1):
-        """NEMS anchor
+        """NEMS anchor (the main MEMS section for the phase shifter and tunable directional coupler)
 
         Args:
             fin_dim: fixed fin dimension (x, y)
@@ -345,7 +345,8 @@ class NemsAnchor(Pattern):
             include_fin_dummy: include fin dummy for for mechanical support
             attach_comb: attach a comb drive to the shuttle (only if pos_electrode_dim specified!)
             tooth_dim: (length, width, inter-tooth gap)
-            shuttle_stripe_w:
+            shuttle_stripe_w: design an etch hole shuttle consisting of stripes of width ``shuttle_stripe_w``
+                (if 0, do not add a stripped shuttle).
         """
         self.fin_dim = fin_dim
         self.spring_dim = spring_dim
@@ -584,7 +585,7 @@ class LateralNemsFull(Multilayer):
             clearout_layer: clearout layer
             clearout_etch_stop_layer: clearout etch stop layer
         """
-        device_name = 'tdc' if device.__class__.__name__ == 'LateralNemsTDC' else 'ps'
+        device_name = 'tdc' if 'interaction_l' in device.__dict__ else 'ps'
         self.trace_w = trace_w
         self.ridge = ridge
         self.rib = rib
@@ -625,7 +626,7 @@ class LateralNemsFull(Multilayer):
         if gnd_metal is not None:
             if top.gnd_pads:
                 gnd_pads = top.gnd_pads + bot.gnd_pads
-            elif device.__class__.__name__ == 'LateralNemsPS' and anchor.gnd_electrode_dim is None:
+            elif device_name == 'ps' and anchor.gnd_electrode_dim is None:
                 if not device.gnd_pads:
                     raise ValueError('No ground pads available...')
                 gnd_pads = device.gnd_pads
@@ -644,8 +645,12 @@ class LateralNemsFull(Multilayer):
             vias.extend(sum([pos_via.copy.align(pad).pattern_to_layer for pad in pos_pads], []))
             port['pos_l'] = Port(pos_box.bounds[0], pos_box.center[1], -np.pi)
             port['pos_r'] = Port(pos_box.bounds[2], pos_box.center[1], 0)
+            clearout_h = pos_pads[0].bounds[1] - pos_pads[1].bounds[3]
+            clearout = full.clearout_box(clearout_layer, clearout_etch_stop_layer, (clearout_dim[0], clearout_h))
+        else:
+            clearout = full.clearout_box(clearout_layer, clearout_etch_stop_layer, clearout_dim)
         # TODO(sunil): make a name attribute for each pattern instead?
-        if device.__class__.__name__ == 'LateralNemsTDC':
+        if device_name == 'tdc':
             gnd_pads = device.gnd_wg_pads
             gnd = Pattern(*gnd_pads)
             gnd_box = Box((gnd.size[0], gnd.size[1])).hollow(trace_w).align(gnd)
@@ -656,7 +661,6 @@ class LateralNemsFull(Multilayer):
                 port['gnd_r'] = Port(gnd_box.bounds[2] - trace_w / 2, gnd_box.bounds[3], np.pi / 2)
 
         rib_brim = [(rb, rib) for rb in device.rib_brim if rib is not None]
-        clearout = full.clearout_box(clearout_layer, clearout_etch_stop_layer, clearout_dim)
         super(LateralNemsFull, self).__init__([(full, ridge)] + clearout + rib_brim + vias + dopes + metals)
         self.port = port
         self.port.update(device.port)

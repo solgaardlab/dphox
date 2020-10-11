@@ -218,7 +218,6 @@ class AIMNazca:
                         self.va_via.put(nd.cp.x(), nd.cp.y(), 90)
                         self.m2_ic.strt(6, width=8).put(x_loc, j * pitch[1], 270)
                         self.va_via.put()
-                        # TODO(Nate): Add M1 connections for routing
                     nd.Pin(f'u{i},{j}').put(pad.pin['a0'])
                     nd.Pin(f'd{i},{j}').put(pad.pin['b0'])
                     if use_labels:
@@ -240,11 +239,11 @@ class AIMNazca:
         pitch = pitch if isinstance(pitch, tuple) else (pitch, pitch)
         with nd.Cell(name=f'eutectic_pad_array_{n_pads}_{pitch}') as bond_pad_array:
             pads = [
-                nd.Polygon(oct(width), layer=AIM_STACK['layers']['m1am']),  # m1am
-                nd.Polygon(nd.geom.box(0.4, 0.4), layer=AIM_STACK['layers']['v1am']),  # v1am
-                nd.Polygon(oct(width), layer=AIM_STACK['layers']['m2am']),  # m2am
-                nd.Polygon(nd.geom.box(3.6, 3.6), layer=AIM_STACK['layers']['vaam']),
-                nd.Polygon(oct(width), layer=AIM_STACK['layers']['mlam']),
+                nd.Polygon(oct(width), layer='m1am'),  # m1am
+                nd.Polygon(nd.geom.box(0.4, 0.4), layer='v1am'),  # v1am
+                nd.Polygon(oct(width), layer='m2am'),  # m2am
+                nd.Polygon(nd.geom.box(3.6, 3.6), layer='vaam'),  # vaam
+                nd.Polygon(oct(width), layer='mlam'),  # mlam
             ]
             for i in range(n_pads[0]):
                 for j in range(n_pads[1]):
@@ -260,12 +259,6 @@ class AIMNazca:
                                         width=width).put()  # adding m1 to bring resistance down
             nd.put_stub()
         return bond_pad_array
-
-    def custom_dc(self, waveguide_w: float = 0.48, bend_dim: Dim2 = (20, 50.78 / 2), gap_w: float = 0.3,
-                  interaction_l: float = 37.8, end_bend_dim: Optional[Dim3] = None, use_radius: bool = True,
-                  name: str = 'dc') -> Tuple[nd.Cell, nd.Cell]:
-        dc = DC(bend_dim, waveguide_w, gap_w, interaction_l, (0,), None, end_bend_dim, use_radius)
-        return dc.nazca_cell(name, layer='seam'), dc.upper_path.nazca_cell(f'{name}_dummy', layer='seam')
 
     def pdk_dc(self, radius: float, interport_w: float) -> nd.Cell:
         with nd.Cell('mzi_bb') as cell:
@@ -409,33 +402,6 @@ class AIMNazca:
             nd.put_stub()
         return node
 
-    def tdc_node(self, diff_ps: nd.Cell, tdc: nd.Cell, tap: Optional[nd.Cell] = None,
-                 detector: Optional[nd.Cell] = None, detector_loopback_radius: float = 5):
-        with nd.Cell(name=f'tdc') as node:
-            input_ps = diff_ps.put()
-            _tdc = tdc.put(input_ps.pin['b0'])
-            nd.Pin('a0').put(input_ps.pin['a0'])
-            nd.Pin('a1').put(input_ps.pin['a1'])
-            if tap is not None:
-                upper_sampler = tap.put(_tdc.pin['b0'])
-                lower_sampler = tap.put(_tdc.pin['b1'])
-                nd.Pin('b0').put(upper_sampler.pin['b0'])
-                nd.Pin('b1').put(lower_sampler.pin['b0'])
-            else:
-                nd.Pin('b0').put(_tdc.pin['b0'])
-                nd.Pin('b1').put(_tdc.pin['b1'])
-            _tdc.raise_pins(['gnd_l', 'pos_l', 'gnd_r', 'pos_r'])
-            if detector is not None:
-                if detector_loopback_radius > 0:
-                    self.waveguide_ic.bend(detector_loopback_radius, 180).put(node.pin['b1'])
-                    detector.put()
-                    self.waveguide_ic.bend(detector_loopback_radius, -180).put(node.pin['b0'])
-                    detector.put()
-                else:
-                    detector.put(node.pin['b1'])
-                    detector.put(node.pin['b0'])
-        return node
-
     def grating_array(self, n: int, period: float, turn_radius: float = 0,
                       connector_x: float = 0, connector_y: float = 0, link_end_gratings_radius: float = 0):
         with nd.Cell(name=f'grating_array_{n}_{period}') as gratings:
@@ -480,9 +446,8 @@ class AIMNazca:
 
     def dice_box(self, dim: Dim2 = (100, 2000), bottom_left_corner: Dim2 = (0, 0)):
         with nd.Cell(name=f'dice_box_{dim[0]}_{dim[1]}') as dice_box:
-            nd.Polygon(nd.geom.box(*dim),
-                       layer=AIM_STACK['layers']['diam']).put(bottom_left_corner[0],
-                                                              bottom_left_corner[1] + dim[1] / 2)
+            nd.Polygon(nd.geom.box(*dim), layer='diam').put(bottom_left_corner[0],
+                                                            bottom_left_corner[1] + dim[1] / 2)
         return dice_box
 
     def drop_port_array(self, n: Union[int, List[int]], waveguide_w: float, period: float, final_taper_width: float):
