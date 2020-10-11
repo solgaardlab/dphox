@@ -287,8 +287,7 @@ pull_in_tdc_devices += [aim_pull_in_full_tdc.update(
         dc_gap_w=0.125, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2),
         **tdc_taper(20, -0.52)
     ),
-    anchor=aim_pull_apart_anchor.update(shuttle_dim=(test_tdc_interaction_l_extr, 5),
-                                        pos_electrode_dim=None, gnd_electrode_dim=None),
+    anchor=aim_pull_in_anchor.update(shuttle_dim=(test_tdc_interaction_l_extr, 5)),
     clearout_dim=(test_tdc_interaction_l_extr, 2.5)
 )]
 pull_in_tdc = [dev.nazca_cell(f'pull_in_tdc_{i}') for i, dev in enumerate(pull_in_tdc_devices)]
@@ -366,7 +365,8 @@ tether = [
                     spring_dim=(psl + 10, 0.22),
                     pos_electrode_dim=(psl, 4, 0.5),
                     fin_dim=(psl, 0.22)
-                 )
+                 ),
+                clearout_dim=(psl + 5, 12.88),
              )
              for psl in (60, 80) for taper_l, taper_change in ((5, -0.05), (10, -0.1), (15, -0.1))
          ] + [
@@ -376,7 +376,8 @@ tether = [
                     spring_dim=(il + 5, 0.22),
                     pos_electrode_dim=(il - 5, 4, 0.5),
                     fin_dim=(il, 0.4),
-                 )
+                 ),
+                 clearout_dim=(il + 5, 12.88),
              )
              for il in (80, 100) for taper_l, taper_change in
              ((10, -0.1), (15, -0.1), (20, -0.16), (20, -0.32), (20, -0.52))
