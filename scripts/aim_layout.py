@@ -412,7 +412,7 @@ aggressive = [
                                                                    wg_taper=cubic_taper(-0.4),
                                                                    gap_taper=cubic_taper(-0.4),
                                                                    ))
-                 for taper_l in (10,) for taper_change in (-0.25, -0.3, -0.35)  # slot variations
+                 for taper_l in (10,) for taper_change in (-0.2, -0.25, -0.3, -0.35)  # slot variations
              ] + [aim_pull_apart_full_ps] * 2 + [aim_pull_in_full_ps] * 2 + [
                  aim_tether_full_ps.update(
                      ps=aim_tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
@@ -919,11 +919,19 @@ with nd.Cell('test_chiplet') as test_chiplet:
                 # connect to the pad using via
                 chip.va_via.put()
 
+
 # Final chip layout
+
+print('Assembling final layout including other GDS designs...')
+bb_goos_1 = nd.netlist.load_gds('broadband_goos_gratings_1.gds', newcellname='broadband_grating_1')
+bb_goos_2 = nd.netlist.load_gds('broadband_goos_gratings_2.gds', newcellname='broadband_grating_2')
+
 with nd.Cell('aim_layout') as aim_layout:
     mesh_chiplet.put(mesh_chiplet_x)
     test_chiplet.put(test_chiplet_x)
     chiplet_divider.put(chiplet_divider_x, -standard_grating_interport + 20)
+    bb_goos_1.put(chiplet_divider_x + 350, standard_grating_interport - 3)
+    bb_goos_2.put(input_interposer.bbox[0] + chip_w - 535, standard_grating_interport - 3)
     chip_horiz_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],
                         -standard_grating_interport + edge_shift_dim[1] - perimeter_w)
     chip_horiz_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],
@@ -932,6 +940,9 @@ with nd.Cell('aim_layout') as aim_layout:
                        -standard_grating_interport + edge_shift_dim[1])
     chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
                        -standard_grating_interport + edge_shift_dim[1])
+
+
+
 
 nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly
