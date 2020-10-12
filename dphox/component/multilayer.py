@@ -1,6 +1,6 @@
 from .pattern import Path, Pattern, Port
 from .passive import Box
-from ...typing import *
+from ..typing import *
 
 from collections import defaultdict
 

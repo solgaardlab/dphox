@@ -1,1 +1,1 @@
-from .component import *
+
