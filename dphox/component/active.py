@@ -162,21 +162,20 @@ class LateralNemsPS(Pattern):
             self.port['fin1'] = Port(*(center - dy), np.pi)
 
     def effective_index(self, waveguide_h: float = 0.22, grid_spacing: float = 0.01,
-                        wavelength: float = 1.55, wg_z: float = 1, sim_size: Dim2 = (2.5, 2),
-                        wg_material: Material = SILICON):
+                        wavelength: float = 1.55, wg_z: float = 1, sim_size: Dim2 = (2.5, 2)):
         if not SIMPHOX_IMPORTED:
             raise ImportError("This method requires simphox to be imported")
         waveguide_w_change = np.sum([np.sum(et) for et in self.end_taper])
         waveguide_w = self.waveguide_w + waveguide_w_change
         mode_device = ModeDevice(
-            wg=MaterialBlock((waveguide_w, waveguide_h), wg_material),
+            wg=MaterialBlock((waveguide_w, waveguide_h), SILICON),
             sub=MaterialBlock(sim_size, AIR),
             size=sim_size,
             wavelength=wavelength,
             wg_height=wg_z,
             spacing=grid_spacing
         )
-        nanofin_ps = MaterialBlock((self.nanofin_w, waveguide_h), wg_material)
+        nanofin_ps = MaterialBlock((self.nanofin_w, waveguide_h), SILICON)
         return mode_device.solve(mode_device.single(lat_ps=nanofin_ps, sep=self.gap_w))
 
     def update(self, new: bool = True, **kwargs):
