@@ -423,7 +423,7 @@ aggressive = [
                  aim_tether_full_ps.update(
                      ps=aim_tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
                      anchor=aim_tether_anchor_tdc.update(
-                        spring_dim=(psl + 5, 0.22),
+                        spring_dim=(psl + 10, 0.22),
                         pos_electrode_dim=(psl - 5, 4, 0.4),
                         fin_dim=(psl, 0.3),
                         shuttle_dim=(10, 1.5),
@@ -470,13 +470,13 @@ extreme = [
             aim_tether_full_ps.update(
                 ps=aim_tether_ps.update(phaseshift_l=psl),
                 anchor=aim_tether_anchor_ps.update(
-                    spring_dim=(psl, 0.22),
+                    spring_dim=(psl + 10, 0.22),
                     pos_electrode_dim=(psl - 5, 4, 0.3),
                     fin_dim=(psl, 0.15),
                     shuttle_dim=(5, 1.5),
                     shuttle_stripe_w=0
                 ),
-                clearout_dim=(psl, 0.3)
+                clearout_dim=(psl + 5, 0.3)
             ) for psl in (15, 30)
         ] + [
              aim_tether_full_tdc.update(
