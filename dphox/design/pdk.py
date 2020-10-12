@@ -1,4 +1,4 @@
-from .component import *
+from ..component import *
 
 # Solgaard lab AIM PDK
 
@@ -8,9 +8,6 @@ aim_phaseshift_l_pull_in = 40
 aim_interaction_l_pull_apart = 100
 aim_interaction_l_pull_in = 50
 aim_end_l = 5
-clearout_h_pull_in = 3
-clearout_h_pull_apart_ps = 11
-clearout_h_pull_apart_tdc = 11.88
 tether_phaseshift_l = 75
 tether_interaction_l = 100
 aim_interport_w = 50
@@ -67,7 +64,7 @@ class AIMNemsAnchor(NemsAnchor):
 
 
 class AIMNemsFull(LateralNemsFull):
-    def __init__(self, device, anchor, clearout_dim=(aim_phaseshift_l_pull_in, clearout_h_pull_in),
+    def __init__(self, device, anchor, clearout_dim,
                  pos_box_w=8, gnd_box_h=0,
                  gnd_via=Via((0.4, 0.4), 0.1, metal='m1am', via='cbam', shape=(2, 2), pitch=1),
                  pos_via=Via((0.4, 0.4), 0.1, metal=['m1am', 'm2am'], via=['cbam', 'v1am'], shape=(20, 2), pitch=1),
@@ -108,15 +105,16 @@ aim_tether_anchor_ps = AIMNemsAnchor(
     include_fin_dummy=False
 )
 
-aim_pull_in_full_ps = AIMNemsFull(device=aim_ps_pull_in, anchor=aim_pull_in_anchor)
+aim_pull_in_full_ps = AIMNemsFull(device=aim_ps_pull_in, anchor=aim_pull_in_anchor,
+                                  clearout_dim=(aim_phaseshift_l_pull_in, 0.1))
 aim_pull_in_full_tdc = AIMNemsFull(device=aim_tdc_pull_in, anchor=aim_pull_in_anchor,
-                                   clearout_dim=(aim_interaction_l_pull_in, clearout_h_pull_in),
+                                   clearout_dim=(aim_interaction_l_pull_in, 0.1),
                                    gnd_box_h=10, pos_box_w=12)
 aim_pull_apart_full_ps = AIMNemsFull(device=aim_ps_pull_apart, anchor=aim_pull_apart_anchor,
-                                     clearout_dim=(aim_phaseshift_l_pull_apart, clearout_h_pull_apart_ps),
+                                     clearout_dim=(aim_phaseshift_l_pull_apart, 0.1),
                                      gnd_box_h=10, pos_box_w=18)
 aim_pull_apart_full_tdc = AIMNemsFull(device=aim_tdc_pull_apart, anchor=aim_pull_apart_anchor,
-                                      clearout_dim=(aim_interaction_l_pull_apart, clearout_h_pull_apart_tdc),
+                                      clearout_dim=(aim_interaction_l_pull_apart, 0.5),
                                       gnd_box_h=10, pos_box_w=18)
 
 aim_tether_ps = aim_ps_pull_apart.update(
@@ -140,9 +138,9 @@ aim_tether_tdc = aim_tdc_pull_apart.update(
 aim_tether_full_ps = aim_pull_apart_full_ps.update(
     anchor=aim_tether_anchor_ps,
     ps=aim_tether_ps,
-    clearout_dim=(tether_phaseshift_l + 5, clearout_h_pull_apart_ps + 2))
+    clearout_dim=(tether_phaseshift_l + 5, 0.5))
 
 aim_tether_full_tdc = aim_pull_apart_full_tdc.update(
     anchor=aim_tether_anchor_tdc,
     tdc=aim_tether_tdc,
-    clearout_dim=(tether_interaction_l + 5, clearout_h_pull_apart_tdc + 2))
+    clearout_dim=(tether_interaction_l + 5, 0.5))

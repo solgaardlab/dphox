@@ -16,7 +16,7 @@ try:
 except ImportError:
     pass
 
-from ...typing import *
+from ..typing import *
 
 
 class Path(gy.Path):

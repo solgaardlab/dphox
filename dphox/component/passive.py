@@ -1,4 +1,4 @@
-from ...typing import *
+from ..typing import *
 from .pattern import Pattern, Path, Port
 
 from copy import deepcopy as copy

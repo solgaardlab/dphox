@@ -1,9 +1,9 @@
 import itertools
 
 import nazca as nd
-from dphox.design.aim import AIMNazca
 from datetime import date
 from dphox.design.pdk import *
+from dphox.design.aim import AIMNazca
 
 chip = AIMNazca(
     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
@@ -256,7 +256,7 @@ pull_apart_tdc_devices += [aim_pull_apart_full_tdc.update(
     ),
     anchor=aim_pull_apart_anchor.update(shuttle_dim=(test_tdc_interaction_l_extr, 3),
                                         fin_dim=(test_tdc_interaction_l_extr, 0.15)),
-    clearout_dim=(test_tdc_interaction_l_extr, 2.5),
+    clearout_dim=(test_tdc_interaction_l_extr, 0.1),
 )]
 pull_apart_tdc = [dev.nazca_cell(f'pull_apart_tdc_{i}') for i, dev in enumerate(pull_apart_tdc_devices)]
 
@@ -288,7 +288,7 @@ pull_in_tdc_devices += [aim_pull_in_full_tdc.update(
         **tdc_taper(20, -0.52)
     ),
     anchor=aim_pull_in_anchor.update(shuttle_dim=(test_tdc_interaction_l_extr, 5)),
-    clearout_dim=(test_tdc_interaction_l_extr, 2.5)
+    clearout_dim=(test_tdc_interaction_l_extr, 0.1)
 )]
 pull_in_tdc = [dev.nazca_cell(f'pull_in_tdc_{i}') for i, dev in enumerate(pull_in_tdc_devices)]
 
@@ -366,7 +366,7 @@ tether = [
                     pos_electrode_dim=(psl, 4, 0.5),
                     fin_dim=(psl, 0.22)
                  ),
-                 clearout_dim=(psl + 5, 12.88),
+                 clearout_dim=(psl + 5, 0.1),
              )
              for psl in (60, 80) for taper_l, taper_change in ((5, -0.05), (10, -0.1), (15, -0.1))
          ] + [
@@ -377,7 +377,7 @@ tether = [
                     pos_electrode_dim=(il - 5, 4, 0.5),
                     fin_dim=(il, 0.3),
                  ),
-                 clearout_dim=(il + 5, 12.88),
+                 clearout_dim=(il + 5, 0.1),
              )
              for il in (80, 100) for taper_l, taper_change in
              ((10, -0.1), (15, -0.1), (20, -0.16), (20, -0.32), (20, -0.52))
@@ -388,7 +388,7 @@ tether = [
                                             fin_dim=(test_tdc_interaction_l_extr, 0.22),
                                             pos_electrode_dim=(test_tdc_interaction_l_extr, 4, 0.5)
                                         ),
-                                        clearout_dim=(test_tdc_interaction_l_extr + 5, 12.88),
+                                        clearout_dim=(test_tdc_interaction_l_extr + 5, 0.1),
                                         pos_box_w=12,
                                         )
          ]
@@ -869,7 +869,7 @@ with nd.Cell('test_chiplet') as test_chiplet:
     # place ground bus
     gnd_pad.put(-15, test_pad_y)
 
-    # TODO(Nate): space thse pads as columns are filled
+    # TODO(Nate): space these pads as columns are filled
     # place test pads
 
     # TODO(Nate): for probes, we can either manually cut them in the end or have a semiautomated way of doing it (modify below)
@@ -940,9 +940,6 @@ with nd.Cell('aim_layout') as aim_layout:
                        -standard_grating_interport + edge_shift_dim[1])
     chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
                        -standard_grating_interport + edge_shift_dim[1])
-
-
-
 
 nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly

@@ -1,4 +1,4 @@
-from ...typing import *
+from ..typing import *
 from .pattern import Pattern, Path, get_linear_adiabatic, cubic_taper, Port
 from .passive import Waveguide, DC, Box
 from .multilayer import Multilayer, Via
@@ -15,8 +15,8 @@ AIR = Material('Air', (0, 0, 0), 1)
 
 
 class LateralNemsPS(Pattern):
-    def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float,
-                 gap_w: float, taper_l: float, fin_end_bend_dim: Dim2, gnd_connector: Optional[Dim3] = None,
+    def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, gap_w: float,
+                 taper_l: float, fin_end_bend_dim: Dim2, gnd_connector: Optional[Dim3] = None,
                  gnd_pad_dim: Optional[Dim2] = None, end_ls: Tuple[float] = (0,), num_taper_evaluations: int = 100,
                  gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
                  boundary_taper: Optional[Tuple[float, ...]] = None,
@@ -646,7 +646,8 @@ class LateralNemsFull(Multilayer):
             port['pos_l'] = Port(pos_box.bounds[0], pos_box.center[1], -np.pi)
             port['pos_r'] = Port(pos_box.bounds[2], pos_box.center[1], 0)
             clearout_h = pos_pads[0].bounds[1] - pos_pads[1].bounds[3]
-            clearout = full.clearout_box(clearout_layer, clearout_etch_stop_layer, (clearout_dim[0], clearout_h))
+            clearout = full.clearout_box(clearout_layer, clearout_etch_stop_layer, (clearout_dim[0],
+                                                                                    clearout_h + clearout_dim[1]))
         else:
             clearout = full.clearout_box(clearout_layer, clearout_etch_stop_layer, clearout_dim)
         # TODO(sunil): make a name attribute for each pattern instead?
@@ -675,7 +676,7 @@ class LateralNemsFull(Multilayer):
         Returns:
 
         """
-        return cls(**_handle_config(config))
+        return cls(**_handle_nems_config(config))
 
     def update(self, new: bool = True, **kwargs):
         """Update this config with a new set of parameters
@@ -694,10 +695,10 @@ class LateralNemsFull(Multilayer):
         if 'ps' in kwargs and 'tdc' in config:
             del config['tdc']
         if not new:
-            self.__init__(**_handle_config(config))
+            self.__init__(**_handle_nems_config(config))
             return self
         else:
-            return LateralNemsFull(**_handle_config(config))
+            return LateralNemsFull(**_handle_nems_config(config))
 
 
 class NemsMillerNode(Pattern):
@@ -790,7 +791,7 @@ class NemsMillerNode(Pattern):
 #         return self.input_ports + np.asarray((self.size[0], 0))
 
 
-def _handle_config(config):
+def _handle_nems_config(config):
     anchor = NemsAnchor(**config['anchor']) if isinstance(config['anchor'], dict) else config['anchor']
     pos_via = Via(**config['pos_via']) if isinstance(config['pos_via'], dict) else config['pos_via']
     gnd_via = Via(**config['gnd_via']) if isinstance(config['gnd_via'], dict) else config['gnd_via']

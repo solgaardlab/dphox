@@ -1,5 +1,3 @@
-import numpy as np
-
 AMF_STACK = {
     'layers': {
         'waveguide': 10,
@@ -109,7 +107,7 @@ AIM_STACK = {
     },
     'drc': {  # design rules for AIM PDKv3.5
         # format int (layer * 100 + dr_index): (rule str, special str, relation, float)
-        # seam
+        # ream
         70201: [('width', '', '>=', 0.5)],
         70202: [('length', '', '>=', 2)],
         70211: [('width', 'space on wafer', '>=', 0.5)],
@@ -117,7 +115,7 @@ AIM_STACK = {
         70204: [('area', '', '>=', 2)],
         70205: [('space', 'to tapered waveguide', '>=', 0.13)],
         70206: [('outside', 'seam', '>=', 0.25)],
-        # ream
+        # seam
         70901: [('width', '', '>=', 0.15)],
         70902: [('length', '', '>=', 0.6)],
         70903: [('space', '', '>=', 0.1)],
