@@ -117,11 +117,11 @@ class LateralNemsPS(Pattern):
             #  (rule for how etches are handled at different foundries?)
             #  clunky way to separate seam and ream masks for now
             rib_etch = Waveguide(waveguide_w=waveguide_w + 2 * rib_etch_grow, length=end_ls[gnd_connector_idx],
-                                      taper_ls=(end_ls[gnd_connector_idx] / 2, end_ls[gnd_connector_idx] / 2),
-                                      taper_params=(cubic_taper(gnd_connector[0] - waveguide_w),
-                                                    cubic_taper(final_width - gnd_connector[0])),
-                                      symmetric=False
-                                      )
+                                 taper_ls=(end_ls[gnd_connector_idx] / 2, end_ls[gnd_connector_idx] / 2),
+                                 taper_params=(cubic_taper(gnd_connector[0] - waveguide_w),
+                                               cubic_taper(final_width - gnd_connector[0])),
+                                 symmetric=False
+                                 )
             rib_brims_etch = [copy(rib_etch).translate(rib_brim_x),
                               copy(rib_etch).flip(horiz=True).translate(wg.size[0] - rib_brim_x)]
 
@@ -326,8 +326,8 @@ class LateralNemsTDC(Pattern):
                             Box(gnd_contact_dim[:2]).translate(dx=x - waveguide_w / 2 - gnd_contact_dim[0], dy=y))
                     gnd_wg_pads.append(
                         Box(gnd_wg[:2]).align(rib_brim[0]).halign(gnd_connections[-1],
-                                                                   left=flip_x,
-                                                                   opposite=True))
+                                                                  left=flip_x,
+                                                                  opposite=True))
                 flip_x = not flip_x
             rib_etch = [Pattern(poly) for brim in rib_etch for poly in (brim.shapely - dc.shapely)]
             patterns += gnd_connections + rib_brim + gnd_wg_pads
@@ -553,7 +553,7 @@ class GndWaveguide(Pattern):
             pad = Box(gnd_contact_dim).align(gnd_connection).valign(gnd_connection, bottom=not flip, opposite=True)
             pads.append(pad)
 
-        patterns = rib_brim + [wg, gnd_connection]
+        patterns = rib_brim + [wg, gnd_connection] + pads
 
         super(GndWaveguide, self).__init__(*patterns)
         self.wg, self.rib_brim, self.pads = wg, rib_brim_ream, pads
