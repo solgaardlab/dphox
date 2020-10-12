@@ -68,13 +68,13 @@ detector_route_loop = (20, 30, 40)  # height, length, relative starting x for lo
 tapline_x_start = 600
 # x for the 8 taplines, numpy gives errors for some reason, so need to use raw python
 tapline_x = [tapline_x_start + x for x in
-             [0, 400, 700, 1000, 1400, 1800, 2070, 2400]]
+             [0, 400, 700, 1000, 1400, 1800, 2090, 2400]]
 tapline_y = 162  # y for the taplines
 grating_array_xy = (600, 125)
 
 # spacing of test array probe pads
 test_pad_x = [tapline_x[0] - 80, tapline_x[1] - 80, tapline_x[2] - 250, tapline_x[3] - 250,
-              tapline_x[4] - 80, tapline_x[5] - 372, tapline_x[6] - 240, tapline_x[7] - 300]
+              tapline_x[4] - 80, tapline_x[5] - 372, tapline_x[6] - 260, tapline_x[7] - 280]
 
 # bond pad (testing)
 
@@ -502,8 +502,8 @@ extreme_column_dcs = [dc_aggressive] * 10 + [dc_short] * 4 + [None] * 3
 # testing tap lines
 testing_tap_line = chip.tap_line(n_test, name='tapline')
 testing_tap_line_tdc = chip.tap_line(n_test, inter_wg_dist=200, name='tapline_tdc')
-testing_tap_line_aggressive = chip.tap_line(n_test, inter_wg_dist=310, name='tapline_aggressive')
-testing_tap_line_extreme = chip.tap_line(n_test, inter_wg_dist=250, name='tapline_extreme')
+testing_tap_line_aggressive = chip.tap_line(n_test, inter_wg_dist=290, name='tapline_aggressive')
+testing_tap_line_extreme = chip.tap_line(n_test, inter_wg_dist=270, name='tapline_extreme')
 
 test_columns = []
 
