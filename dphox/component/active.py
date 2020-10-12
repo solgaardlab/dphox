@@ -111,6 +111,18 @@ class LateralNemsPS(Pattern):
                                                cubic_taper(final_width - gnd_connector[0])),
                                  symmetric=False
                                  )
+            # clunky way to sepaerate seam and ream masks for now
+            # TODO: remove hard coding ream_grow
+            ream_grow = 0.1
+            rib_brim_ream = Waveguide(waveguide_w=waveguide_w + 2 * ream_grow, length=end_ls[gnd_connector_idx],
+                                      taper_ls=(end_ls[gnd_connector_idx] / 2,
+                                                end_ls[gnd_connector_idx] / 2),
+                                      taper_params=(cubic_taper(gnd_connector[0] - waveguide_w),
+                                                    cubic_taper(final_width - gnd_connector[0])),
+                                      symmetric=False
+                                      )
+            rib_brims_ream = [copy(rib_brim_ream).translate(rib_brim_x),
+                              copy(rib_brim_ream).flip(horiz=True).translate(wg.size[0] - rib_brim_x)]
 
             rib_brims = [copy(rib_brim).translate(rib_brim_x),
                          copy(rib_brim).flip(horiz=True).translate(wg.size[0] - rib_brim_x)]
@@ -134,8 +146,11 @@ class LateralNemsPS(Pattern):
             rib_brim = [Pattern(poly) for poly in rib_brim.shapely - wg.shapely]
             patterns.extend(rib_brim + gnd_connections + gnd_pads)
 
+            rib_brim_ream = Pattern(*rib_brims_ream)
+            rib_brim_ream = [Pattern(poly) for poly in rib_brim_ream.shapely - wg.shapely]
+
         super(LateralNemsPS, self).__init__(*patterns, call_union=False)
-        self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads = wg, nanofins, rib_brim, gnd_pads
+        self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads = wg, nanofins, rib_brim_ream, gnd_pads
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)
         self.port['a0'] = Port(0, 0, -np.pi)
@@ -226,7 +241,6 @@ class LateralNemsTDC(Pattern):
         self.beam_taper = beam_taper
         self.end_bend_dim = end_bend_dim
 
-
         dc = DC(bend_dim=bend_dim, waveguide_w=waveguide_w, gap_w=dc_gap_w,
                 coupler_boundary_taper_ls=dc_taper_ls, coupler_boundary_taper=dc_taper,
                 interaction_l=interaction_l + 2 * dc_end_l, end_bend_dim=end_bend_dim, use_radius=use_radius)
@@ -276,17 +290,29 @@ class LateralNemsTDC(Pattern):
                     f'Not enough room in s-bend to ground waveguide with bend_dim[0] of {bend_dim[0]}'
                     f'need at least {(gnd_wg[0] + (waveguide_w / 2 + np.sum(brim_taper) / 2 + gnd_contact_dim[0]))}')
 
-            rib_brim, gnd_connections, gnd_wg_pads = [], [], []
+            rib_brim, rib_brim_ream, gnd_connections, gnd_wg_pads = [], [], [], []
             dx_brim = bend_dim[0]
-            dy_brim = bend_dim[1] / 2
+            dy_brim = (dc_gap_w + waveguide_w + bend_dim[1]) / 2
             min_x, min_y, max_x, max_y = dc.shapely.bounds
+            # remaking the y coordinate center referenced for symmetry
+            center_y = (max_y + min_y) / 2 - gnd_contact_dim[-1] / 2
             flip_x = flip_y = True
             for x in (min_x + dx_brim, max_x - dx_brim):
-                for y in (min_y + dy_brim, max_y - dy_brim):
+                for y in (center_y - dy_brim, center_y + dy_brim):
                     flip_y = not flip_y
                     rib_brim.append(
                         Waveguide(
                             waveguide_w, taper_ls=(brim_l,),
+                            taper_params=(brim_taper,), length=2 * brim_l + gnd_contact_dim[-1],
+                            rotate_angle=np.pi / 2).translate(dx=x, dy=y - brim_l)
+                    )
+
+                    # clunky way to sepaerate seam and ream masks for now
+                    # TODO: remove hard coding ream_grow
+                    ream_grow = 0.25
+                    rib_brim_ream.append(
+                        Waveguide(
+                            waveguide_w + 2 * ream_grow, taper_ls=(brim_l,),
                             taper_params=(brim_taper,), length=2 * brim_l + gnd_contact_dim[-1],
                             rotate_angle=np.pi / 2).translate(dx=x, dy=y - brim_l)
                     )
@@ -301,10 +327,11 @@ class LateralNemsTDC(Pattern):
                                                                    opposite=True))
                 flip_x = not flip_x
             rib_brim = [Pattern(poly) for brim in rib_brim for poly in (brim.shapely - dc.shapely)]
+            rib_brim_ream = [Pattern(poly) for brim in rib_brim_ream for poly in (brim.shapely - dc.shapely)]
             patterns += gnd_connections + rib_brim + gnd_wg_pads
         super(LateralNemsTDC, self).__init__(*patterns, call_union=False)
         self.dc, self.connectors, self.pads, self.nanofins = dc, connectors, gnd_wg_pads, nanofins
-        self.gnd_connections, self.rib_brim = gnd_connections, rib_brim
+        self.gnd_connections, self.rib_brim = gnd_connections, rib_brim_ream
         self.port = self.dc.port
         self.gnd_wg_pads = gnd_wg_pads
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w + self.dc_gap_w / 2 + self.beam_gap_w))
@@ -383,7 +410,7 @@ class NemsAnchor(Pattern):
             straight = Box(straight_connector)
             fin_connectors = [
                 straight.copy.halign(shuttle).valign(shuttle, bottom=False,
-                                                       opposite=True),
+                                                     opposite=True),
                 straight.copy.halign(shuttle, left=False,
                                      opposite=False).valign(shuttle,
                                                             bottom=False,
@@ -513,8 +540,12 @@ class GndWaveguide(Pattern):
         wg = Waveguide(waveguide_w=waveguide_w, length=length)
         rib_brim = Waveguide(waveguide_w=waveguide_w, length=2 * brim_l, taper_ls=(brim_l,),
                              taper_params=(brim_taper,)).align(wg)
+        ream_grow = 0.25
+        rib_brim_ream = Waveguide(waveguide_w=waveguide_w + 2 * ream_grow, length=2 * brim_l, taper_ls=(brim_l,),
+                                  taper_params=(brim_taper,)).align(wg)
         gnd_connection = Box(gnd_connector_dim).align(wg).valign(wg, bottom=not flip, opposite=True)
         rib_brim = [Pattern(poly) for poly in (rib_brim.shapely - wg.shapely)]
+        rib_brim_ream = [Pattern(poly) for poly in (rib_brim_ream.shapely - wg.shapely)]
 
         if gnd_contact_dim is not None:
             pad = Box(gnd_contact_dim).align(gnd_connection).valign(gnd_connection, bottom=not flip, opposite=True)
@@ -523,7 +554,7 @@ class GndWaveguide(Pattern):
         patterns = rib_brim + [wg, gnd_connection]
 
         super(GndWaveguide, self).__init__(*patterns)
-        self.wg, self.rib_brim, self.pads = wg, rib_brim, pads
+        self.wg, self.rib_brim, self.pads = wg, rib_brim_ream, pads
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['b0'] = Port(length, 0)
         if gnd_contact_dim is not None:
