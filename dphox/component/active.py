@@ -651,9 +651,9 @@ class LateralNemsFull(Multilayer):
         vias = []
         dopes = [s.expand(dope_expand).dope(shuttle_dope, dope_grow)
                  for s in [top.shuttle, bot.shuttle] if shuttle_dope is not None] + \
-                [s.expand(dope_expand).dope(shuttle_dope, dope_grow)
+                [s.expand(dope_expand).dope(spring_dope, dope_grow)
                  for s in top.springs + bot.springs if spring_dope is not None] + \
-                [s.expand(dope_expand).dope(shuttle_dope, dope_grow)
+                [s.expand(dope_expand).dope(pad_dope, dope_grow)
                  for s in top.pads + bot.pads if pad_dope is not None]
         metals = []
         port = {}
