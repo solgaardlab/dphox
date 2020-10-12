@@ -11,6 +11,7 @@ MEEP_IMPORTED = False  # for meep sims
 try:
     SIMPHOX_IMPORTED = True
     from simphox.device import ModeDevice, MaterialBlock, SILICON, Material
+
     AIR = Material('Air', (0, 0, 0), 1)
 except ImportError:
     SIMPHOX_IMPORTED = False
@@ -19,7 +20,7 @@ except ImportError:
 
 class LateralNemsPS(Pattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, gap_w: float,
-                 taper_l: float, fin_end_bend_dim: Dim2, gnd_connector: Optional[Dim3] = None,
+                 taper_l: float, fin_end_bend_dim: Dim2, rib_etch_grow: float, gnd_connector: Optional[Dim3] = None,
                  gnd_pad_dim: Optional[Dim2] = None, end_ls: Tuple[float] = (0,), num_taper_evaluations: int = 100,
                  gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
                  boundary_taper: Optional[Tuple[float, ...]] = None,
@@ -33,6 +34,7 @@ class LateralNemsPS(Pattern):
             gnd_connector: tuple of the form (rib_brim_w, connectorx, connectory)
             gnd_pad_dim: add a pad to the ground connector
             fin_end_bend_dim: adiabatic fin bending
+            rib_etch_grow: rib etch grow (extra growth accounts for foreshortening and/or misalignment)
             taper_l: taper length at start and end (including fins)
             end_ls: end waveguide lengths (not including fins)
             num_taper_evaluations: number of taper evaluations (see gdspy)
@@ -56,6 +58,7 @@ class LateralNemsPS(Pattern):
         self.gnd_pad_dim = gnd_pad_dim
         self.gnd_connector = gnd_connector
         self.gnd_connector_idx = gnd_connector_idx
+        self.rib_etch_grow = rib_etch_grow
 
         if not phaseshift_l >= 2 * taper_l:
             raise ValueError(f'Require interaction_l >= 2 * taper_l but got {phaseshift_l} < {2 * taper_l}')
@@ -97,7 +100,7 @@ class LateralNemsPS(Pattern):
                            slot_taper_ls=(taper_l,), slot_taper_params=(gap_taper,))
             patterns = [wg]
 
-        rib_brim, gnd_pads = [], []
+        rib_brim, gnd_pads, rib_etch = [], [], []
 
         gnd_connector_idx = len(end_ls) - 1 if gnd_connector_idx == -1 else gnd_connector_idx
         rib_brim_x = float(np.sum(end_ls[:gnd_connector_idx]))
@@ -105,24 +108,22 @@ class LateralNemsPS(Pattern):
         if gnd_connector is not None:
             final_width = waveguide_w + np.sum([np.sum(t) for t in end_taper])
             rib_brim = Waveguide(waveguide_w=waveguide_w, length=end_ls[gnd_connector_idx],
-                                 taper_ls=(end_ls[gnd_connector_idx] / 2,
-                                           end_ls[gnd_connector_idx] / 2),
+                                 taper_ls=(end_ls[gnd_connector_idx] / 2, end_ls[gnd_connector_idx] / 2),
                                  taper_params=(cubic_taper(gnd_connector[0] - waveguide_w),
                                                cubic_taper(final_width - gnd_connector[0])),
                                  symmetric=False
                                  )
-            # clunky way to sepaerate seam and ream masks for now
-            # TODO: remove hard coding ream_grow
-            ream_grow = 0.1
-            rib_brim_ream = Waveguide(waveguide_w=waveguide_w + 2 * ream_grow, length=end_ls[gnd_connector_idx],
-                                      taper_ls=(end_ls[gnd_connector_idx] / 2,
-                                                end_ls[gnd_connector_idx] / 2),
+            # TODO(Nate): make not clunky, and foundry agnostic
+            #  (rule for how etches are handled at different foundries?)
+            #  clunky way to separate seam and ream masks for now
+            rib_etch = Waveguide(waveguide_w=waveguide_w + 2 * rib_etch_grow, length=end_ls[gnd_connector_idx],
+                                      taper_ls=(end_ls[gnd_connector_idx] / 2, end_ls[gnd_connector_idx] / 2),
                                       taper_params=(cubic_taper(gnd_connector[0] - waveguide_w),
                                                     cubic_taper(final_width - gnd_connector[0])),
                                       symmetric=False
                                       )
-            rib_brims_ream = [copy(rib_brim_ream).translate(rib_brim_x),
-                              copy(rib_brim_ream).flip(horiz=True).translate(wg.size[0] - rib_brim_x)]
+            rib_brims_etch = [copy(rib_etch).translate(rib_brim_x),
+                              copy(rib_etch).flip(horiz=True).translate(wg.size[0] - rib_brim_x)]
 
             rib_brims = [copy(rib_brim).translate(rib_brim_x),
                          copy(rib_brim).flip(horiz=True).translate(wg.size[0] - rib_brim_x)]
@@ -144,13 +145,13 @@ class LateralNemsPS(Pattern):
 
             rib_brim = Pattern(*rib_brims)
             rib_brim = [Pattern(poly) for poly in rib_brim.shapely - wg.shapely]
+            rib_etch = Pattern(*rib_brims_etch)
+            rib_etch = [Pattern(poly) for poly in rib_etch.shapely - wg.shapely]
+
             patterns.extend(rib_brim + gnd_connections + gnd_pads)
 
-            rib_brim_ream = Pattern(*rib_brims_ream)
-            rib_brim_ream = [Pattern(poly) for poly in rib_brim_ream.shapely - wg.shapely]
-
         super(LateralNemsPS, self).__init__(*patterns, call_union=False)
-        self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads = wg, nanofins, rib_brim_ream, gnd_pads
+        self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads = wg, nanofins, rib_etch, gnd_pads
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)
         self.port['a0'] = Port(0, 0, -np.pi)
@@ -199,7 +200,7 @@ class LateralNemsPS(Pattern):
 
 class LateralNemsTDC(Pattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, dc_gap_w: float, beam_gap_w: float, bend_dim: Dim2,
-                 interaction_l: float, fin_end_bend_dim: Dim2, gnd_wg: Dim4,
+                 interaction_l: float, fin_end_bend_dim: Dim2, gnd_wg: Dim4, rib_etch_grow: float,
                  dc_taper_ls: Tuple[float, ...] = None,
                  dc_taper: Optional[Tuple[Tuple[float, ...]]] = None,
                  beam_taper: Optional[Tuple[Tuple[float, ...]]] = None,
@@ -216,6 +217,7 @@ class LateralNemsTDC(Pattern):
             interaction_l: interaction length
             fin_end_bend_dim: adiabatic transition for the fin end bend dim
             gnd_wg: ground waveguide dimensions
+            rib_etch_grow: rib etch grow (extra growth accounts for foreshortening and/or misalignment)
             dc_taper_ls: DC taper lengths
             dc_taper: tapering of the boundary of the directional coupler
             beam_taper: tapering of the lower boundary of the fin
@@ -239,11 +241,12 @@ class LateralNemsTDC(Pattern):
         self.boundary_taper = boundary_taper
         self.beam_taper = beam_taper
         self.end_bend_dim = end_bend_dim
+        self.rib_etch_grow = rib_etch_grow
 
         dc = DC(bend_dim=bend_dim, waveguide_w=waveguide_w, gap_w=dc_gap_w,
                 coupler_boundary_taper_ls=dc_taper_ls, coupler_boundary_taper=dc_taper,
                 interaction_l=interaction_l + 2 * dc_end_l, end_bend_dim=end_bend_dim, use_radius=use_radius)
-        connectors, gnd_wg_pads, gnd_connections, rib_brim = [], [], [], []
+        connectors, gnd_wg_pads, gnd_connections, rib_etch = [], [], [], []
 
         nanofin_y = nanofin_w / 2 + dc_gap_w / 2 + waveguide_w + beam_gap_w
         nanofin = Box((interaction_l, nanofin_w)).align(dc)
@@ -289,7 +292,7 @@ class LateralNemsTDC(Pattern):
                     f'Not enough room in s-bend to ground waveguide with bend_dim[0] of {bend_dim[0]}'
                     f'need at least {(gnd_wg[0] + (waveguide_w / 2 + np.sum(brim_taper) / 2 + gnd_contact_dim[0]))}')
 
-            rib_brim, rib_brim_ream, gnd_connections, gnd_wg_pads = [], [], [], []
+            rib_etch, gnd_connections, gnd_wg_pads = [], [], []
             dx_brim = bend_dim[0]
             dy_brim = (dc_gap_w + waveguide_w + bend_dim[1]) / 2
             min_x, min_y, max_x, max_y = dc.shapely.bounds
@@ -299,19 +302,20 @@ class LateralNemsTDC(Pattern):
             for x in (min_x + dx_brim, max_x - dx_brim):
                 for y in (center_y - dy_brim, center_y + dy_brim):
                     flip_y = not flip_y
-                    rib_brim.append(
-                        Waveguide(
-                            waveguide_w, taper_ls=(brim_l,),
-                            taper_params=(brim_taper,), length=2 * brim_l + gnd_contact_dim[-1],
-                            rotate_angle=np.pi / 2).translate(dx=x, dy=y - brim_l)
-                    )
+                    rib_brim = [Waveguide(
+                        waveguide_w,
+                        taper_ls=(brim_l,),
+                        taper_params=(brim_taper,),
+                        length=2 * brim_l + gnd_contact_dim[-1],
+                        rotate_angle=np.pi / 2).translate(dx=x, dy=y - brim_l)]
 
-                    # clunky way to sepaerate seam and ream masks for now
-                    # TODO: remove hard coding ream_grow
-                    ream_grow = 0.25
-                    rib_brim_ream.append(
+                    # TODO(Nate): make not clunky, and foundry agnostic
+                    #  (rule for how etches are handled at different foundries?)
+                    #  clunky way to separate seam and ream masks for now
+                    # clunky way to separate seam and ream masks for now
+                    rib_etch.append(
                         Waveguide(
-                            waveguide_w + 2 * ream_grow, taper_ls=(brim_l,),
+                            waveguide_w + 2 * rib_etch_grow, taper_ls=(brim_l,),
                             taper_params=(brim_taper,), length=2 * brim_l + gnd_contact_dim[-1],
                             rotate_angle=np.pi / 2).translate(dx=x, dy=y - brim_l)
                     )
@@ -321,16 +325,15 @@ class LateralNemsTDC(Pattern):
                         gnd_connections.append(
                             Box(gnd_contact_dim[:2]).translate(dx=x - waveguide_w / 2 - gnd_contact_dim[0], dy=y))
                     gnd_wg_pads.append(
-                        Box(gnd_wg[:2]).align(rib_brim[-1]).halign(gnd_connections[-1],
+                        Box(gnd_wg[:2]).align(rib_brim[0]).halign(gnd_connections[-1],
                                                                    left=flip_x,
                                                                    opposite=True))
                 flip_x = not flip_x
-            rib_brim = [Pattern(poly) for brim in rib_brim for poly in (brim.shapely - dc.shapely)]
-            rib_brim_ream = [Pattern(poly) for brim in rib_brim_ream for poly in (brim.shapely - dc.shapely)]
+            rib_etch = [Pattern(poly) for brim in rib_etch for poly in (brim.shapely - dc.shapely)]
             patterns += gnd_connections + rib_brim + gnd_wg_pads
         super(LateralNemsTDC, self).__init__(*patterns, call_union=False)
         self.dc, self.connectors, self.pads, self.nanofins = dc, connectors, gnd_wg_pads, nanofins
-        self.gnd_connections, self.rib_brim = gnd_connections, rib_brim_ream
+        self.gnd_connections, self.rib_brim = gnd_connections, rib_etch
         self.port = self.dc.port
         self.gnd_wg_pads = gnd_wg_pads
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w + self.dc_gap_w / 2 + self.beam_gap_w))
@@ -796,6 +799,7 @@ class NemsMillerNode(Pattern):
 
         super(NemsMillerNode, self).__init__(*([dc] + nanofins + connectors + pads))
         self.dc, self.connectors, self.nanofins, self.pads = dc, connectors, nanofins, pads
+
 
 # class RingResonator(Pattern):
 #     def __init__(self, waveguide_w: float, taper_l: float = 0,

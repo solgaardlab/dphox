@@ -32,24 +32,26 @@ class AIMNemsPS(LateralNemsPS):
     def __init__(self, waveguide_w=0.48, nanofin_w=0.22, phaseshift_l=aim_phaseshift_l_pull_apart,
                  gap_w=0.10, num_taper_evaluations=100, gnd_connector=(2, 0.2, 5),
                  gnd_pad_dim=None, taper_l=0, end_ls=(aim_end_l,), gap_taper=None, wg_taper=None, boundary_taper=None,
-                 fin_end_bend_dim=(2, 1), end_taper=((0, -0.08),), gnd_connector_idx=-1):
+                 fin_end_bend_dim=(2, 1), end_taper=((0, -0.08),), gnd_connector_idx=-1, rib_etch_grow=0.1):
         super(AIMNemsPS, self).__init__(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l,
                                         gap_w=gap_w, num_taper_evaluations=num_taper_evaluations,
                                         gnd_connector=gnd_connector, taper_l=taper_l, gnd_pad_dim=gnd_pad_dim,
                                         end_ls=end_ls, gap_taper=gap_taper, wg_taper=wg_taper,
                                         boundary_taper=boundary_taper, fin_end_bend_dim=fin_end_bend_dim,
-                                        end_taper=end_taper, gnd_connector_idx=gnd_connector_idx)
+                                        end_taper=end_taper, gnd_connector_idx=gnd_connector_idx,
+                                        rib_etch_grow=rib_etch_grow)
 
 
 class AIMNemsTDC(LateralNemsTDC):
     def __init__(self, waveguide_w=0.48, nanofin_w=0.22, interaction_l=aim_interaction_l_pull_apart,
                  dc_gap_w=0.2, beam_gap_w=0.1, bend_dim=(10, 24.66), gnd_wg=(2, 2, 2, 0.75),
-                 use_radius=True, dc_end_l=0, dc_taper_ls=None, dc_taper=None, beam_taper=None, fin_end_bend_dim=(2, 1)
-                 ):
+                 use_radius=True, dc_end_l=0, dc_taper_ls=None, dc_taper=None, beam_taper=None, fin_end_bend_dim=(2, 1),
+                 rib_etch_grow=0.25):
         super(AIMNemsTDC, self).__init__(waveguide_w=waveguide_w, nanofin_w=nanofin_w, interaction_l=interaction_l,
                                          dc_gap_w=dc_gap_w, beam_gap_w=beam_gap_w, bend_dim=bend_dim, gnd_wg=gnd_wg,
                                          use_radius=use_radius, dc_end_l=dc_end_l, dc_taper_ls=dc_taper_ls,
-                                         dc_taper=dc_taper, beam_taper=beam_taper, fin_end_bend_dim=fin_end_bend_dim)
+                                         dc_taper=dc_taper, beam_taper=beam_taper, fin_end_bend_dim=fin_end_bend_dim,
+                                         rib_etch_grow=rib_etch_grow)
 
 
 class AIMNemsAnchor(NemsAnchor):
