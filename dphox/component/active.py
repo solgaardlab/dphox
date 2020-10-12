@@ -574,7 +574,7 @@ class LateralNemsFull(Multilayer):
             trace_w: trace width
             pos_box_w: Extension for the positive box
             gnd_box_h: Extension for the negative box
-            clearout_dim: clearout box dimension aligned in the center
+            clearout_dim: clearout_w, clearout_h_added (relative to box height matched at edges of pos electrodes)
             ridge: ridge layer
             rib: rib layer
             shuttle_dope: shuttle dope layer

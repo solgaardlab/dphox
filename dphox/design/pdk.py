@@ -106,15 +106,15 @@ aim_tether_anchor_ps = AIMNemsAnchor(
 )
 
 aim_pull_in_full_ps = AIMNemsFull(device=aim_ps_pull_in, anchor=aim_pull_in_anchor,
-                                  clearout_dim=(aim_phaseshift_l_pull_in, 0.1))
+                                  clearout_dim=(aim_phaseshift_l_pull_in, 0.3))
 aim_pull_in_full_tdc = AIMNemsFull(device=aim_tdc_pull_in, anchor=aim_pull_in_anchor,
-                                   clearout_dim=(aim_interaction_l_pull_in, 0.1),
+                                   clearout_dim=(aim_interaction_l_pull_in, 0.3),
                                    gnd_box_h=10, pos_box_w=12)
 aim_pull_apart_full_ps = AIMNemsFull(device=aim_ps_pull_apart, anchor=aim_pull_apart_anchor,
-                                     clearout_dim=(aim_phaseshift_l_pull_apart, 0.1),
+                                     clearout_dim=(aim_phaseshift_l_pull_apart, 0.3),
                                      gnd_box_h=10, pos_box_w=18)
 aim_pull_apart_full_tdc = AIMNemsFull(device=aim_tdc_pull_apart, anchor=aim_pull_apart_anchor,
-                                      clearout_dim=(aim_interaction_l_pull_apart, 0.5),
+                                      clearout_dim=(aim_interaction_l_pull_apart, 0.3),
                                       gnd_box_h=10, pos_box_w=18)
 
 aim_tether_ps = aim_ps_pull_apart.update(

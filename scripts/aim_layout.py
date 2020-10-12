@@ -216,8 +216,11 @@ print('Defining pull-in ps structures...')
 
 pull_in_gap = [aim_pull_in_full_ps.update(ps=aim_ps_pull_in.update(gap_w=gap_w))
                for gap_w in (0.1, 0.125, 0.15, 0.2, 0.25)]
-pull_in_taper = [aim_pull_in_full_ps.update(ps=aim_ps_pull_in.update(**ps_taper(taper_l, taper_change)))
-                 for taper_change in (-0.05, -0.1, -0.15) for taper_l in (10, 20)]
+pull_in_taper = [aim_pull_in_full_ps.update(
+    ps=aim_ps_pull_in.update(**ps_taper(taper_l, taper_change))
+)
+    for taper_change in (-0.05, -0.1, -0.15) for taper_l in (10, 15)
+]
 pull_in_fin = [aim_pull_in_full_ps.update(ps=aim_ps_pull_in.update(nanofin_w=nanofin_w, gap_w=gap_w))
                for nanofin_w in (0.15, 0.2, 0.22) for gap_w in (0.1, 0.15)]
 pull_in_ps = [chip.mzi_arms([delay_line_50, ps], [delay_line_200],
@@ -254,9 +257,10 @@ pull_apart_tdc_devices += [aim_pull_apart_full_tdc.update(
         dc_gap_w=0.125, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2),
         **tdc_taper(20, -0.52)
     ),
-    anchor=aim_pull_apart_anchor.update(shuttle_dim=(test_tdc_interaction_l_extr, 3),
+    anchor=aim_pull_apart_anchor.update(pos_electrode_dim=(test_tdc_interaction_l_extr, 4, 0.5),
+                                        spring_dim=(test_tdc_interaction_l_extr, 0.22),
                                         fin_dim=(test_tdc_interaction_l_extr, 0.15)),
-    clearout_dim=(test_tdc_interaction_l_extr, 0.1),
+    clearout_dim=(test_tdc_interaction_l_extr, 0.3),
 )]
 pull_apart_tdc = [dev.nazca_cell(f'pull_apart_tdc_{i}') for i, dev in enumerate(pull_apart_tdc_devices)]
 
@@ -366,7 +370,7 @@ tether = [
                     pos_electrode_dim=(psl, 4, 0.5),
                     fin_dim=(psl, 0.22)
                  ),
-                 clearout_dim=(psl + 5, 0.1),
+                 clearout_dim=(psl + 5, 0.3),
              )
              for psl in (60, 80) for taper_l, taper_change in ((5, -0.05), (10, -0.1), (15, -0.1))
          ] + [
@@ -377,7 +381,7 @@ tether = [
                     pos_electrode_dim=(il - 5, 4, 0.5),
                     fin_dim=(il, 0.3),
                  ),
-                 clearout_dim=(il + 5, 0.1),
+                 clearout_dim=(il + 5, 0.3),
              )
              for il in (80, 100) for taper_l, taper_change in
              ((10, -0.1), (15, -0.1), (20, -0.16), (20, -0.32), (20, -0.52))
@@ -388,7 +392,7 @@ tether = [
                                             fin_dim=(test_tdc_interaction_l_extr, 0.22),
                                             pos_electrode_dim=(test_tdc_interaction_l_extr, 4, 0.5)
                                         ),
-                                        clearout_dim=(test_tdc_interaction_l_extr + 5, 0.1),
+                                        clearout_dim=(test_tdc_interaction_l_extr + 5, 0.3),
                                         pos_box_w=12,
                                         )
          ]
@@ -397,10 +401,12 @@ tether_column = [chip.mzi_arms([dev], [1], name=f'tether_{i}') if i < 6 else dev
                  for i, dev in enumerate(tether)]
 tether_dcs = [dc if i < 6 else None for i in range(n_test)]
 
+
 '''
-Aggressive test structures
+Aggressive test structures (two columns)
 
 Motivation: Change the couplers to be shorter in this stack and test the resulting MZIs (for use in future runs)
+This includes inv design and aggressive, broadband directional couplers
 
 '''
 
@@ -422,11 +428,12 @@ aggressive = [
                         fin_dim=(psl, 0.3),
                         shuttle_dim=(10, 1.5),
                         shuttle_stripe_w=0
-                     )
+                     ),
+                     clearout_dim=(psl + 5, 0.3)
                  )
                  for psl in (50, 70) for taper_l, taper_change in ((10, -0.05), (15, -0.1), (20, -0.1))
              ] + [
-                aim_tether_full_tdc.update(ps=aim_tether_tdc.update(**tdc_taper(taper_l, taper_change)))
+                aim_tether_full_tdc.update(tdc=aim_tether_tdc.update(**tdc_taper(taper_l, taper_change)))
                 for taper_l, taper_change in ((20, -0.32), (20, -0.42), (20, -0.52))
 ]
 aggressive_column = [chip.mzi_arms([dev], [1], name=f'aggressive_{i}') if i < 14
@@ -434,10 +441,69 @@ aggressive_column = [chip.mzi_arms([dev], [1], name=f'aggressive_{i}') if i < 14
 
 aggressive_column_dcs = [dc_short] * 6 + [dc_aggressive, dc_invdes, dc_aggressive, dc_invdes] + [dc_short] * 4 + [None] * 3
 
+
+'''
+Extreme phase shifters
+
+Motivation: 
+Stiff pull-in phase shifter (resonance)
+Stiff pull-in phase shifter thicker fins (higher pull-in)
+More inv design and aggressive coupler variations
+
+'''
+
+extreme = [
+                 aim_pull_in_full_ps.update(
+                     ps=aim_ps_pull_in.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
+                     anchor=aim_pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
+                     clearout_dim=(psl, 0.3)
+                 )
+                 for psl in (30, 40) for taper_l, taper_change in ((5, -0.1), (10, -0.1), (15, -0.1))
+          ] + [
+                 aim_pull_in_full_ps.update(
+                     ps=aim_ps_pull_in.update(phaseshift_l=psl, nanofin_w=nanofin_w),
+                     anchor=aim_pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
+                     clearout_dim=(psl, 0.3)
+                 )
+                 for psl in (20, 30) for nanofin_w in (0.2, 0.25, 0.3)
+          ] + [
+            aim_tether_full_ps.update(
+                ps=aim_tether_ps.update(phaseshift_l=psl),
+                anchor=aim_tether_anchor_ps.update(
+                    spring_dim=(psl, 0.22),
+                    pos_electrode_dim=(psl - 5, 4, 0.3),
+                    fin_dim=(psl, 0.15),
+                    shuttle_dim=(5, 1.5),
+                    shuttle_stripe_w=0
+                ),
+                clearout_dim=(psl, 0.3)
+            ) for psl in (15, 30)
+        ] + [
+             aim_tether_full_tdc.update(
+                 ps=aim_tether_tdc.update(interaction_l=il, dc_gap_w=0.125,
+                                          bend_dim=(test_tdc_radius,
+                                                    test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2),),
+                 anchor=aim_tether_anchor_tdc.update(
+                    spring_dim=(il, 0.22),
+                    pos_electrode_dim=(il - 5, 4, 0.4),
+                    fin_dim=(il, 0.3),
+                    shuttle_dim=(10, 1.5),
+                    shuttle_stripe_w=0
+                 ),
+                 clearout_dim=(il, 0.3)
+             ) for il in (15, 20, 25)
+         ]
+extreme_column = [chip.mzi_arms([dev], [1], name=f'extreme_{i}') if i < 14
+                  else dev.nazca_cell(f'extreme_{i}') for i, dev in enumerate(aggressive)]
+
+extreme_column_dcs = [dc_aggressive] * 10 + [dc_short] * 4 + [None] * 3
+
+
 # testing tap lines
 testing_tap_line = chip.tap_line(n_test, name='tapline')
 testing_tap_line_tdc = chip.tap_line(n_test, inter_wg_dist=200, name='tapline_tdc')
 testing_tap_line_aggressive = chip.tap_line(n_test, inter_wg_dist=310, name='tapline_aggressive')
+testing_tap_line_extreme = chip.tap_line(n_test, inter_wg_dist=250, name='tapline_extreme')
 
 test_columns = []
 
@@ -481,7 +547,8 @@ test_columns.append(
 
 # TODO(sunil): dummy, replace with more variations!
 test_columns.append(
-    chip.test_column(pull_in_tdc, testing_tap_line_tdc, f'dummy', autoroute_node_detector)
+    chip.test_column(extreme_column, testing_tap_line_extreme, f'extreme', autoroute_node_detector,
+                     dc=extreme_column_dcs)
 )
 
 test_columns.append(
