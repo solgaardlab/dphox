@@ -301,6 +301,7 @@ class Pattern:
                 else np.stack((points[0], -points[1] + 2 * center[1]))
             new_polys.append(Polygon(new_points.T))
         self.polys = new_polys
+        self.shapely = self._shapely()
         # any patterns in this pattern should also be flipped
         for pattern in self.reference_patterns:
             pattern.flip(center, horiz)
@@ -422,7 +423,7 @@ class Pattern:
             new_pattern.port = self.port
         return new_pattern
 
-    def put(self, port: Port):
+    def to(self, port: Port):
         return self.rotate(port.a_deg).translate(port.x, port.y)
 
     @classmethod
