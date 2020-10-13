@@ -55,8 +55,8 @@ class AIMNazca:
         self.v1_via_8 = Via((0.4, 0.4), 0.15, shape=(1, 8), pitch=1,
                             metal=['m1am', 'm2am'], via='v1am').nazca_cell('v1_via_8')
 
-    def gnd_wg(self, waveguide_w: float = 0.48, length: float = 13, gnd_contact_dim: Optional[Dim2] = (2, 2),
-               rib_brim_w: float = 1.5, gnd_connector_dim: Optional[Dim2] = (1, 2),
+    def gnd_wg(self, waveguide_w: float = 0.48, length: float = 5, gnd_contact_dim: Optional[Dim2] = (2, 2),
+               rib_brim_w: float = 2, gnd_connector_dim: Optional[Dim2] = (1, 2),
                flip: bool = False, dope_grow: float = 0.25, name='gnd_wg') -> nd.Cell:
         c = GndWaveguide(waveguide_w=waveguide_w, length=length, gnd_contact_dim=gnd_contact_dim,
                          rib_brim_w=rib_brim_w, gnd_connector_dim=gnd_connector_dim, flip=flip)

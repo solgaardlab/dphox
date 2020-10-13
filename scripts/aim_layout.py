@@ -194,14 +194,16 @@ Motivation: modify fin width to change stiffness / phase shift per unit length
 print('Defining pull-apart ps structures...')
 
 pull_apart_gap = [aim_pull_apart_full_ps.update(ps=aim_ps_pull_apart.update(gap_w=gap_w))
-                  for gap_w in (0.1, 0.15, 0.2, 0.25)]
+                  for gap_w in (0.1, 0.15, 0.2)]
 pull_apart_taper = [aim_pull_apart_full_ps.update(ps=aim_ps_pull_apart.update(**ps_taper(taper_l, taper_change)))
                     for taper_change in (-0.05, -0.1, -0.15) for taper_l in (20, 30, 40)]
 pull_apart_fin = [aim_pull_apart_full_ps.update(ps=aim_ps_pull_apart.update(nanofin_w=nanofin_w))
-                  for nanofin_w in (0.15, 0.2, 0.22, 0.25)]
+                  for nanofin_w in (0.15, 0.2, 0.25)]
+pull_apart_stiff = [aim_pull_apart_full_ps.update(anchor=aim_pull_apart_anchor.update(spring_dim=spring_dim))
+                    for spring_dim in [(100, 0.3), (100, 0.4)]]
 pull_apart_ps = [chip.mzi_arms([delay_line_50, ps], [delay_line_200],
                                interport_w=test_interport_w, name=f'pull_apart_{i}')
-                 for i, ps in enumerate(pull_apart_gap + pull_apart_taper + pull_apart_fin)]
+                 for i, ps in enumerate(pull_apart_gap + pull_apart_taper + pull_apart_fin + pull_apart_stiff)]
 
 '''
 Pull-in phase shifter or PSV1
@@ -222,7 +224,7 @@ pull_in_taper = [aim_pull_in_full_ps.update(
     for taper_change in (-0.05, -0.1, -0.15) for taper_l in (10, 15)
 ]
 pull_in_fin = [aim_pull_in_full_ps.update(ps=aim_ps_pull_in.update(nanofin_w=nanofin_w, gap_w=gap_w))
-               for nanofin_w in (0.15, 0.2, 0.22) for gap_w in (0.1, 0.15)]
+               for nanofin_w in (0.15, 0.2, 0.25) for gap_w in (0.1, 0.15)]
 pull_in_ps = [chip.mzi_arms([delay_line_50, ps], [delay_line_200],
                             interport_w=test_interport_w, name=f'pull_in_{i}')
               for i, ps in enumerate(pull_in_gap + pull_in_taper + pull_in_fin)]
@@ -851,16 +853,18 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         if layer == 14:
             # mesh TDC test
             dev = tdc.put(output_interposer.pin['a7'])
-            chip.waveguide_ic.bend(10, -180).put()
+            chip.waveguide_ic.bend(8, -180).put()
+            chip.waveguide_ic.strt(length=10).put()
             d1 = detector.put(flip=True)
-            chip.waveguide_ic.bend(10, 180).put(dev.pin['b1'])
+            chip.waveguide_ic.bend(8, 180).put(dev.pin['b1'])
+            chip.waveguide_ic.strt(length=10).put()
             d2 = detector.put(flip=True)
             chip.m2_ic.bend_strt_bend_p2p(d2.pin['n'], autoroute_nems_anode.pin['a5'], radius=4).put()
             chip.m2_ic.bend_strt_bend_p2p(d1.pin['n'], autoroute_nems_anode.pin['a6'], radius=4).put()
             chip.m2_ic.bend_strt_bend_p2p(d2.pin['p'], autoroute_nems_cathode.pin['a5'], radius=4).put()
             chip.m2_ic.bend_strt_bend_p2p(d1.pin['p'], autoroute_nems_cathode.pin['a6'], radius=4).put()
             chip.m1_ic.bend_strt_bend_p2p(dev.pin['gnd_r'], autoroute_nems_gnd.pin['a5'], radius=4).put()
-            chip.m2_ic.bend_strt_bend_p2p(dev.pin['pos_r'], autoroute_nems_pos.pin['a6'], radius=4).put()
+            chip.m2_ic.bend_strt_bend_p2p(dev.pin['pos_r'], autoroute_nems_pos.pin['a5'], radius=4).put()
             chip.v1_via_4.put(dev.pin['gnd_r'], flop=True)
 
             # mesh tap test

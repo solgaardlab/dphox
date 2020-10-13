@@ -152,7 +152,7 @@ class LateralNemsPS(Pattern):
 
         super(LateralNemsPS, self).__init__(*patterns, call_union=False)
         self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads, self.pads = wg, nanofins, rib_etch, gnd_pads, None
-        # self.pads = None so that LateralNemsFull works on all devices 
+        # self.pads = None so that LateralNemsFull works on all devices
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)
         self.port['a0'] = Port(0, 0, -np.pi)
@@ -539,6 +539,7 @@ class GndWaveguide(Pattern):
         # TODO(): remove the hidden hardcoding
         brim_l, brim_taper = get_linear_adiabatic(min_width=waveguide_w, max_width=rib_brim_w, aggressive=True)
         brim_taper = cubic_taper(brim_taper[1])
+        brim_l = min(length / 2, brim_l)
 
         wg = Waveguide(waveguide_w=waveguide_w, length=length)
         rib_brim = Waveguide(waveguide_w=waveguide_w, length=2 * brim_l, taper_ls=(brim_l,),
