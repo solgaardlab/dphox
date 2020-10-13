@@ -306,12 +306,12 @@ Motivation: Test structures necessary for reference measurements
 '''
 print('Defining VIP structures...')
 
-delay_arms = chip.mzi_arms([delay_line_50, gnd_wg],
-                           [delay_line_200, gnd_wg],
+delay_arms = chip.mzi_arms([delay_line_50, gnd_wg, 60, gnd_wg],
+                           [delay_line_200],
                            interport_w=test_interport_w,
                            name='bare_mzi_arms')
-delay_arms_gnded = chip.mzi_arms([delay_line_50, gnd_wg],
-                                 [delay_line_200, gnd_wg],
+delay_arms_gnded = chip.mzi_arms([delay_line_50, gnd_wg, 60, gnd_wg],
+                                 [delay_line_200],
                                  interport_w=test_interport_w,
                                  name='bare_mzi_arms_gnded')
 
