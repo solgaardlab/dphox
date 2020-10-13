@@ -57,12 +57,11 @@ class AIMNemsTDC(LateralNemsTDC):
 class AIMNemsAnchor(NemsAnchor):
     def __init__(self, fin_dim=(100, 0.22), shuttle_dim=(50, 2), spring_dim=None, straight_connector=(0.25, 1),
                  tether_connector=(2, 1, 0.5, 1), pos_electrode_dim=(90, 4, 0.5), gnd_electrode_dim=(3, 4),
-                 attach_comb=False, include_fin_dummy=True, shuttle_stripe_w=1):
+                 include_fin_dummy=True, shuttle_stripe_w=1):
         super(AIMNemsAnchor, self).__init__(fin_dim=fin_dim, shuttle_dim=shuttle_dim, spring_dim=spring_dim,
                                             straight_connector=straight_connector, tether_connector=tether_connector,
                                             pos_electrode_dim=pos_electrode_dim, gnd_electrode_dim=gnd_electrode_dim,
-                                            attach_comb=attach_comb, include_fin_dummy=include_fin_dummy,
-                                            shuttle_stripe_w=shuttle_stripe_w)
+                                            include_fin_dummy=include_fin_dummy, shuttle_stripe_w=shuttle_stripe_w)
 
 
 class AIMNemsFull(LateralNemsFull):

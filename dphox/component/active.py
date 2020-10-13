@@ -313,7 +313,6 @@ class LateralNemsTDC(Pattern):
                     # TODO(Nate): make not clunky, and foundry agnostic
                     #  (rule for how etches are handled at different foundries?)
                     #  clunky way to separate seam and ream masks for now
-                    # clunky way to separate seam and ream masks for now
                     rib_etch.append(
                         Waveguide(
                             waveguide_w + 2 * rib_etch_grow, taper_ls=(brim_l,),
@@ -365,8 +364,7 @@ class NemsAnchor(Pattern):
     def __init__(self, fin_dim: Dim2, shuttle_dim: Dim2, spring_dim: Dim2 = None,
                  straight_connector: Optional[Dim2] = None, tether_connector: Optional[Dim4] = None,
                  pos_electrode_dim: Optional[Dim3] = None, gnd_electrode_dim: Optional[Dim2] = None,
-                 include_fin_dummy: bool = False, attach_comb: bool = False, tooth_dim: Dim3 = (0.3, 3, 0.15),
-                 shuttle_stripe_w: float = 1):
+                 include_fin_dummy: bool = False, tooth_dim: Dim3 = None, shuttle_stripe_w: float = 1):
         """NEMS anchor (the main MEMS section for the phase shifter and tunable directional coupler)
 
         Args:
@@ -378,8 +376,7 @@ class NemsAnchor(Pattern):
             pos_electrode_dim: positive electrode dimension
             gnd_electrode_dim: negative electrode dimension
             include_fin_dummy: include fin dummy for for mechanical support
-            attach_comb: attach a comb drive to the shuttle (only if pos_electrode_dim specified!)
-            tooth_dim: (length, width, inter-tooth gap)
+            tooth_dim: (length, width, inter-tooth gap) (suggested: (0.3, 3, 0.15))
             shuttle_stripe_w: design an etch hole shuttle consisting of stripes of width ``shuttle_stripe_w``
                 (if 0, do not add a stripped shuttle).
         """
@@ -391,7 +388,6 @@ class NemsAnchor(Pattern):
         self.pos_electrode_dim = pos_electrode_dim
         self.gnd_electrode_dim = gnd_electrode_dim
         self.include_fin_dummy = include_fin_dummy
-        self.attach_comb = attach_comb
         self.tooth_dim = tooth_dim
         self.shuttle_stripe_w = shuttle_stripe_w
 
@@ -422,7 +418,7 @@ class NemsAnchor(Pattern):
             patterns.extend(fin_connectors)
             fat = Box((shuttle_dim[0], straight_connector[1])).align(shuttle).valign(
                 shuttle, opposite=True)
-            if include_fin_dummy and not attach_comb:
+            if include_fin_dummy and tooth_dim is None:
                 # this is the mirror image dummy for mechanics
                 dummy_fin = Box(fin_dim).align(shuttle).valign(fat, opposite=False, bottom=False)
                 patterns.append(dummy_fin)
@@ -439,7 +435,7 @@ class NemsAnchor(Pattern):
             top_spring = Box(spring_dim).align(shuttle).valign(shuttle, bottom=True, opposite=True)
             bottom_spring = Box(spring_dim).align(shuttle).valign(shuttle, bottom=False, opposite=True)
             if pos_electrode_dim is not None:
-                pos_alignment_pattern = connector if include_fin_dummy and not attach_comb else top_spring
+                pos_alignment_pattern = connector if include_fin_dummy and tooth_dim is not None else top_spring
                 pos_electrode = Box(pos_electrode_dim[:2]).align(top_spring).valign(
                     pos_alignment_pattern, opposite=True).translate(dy=pos_electrode_dim[2])
                 patterns.append(pos_electrode)
@@ -447,7 +443,7 @@ class NemsAnchor(Pattern):
                 pos_pads.append(pos_electrode)
                 patterns.extend([top_spring, bottom_spring])
                 springs.extend([top_spring, bottom_spring])
-                if attach_comb:
+                if tooth_dim is not None:
                     dx_teeth = tooth_dim[2] + tooth_dim[0]
                     num_teeth = int((min(pos_electrode_dim[0], shuttle_dim[0]) - tooth_dim[1]) // (2 * dx_teeth))
                     if num_teeth <= 0:
@@ -464,7 +460,7 @@ class NemsAnchor(Pattern):
                 if straight_connector is not None:
                     shuttle = Box((shuttle_dim[0], shuttle_dim[1] + straight_connector[1])).valign(shuttle)
             else:
-                if attach_comb:
+                if tooth_dim is not None:
                     raise AttributeError('Must specify pos_electrode_dim if attach_comb is True')
                 if straight_connector is not None:
                     shuttle = Box((shuttle_dim[0], shuttle_dim[1] + straight_connector[1])).valign(shuttle)
@@ -489,7 +485,7 @@ class NemsAnchor(Pattern):
         shift = [-connector.center[0], -connector.bounds[1]]
         shift[1] -= -tether_connector[-1] if tether_connector is not None and straight_connector is None else 0
         self.reference_patterns = self.pads + [self.shuttle] + self.springs
-        self.reference_patterns += [self.comb] if attach_comb else []
+        self.reference_patterns += [self.comb] if tooth_dim is not None else []
         self.translate(*shift)
         for idx, pad in enumerate(self.pads):
             self.port[f'c{idx}'] = Port(*pad.center, -np.pi)
@@ -595,6 +591,48 @@ class MemsMonitorCoupler(Pattern):
 
         super(MemsMonitorCoupler, self).__init__(waveguide, monitor_wg, monitor_left, monitor_right, *pads)
         self.pads = pads[:1]
+
+
+class SimpleComb(Pattern):
+    def __init__(self, tooth_dim: Dim3, gnd_electrode_dim: Dim2,
+               pos_electrode_w: float, overlap: float, edge_tooth_factor: int):
+        """
+
+        Args:
+
+            tooth_dim: width, height and inter-tooth spacing between teeth
+            gnd_electrode_dim: ground electrode dimension
+            pos_electrode_w: positive electrode width
+            overlap: overlap of the comb teeth on pos and gnd sides
+            edge_tooth_factor: integer number of times bigger the edge teeth are vs other teeth (to avoid snapping)
+        Returns:
+
+        """
+        self.tooth_dim = tooth_dim
+        self.gnd_electrode_dim = gnd_electrode_dim
+        self.pos_electrode_w = pos_electrode_w
+        self.overlap = overlap
+        self.edge_tooth_factor = edge_tooth_factor
+
+        gnd_pad = Box(gnd_electrode_dim)
+        pos_pad = Box((gnd_electrode_dim[0], pos_electrode_w))
+        dx_teeth = tooth_dim[2] + tooth_dim[0]
+        num_teeth = int((gnd_electrode_dim[0] - tooth_dim[1]) // (2 * dx_teeth))
+        if num_teeth <= 0:
+            raise ValueError('Electrode dim is too small to hold comb teeth.')
+        tooth = Box(tooth_dim[:2])
+        fat_tooth = Box((tooth_dim[0] * edge_tooth_factor, tooth_dim[1]))
+        upper_teeth = [tooth.copy.translate(dx_teeth * 2 * n) for n in range(num_teeth)]
+        upper_teeth = upper_teeth
+        lower_teeth = [tooth.copy.translate(dx_teeth * (2 * n + 1)) for n in range(num_teeth - 1)]
+        upper_comb = Pattern(*upper_teeth)
+        lower_comb = Pattern(*lower_teeth)
+        upper_comb.align(gnd_pad).valign(gnd_pad, opposite=True, bottom=True)
+        edges = [fat_tooth.copy.align(upper_comb).halign(upper_comb, left=False, opposite=True).translate(tooth_dim[0]),
+                 fat_tooth.copy.align(upper_comb).halign(upper_comb, left=True, opposite=True).translate(-tooth_dim[0])]
+        lower_comb.align(upper_comb).translate(0, -overlap + tooth_dim[1])
+        pos_pad.align(lower_comb).valign(lower_comb, bottom=True, opposite=True)
+        super(SimpleComb, self).__init__(upper_comb, lower_comb, pos_pad, gnd_pad, *edges)
 
 
 class LateralNemsFull(Multilayer):
@@ -742,7 +780,7 @@ class LateralNemsFull(Multilayer):
             return LateralNemsFull(**_handle_nems_config(config))
 
 
-class NemsMillerNode(Pattern):
+class NemsMillerNode(Multilayer):
     def __init__(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
                  gap_w: float, bend_radius: float, bend_extension: float, lr_nanofin_w: float,
                  ud_nanofin_w: float, lr_gap_w: float, ud_gap_w: float, lr_pad_dim: Optional[Dim2] = None,
