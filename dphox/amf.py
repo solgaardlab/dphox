@@ -1,5 +1,5 @@
-from ..typing import Optional, List, Union, Callable, Tuple
-from ..constants import AMF_STACK
+from dphox.typing import Optional, List, Union, Callable, Tuple
+from dphox.constants import AMF_STACK
 
 import nazca as nd
 import numpy as np

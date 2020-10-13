@@ -1,4 +1,4 @@
-from dphox.design.aim import *
+from dphox.aim import *
 from dphox.constants import AIM_STACK
 
 # specify the component you want to visualize in 3d here:

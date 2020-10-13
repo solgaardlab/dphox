@@ -2,8 +2,8 @@ import itertools
 
 import nazca as nd
 from datetime import date
-from dphox.design.aim import *
-from dphox.design.schematic import AIMNazca
+from dphox.aim import *
+from dphox.schematic import AIMNazca
 
 chip = AIMNazca(
     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',

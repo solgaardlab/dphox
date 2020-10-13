@@ -8,9 +8,9 @@ Created on Thu Apr 23 17:19:16 2020
 
 import nazca as nd
 
-from ..component import *
-from ..constants import AIM_PDK_WAVEGUIDE_PATH, AIM_PDK_PASSIVE_PATH, AIM_PDK_ACTIVE_PATH, AIM_STACK, AIM_PDK
-from ..typing import Optional
+from .component import *
+from .constants import AIM_PDK_WAVEGUIDE_PATH, AIM_PDK_PASSIVE_PATH, AIM_PDK_ACTIVE_PATH, AIM_STACK, AIM_PDK
+from .typing import Optional
 
 
 class AIMNazca:

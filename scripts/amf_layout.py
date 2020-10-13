@@ -1,6 +1,6 @@
 import nazca as nd
 import numpy as np
-from dphox.design.amf import AMFPhotonicChip, NazcaVisualizer
+from dphox.amf import AMFPhotonicChip
 from dphox.constants import AMF_STACK
 
 if __name__ == 'main':
@@ -456,7 +456,7 @@ if __name__ == 'main':
                                           post_processing_chiplet.bbox[0] + CHIPLET_SEP - 30], y_line_w=200).put(0, 0)
     sliver = chip.trench_ic.strt(width=2, length=2800).put(15999, 100, 90)
 
-    from datetime import date, datetime
+    from datetime import date
 
     # nd.export_gds(filename=f'amf-{datetime.now().strftime("%Y-%m-%d_%I-%M")}.design')
     # nd.export_gds(filename=f'amf-{str(date.today())}.design')
