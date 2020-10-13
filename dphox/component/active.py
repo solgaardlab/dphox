@@ -151,7 +151,8 @@ class LateralNemsPS(Pattern):
             patterns.extend(rib_brim + gnd_connections + gnd_pads)
 
         super(LateralNemsPS, self).__init__(*patterns, call_union=False)
-        self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads = wg, nanofins, rib_etch, gnd_pads
+        self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads, self.pads = wg, nanofins, rib_etch, gnd_pads, None
+        # self.pads = None so that LateralNemsFull works on all devices 
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)
         self.port['a0'] = Port(0, 0, -np.pi)
@@ -652,12 +653,13 @@ class LateralNemsFull(Multilayer):
         bot = anchor.copy.put(device.port['fin1'])
         full = Pattern(top, bot, device)
         vias = []
+        device_pads = device.pads if device.pads is not None else []
         dopes = [s.expand(dope_expand).dope(shuttle_dope, dope_grow)
                  for s in [top.shuttle, bot.shuttle] if shuttle_dope is not None] + \
                 [s.expand(dope_expand).dope(spring_dope, dope_grow)
                  for s in top.springs + bot.springs if spring_dope is not None] + \
                 [s.expand(dope_expand).dope(pad_dope, dope_grow)
-                 for s in top.pads + bot.pads if pad_dope is not None]
+                 for s in top.pads + bot.pads + device_pads if pad_dope is not None]
         metals = []
         port = {}
         gnd_pads = []

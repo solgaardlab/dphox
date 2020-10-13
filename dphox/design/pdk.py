@@ -73,7 +73,7 @@ class AIMNemsFull(LateralNemsFull):
                  trace_w=3):
         super(AIMNemsFull, self).__init__(device=device, anchor=anchor, gnd_via=gnd_via,
                                           pos_via=pos_via, trace_w=trace_w, pos_box_w=pos_box_w,
-                                          gnd_box_h=gnd_box_h, clearout_dim=clearout_dim, dope_expand=0.25,
+                                          gnd_box_h=gnd_box_h, clearout_dim=clearout_dim, dope_expand=0.3,
                                           dope_grow=0.1, ridge='seam', rib='ream', shuttle_dope='pdam',
                                           spring_dope='pdam', pad_dope='pppam', pos_metal='m2am',
                                           gnd_metal='m1am', clearout_layer='clearout', clearout_etch_stop_layer='snam')
