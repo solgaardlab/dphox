@@ -8,6 +8,7 @@ import numpy as np
 import gdspy as gy
 import nazca as nd
 from shapely.geometry import Polygon, MultiPolygon
+from shapely.ops import cascaded_union
 from descartes import PolygonPatch
 import trimesh
 from trimesh import creation, visual
@@ -43,6 +44,11 @@ class Multilayer:
 
     @property
     def bounds(self) -> Dim4:
+        """
+
+        Returns: Bounding box for the component
+
+        """
         bbox = self.gdspy_cell().get_bounding_box()
         return bbox[0][0], bbox[0][1], bbox[1][0], bbox[1][1]
 
@@ -173,58 +179,67 @@ class Multilayer:
                         process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
                         layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad'):
         meshes = {}
+
+        def _add_trimesh_layer(pattern, zrange, layer):
+            if layer in layer_to_color:
+                zmin, zmax = zrange
+                layer_meshes = [trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
+                                for poly in pattern]
+                mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
+                mesh.visual.face_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
+                meshes[layer] = mesh
+            else:
+                # TODO(sunil): start using logging
+                print(f'WARNING: layer {layer} does not have a color, skipping...')
+
         if process_extrusion is not None:
             layer_to_extrusion = self.build_layers(layer_to_zrange, process_extrusion)
             for layer, pattern_zrange in layer_to_extrusion.items():
-                try:
-                    zmin, zmax = pattern_zrange[1]
-                    layer_meshes = [
-                        trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
-                        for poly in pattern_zrange[0]]
-                    mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
-                    mesh.visual.vertex_colors = visual.random_color() \
-                        if layer_to_color is None else layer_to_color[layer]
-                    meshes[layer] = mesh
-                except KeyError:
-                    print(f"No zranges given for the layer {layer}")
+                pattern, zrange = pattern_zrange
+                _add_trimesh_layer(pattern, zrange, layer)
             return meshes
         else:
             for layer, pattern in self.layer_to_pattern.items():
                 try:
-                    zmin, zmax = layer_to_zrange[layer]
-                    layer_meshes = [
-                        trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
-                        for poly in pattern]
-                    mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
-                    mesh.visual.vertex_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
-                    meshes[layer] = mesh
+                    _add_trimesh_layer(pattern, layer_to_zrange[layer], layer)
                 except KeyError:
                     print(f"No zranges given for the layer {layer}")
             return meshes
 
     def to_trimesh_scene(self, layer_to_zrange: Dict[str, Tuple[float, float]],
                          process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
-                         layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad'):
+                         layer_to_color: Optional[Dict[str, str]] = None, ignore_layers: Optional[List[str]] = None,
+                         engine: str = 'scad'):
         meshes = self.to_trimesh_dict(layer_to_zrange, process_extrusion, layer_to_color, engine)
-        return trimesh.Scene(meshes.values())
+        scene = trimesh.Scene()
+        ignore_layers = [] if ignore_layers is None else ignore_layers
+        for mesh_name, mesh in meshes.items():
+            if mesh_name not in ignore_layers:
+                scene.add_geometry(mesh, mesh_name)
+        return scene
+
+    def show(self, layer_to_zrange: Dict[str, Tuple[float, float]],
+             process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
+             layer_to_color: Optional[Dict[str, str]] = None, ignore_layers: Optional[List[str]] = None,
+             engine: str = 'scad'):
+        self.to_trimesh_scene(layer_to_zrange, process_extrusion, layer_to_color, ignore_layers, engine).show()
 
     def build_layers(self, layer_to_zrange: Dict[str, Tuple[float, float]],
                      process_extrusion: Dict[str, List[Tuple[str, str, str]]]):
         layer_to_extrusion = {}
         layers = self.layer_to_pattern.keys()
         layer_to_pattern_processed = self.layer_to_pattern.copy()
+
         for step, operations in process_extrusion.items():
             for layer_relation in operations:
                 layer, other_layer, operation = layer_relation
                 if 'dope' in step and operation == 'intersection':
                     # make a new layer for each doping intersection
-                    # new_layer = layer + '_' + other_layer
                     zmin, zmax = layer_to_zrange[other_layer]
                     z0, z1 = layer_to_zrange[layer]
                     # TODO(): how to deal with different depth doping currently not addressed
                     new_zrange = (max(zmax - (z1 - z0), zmin), zmax)
                 else:
-                    # new_layer = layer
                     new_zrange = layer_to_zrange[layer]
                 if layer in layers:
                     if other_layer in layers:
@@ -234,8 +249,10 @@ class Multilayer:
                     else:
                         pattern = layer_to_pattern_processed[layer]
                     if pattern.geoms:
+                        pattern_shapely = cascaded_union(pattern.geoms)
+                        pattern_shapely = MultiPolygon([pattern_shapely]) if isinstance(pattern_shapely, Polygon) else pattern_shapely
                         layer_to_pattern_processed[layer] = pattern
-                        layer_to_extrusion[layer] = (pattern, new_zrange)
+                        layer_to_extrusion[layer] = (pattern_shapely, new_zrange)
         return layer_to_extrusion
 
     def fill_material(self, layer_name: str, growth: float, centered_layer: str = None):

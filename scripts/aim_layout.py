@@ -2,21 +2,21 @@ import itertools
 
 import nazca as nd
 from datetime import date
-from dphox.design.pdk import *
-from dphox.design.aim import AIMNazca
+from dphox.design.aim import *
+from dphox.design.schematic import AIMNazca
 
-# chip = AIMNazca(
-#     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
-#     waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
-#     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
-# )
+chip = AIMNazca(
+    passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
+    waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
+    active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
+)
 
 # #Please leave this so Nate can run this quickly
-chip = AIMNazca(
-    passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
-    waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
-    active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
-)
+# chip = AIMNazca(
+#     passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
+#     waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
+#     active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
+# )
 
 # chip params
 
@@ -100,9 +100,9 @@ dc_invdes = AIMDC(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes), gap_w=t
 ).nazca_cell('dc_invdes', layer='seam')
 mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
 tap_detector = chip.bidirectional_tap(10, mesh_bend=True)
-tdc = aim_pull_apart_full_tdc.nazca_cell('test_tdc')
+tdc = pull_apart_full_tdc.nazca_cell('test_tdc')
 gnd_wg = chip.gnd_wg()
-mesh_ps = chip.device_linked([aim_pull_apart_full_ps, sep, tap_detector])
+mesh_ps = chip.device_linked([pull_apart_full_ps, sep, tap_detector])
 alignment_mark = chip.alignment_mark()
 alignment_mark_small = chip.alignment_mark((50, 5), name='alignment_mark_small')
 grating = chip.pdk_cells['cl_band_vertical_coupler_si']
@@ -193,13 +193,13 @@ Motivation: modify fin width to change stiffness / phase shift per unit length
 
 print('Defining pull-apart ps structures...')
 
-pull_apart_gap = [aim_pull_apart_full_ps.update(ps=aim_ps_pull_apart.update(gap_w=gap_w))
+pull_apart_gap = [pull_apart_full_ps.update(ps=ps_pull_apart.update(gap_w=gap_w))
                   for gap_w in (0.1, 0.15, 0.2)]
-pull_apart_taper = [aim_pull_apart_full_ps.update(ps=aim_ps_pull_apart.update(**ps_taper(taper_l, taper_change)))
+pull_apart_taper = [pull_apart_full_ps.update(ps=ps_pull_apart.update(**ps_taper(taper_l, taper_change)))
                     for taper_change in (-0.05, -0.1, -0.15) for taper_l in (20, 30, 40)]
-pull_apart_fin = [aim_pull_apart_full_ps.update(ps=aim_ps_pull_apart.update(nanofin_w=nanofin_w))
+pull_apart_fin = [pull_apart_full_ps.update(ps=ps_pull_apart.update(nanofin_w=nanofin_w))
                   for nanofin_w in (0.15, 0.2, 0.25)]
-pull_apart_stiff = [aim_pull_apart_full_ps.update(anchor=aim_pull_apart_anchor.update(spring_dim=spring_dim))
+pull_apart_stiff = [pull_apart_full_ps.update(anchor=pull_apart_anchor.update(spring_dim=spring_dim))
                     for spring_dim in [(100, 0.3), (100, 0.4)]]
 pull_apart_ps = [chip.mzi_arms([delay_line_50, ps], [delay_line_200],
                                interport_w=test_interport_w, name=f'pull_apart_{i}')
@@ -216,14 +216,14 @@ and phase shift length, modify fin width to change phase shift per unit length
 
 print('Defining pull-in ps structures...')
 
-pull_in_gap = [aim_pull_in_full_ps.update(ps=aim_ps_pull_in.update(gap_w=gap_w))
+pull_in_gap = [pull_in_full_ps.update(ps=ps_pull_in.update(gap_w=gap_w))
                for gap_w in (0.1, 0.125, 0.15, 0.2, 0.25)]
-pull_in_taper = [aim_pull_in_full_ps.update(
-    ps=aim_ps_pull_in.update(**ps_taper(taper_l, taper_change))
+pull_in_taper = [pull_in_full_ps.update(
+    ps=ps_pull_in.update(**ps_taper(taper_l, taper_change))
 )
     for taper_change in (-0.05, -0.1, -0.15) for taper_l in (10, 15)
 ]
-pull_in_fin = [aim_pull_in_full_ps.update(ps=aim_ps_pull_in.update(nanofin_w=nanofin_w, gap_w=gap_w))
+pull_in_fin = [pull_in_full_ps.update(ps=ps_pull_in.update(nanofin_w=nanofin_w, gap_w=gap_w))
                for nanofin_w in (0.15, 0.2, 0.25) for gap_w in (0.1, 0.15)]
 pull_in_ps = [chip.mzi_arms([delay_line_50, ps], [delay_line_200],
                             interport_w=test_interport_w, name=f'pull_in_{i}')
@@ -243,8 +243,8 @@ Note: Tapering and dc_gap is MOST important
 print('Defining pull-apart tdc structures...')
 
 pull_apart_tdc_devices = [
-    aim_pull_apart_full_tdc.update(
-        tdc=aim_tdc_pull_apart.update(
+    pull_apart_full_tdc.update(
+        tdc=tdc_pull_apart.update(
             dc_gap_w=gap_w,
             bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - gap_w / 2 - waveguide_w / 2),
             **tdc_taper(20, taper_change)
@@ -253,15 +253,15 @@ pull_apart_tdc_devices = [
     for gap_w in (0.100, 0.125, .150, 0.300)
     for taper_change in (0, -0.16, -0.32, -0.52)
 ]
-pull_apart_tdc_devices += [aim_pull_apart_full_tdc.update(
-    tdc=aim_tdc_pull_apart.update(
+pull_apart_tdc_devices += [pull_apart_full_tdc.update(
+    tdc=tdc_pull_apart.update(
         interaction_l=test_tdc_interaction_l_extr,
         dc_gap_w=0.125, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2),
         **tdc_taper(20, -0.52)
     ),
-    anchor=aim_pull_apart_anchor.update(pos_electrode_dim=(test_tdc_interaction_l_extr, 4, 0.5),
-                                        spring_dim=(test_tdc_interaction_l_extr, 0.22),
-                                        fin_dim=(test_tdc_interaction_l_extr, 0.15)),
+    anchor=pull_apart_anchor.update(pos_electrode_dim=(test_tdc_interaction_l_extr, 4, 0.5),
+                                    spring_dim=(test_tdc_interaction_l_extr, 0.22),
+                                    fin_dim=(test_tdc_interaction_l_extr, 0.15)),
     clearout_dim=(test_tdc_interaction_l_extr, 0.3),
 )]
 pull_apart_tdc = [dev.nazca_cell(f'pull_apart_tdc_{i}') for i, dev in enumerate(pull_apart_tdc_devices)]
@@ -277,8 +277,8 @@ Tapering and dc_gap is MOST important
 print('Defining pull-in tdc structures...')
 
 pull_in_tdc_devices = [
-    aim_pull_in_full_tdc.update(
-        tdc=aim_tdc_pull_in.update(
+    pull_in_full_tdc.update(
+        tdc=tdc_pull_in.update(
             dc_gap_w=gap_w,
             bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - gap_w / 2 - waveguide_w / 2),
             **tdc_taper(20, taper_change)
@@ -287,13 +287,13 @@ pull_in_tdc_devices = [
     for gap_w in (0.100, 0.125, 0.150, 0.300)
     for taper_change in (0, -0.16, -0.32, -0.52)
 ]
-pull_in_tdc_devices += [aim_pull_in_full_tdc.update(
-    tdc=aim_tdc_pull_in.update(
+pull_in_tdc_devices += [pull_in_full_tdc.update(
+    tdc=tdc_pull_in.update(
         interaction_l=test_tdc_interaction_l_extr,
         dc_gap_w=0.125, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2),
         **tdc_taper(20, -0.52)
     ),
-    anchor=aim_pull_in_anchor.update(shuttle_dim=(test_tdc_interaction_l_extr, 5)),
+    anchor=pull_in_anchor.update(shuttle_dim=(test_tdc_interaction_l_extr, 5)),
     clearout_dim=(test_tdc_interaction_l_extr, 0.1)
 )]
 pull_in_tdc = [dev.nazca_cell(f'pull_in_tdc_{i}') for i, dev in enumerate(pull_in_tdc_devices)]
@@ -365,9 +365,9 @@ but we lose extra mechanical support and are susceptible to warping/cantilever e
 print('Defining tether structures...')
 
 tether = [
-    aim_tether_full_ps.update(
-        ps=aim_tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
-        anchor=aim_tether_anchor_ps.update(
+    tether_full_ps.update(
+        ps=tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
+        anchor=tether_anchor_ps.update(
             spring_dim=(psl + 10, 0.22),
             pos_electrode_dim=(psl, 4, 0.5),
             fin_dim=(psl, 0.22)
@@ -376,9 +376,9 @@ tether = [
     )
     for psl in (60, 80) for taper_l, taper_change in ((5, -0.05), (10, -0.1), (15, -0.1))
 ] + [
-    aim_tether_full_tdc.update(
-        tdc=aim_tether_tdc.update(interaction_l=il, **tdc_taper(taper_l, taper_change)),
-        anchor=aim_tether_anchor_tdc.update(
+    tether_full_tdc.update(
+        tdc=tether_tdc.update(interaction_l=il, **tdc_taper(taper_l, taper_change)),
+        anchor=tether_anchor_tdc.update(
             spring_dim=(il + 5, 0.22),
             pos_electrode_dim=(il - 5, 4, 0.5),
             fin_dim=(il, 0.3),
@@ -388,15 +388,15 @@ tether = [
     for il in (80, 100) for taper_l, taper_change in
     ((10, -0.1), (15, -0.1), (20, -0.16), (20, -0.32), (20, -0.52))
 ] + [
-    aim_tether_full_tdc.update(tdc=aim_tether_tdc.update(interaction_l=test_tdc_interaction_l_extr),
-                               anchor=aim_tether_anchor_tdc.update(
+    tether_full_tdc.update(tdc=tether_tdc.update(interaction_l=test_tdc_interaction_l_extr),
+                           anchor=tether_anchor_tdc.update(
         spring_dim=(test_tdc_interaction_l_extr + 12, 0.22),
         fin_dim=(test_tdc_interaction_l_extr, 0.22),
         pos_electrode_dim=(test_tdc_interaction_l_extr, 4, 0.5)
     ),
-        clearout_dim=(test_tdc_interaction_l_extr + 5, 0.3),
-        pos_box_w=12,
-    )
+                           clearout_dim=(test_tdc_interaction_l_extr + 5, 0.3),
+                           pos_box_w=12,
+                           )
 ]
 
 tether_column = [chip.mzi_arms([dev], [1], name=f'tether_{i}') if i < 6 else dev.nazca_cell(f'tether_{i}')
@@ -415,16 +415,16 @@ This includes inv design and aggressive, broadband directional couplers
 print('Defining aggressive structures...')
 
 aggressive = [
-    aim_tether_full_ps.update(ps=aim_tether_ps.update(taper_l=taper_l,
-                                                      boundary_taper=cubic_taper(taper_change),
-                                                      wg_taper=cubic_taper(-0.4),
-                                                      gap_taper=cubic_taper(-0.4),
-                                                      ))
+    tether_full_ps.update(ps=tether_ps.update(taper_l=taper_l,
+                                              boundary_taper=cubic_taper(taper_change),
+                                              wg_taper=cubic_taper(-0.4),
+                                              gap_taper=cubic_taper(-0.4),
+                                              ))
     for taper_l in (10,) for taper_change in (-0.2, -0.25, -0.3, -0.35)  # slot variations
-] + [aim_pull_apart_full_ps] * 2 + [aim_pull_in_full_ps] * 2 + [
-    aim_tether_full_ps.update(
-        ps=aim_tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
-        anchor=aim_tether_anchor_tdc.update(
+] + [pull_apart_full_ps] * 2 + [pull_in_full_ps] * 2 + [
+    tether_full_ps.update(
+        ps=tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
+        anchor=tether_anchor_tdc.update(
             spring_dim=(psl + 10, 0.22),
             pos_electrode_dim=(psl - 5, 4, 0.4),
             fin_dim=(psl, 0.3),
@@ -435,7 +435,7 @@ aggressive = [
     )
     for psl in (50, 70) for taper_l, taper_change in ((10, -0.05), (15, -0.1), (20, -0.1))
 ] + [
-    aim_tether_full_tdc.update(tdc=aim_tether_tdc.update(**tdc_taper(taper_l, taper_change)))
+    tether_full_tdc.update(tdc=tether_tdc.update(**tdc_taper(taper_l, taper_change)))
     for taper_l, taper_change in ((20, -0.32), (20, -0.42), (20, -0.52))
 ]
 aggressive_column = [chip.mzi_arms([dev], [1], name=f'aggressive_{i}') if i < 14
@@ -455,23 +455,23 @@ More inv design and aggressive coupler variations
 '''
 
 extreme = [
-    aim_pull_in_full_ps.update(
-        ps=aim_ps_pull_in.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
-        anchor=aim_pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
+    pull_in_full_ps.update(
+        ps=ps_pull_in.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
+        anchor=pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
         clearout_dim=(psl, 0.3)
     )
     for psl in (30, 40) for taper_l, taper_change in ((5, -0.1), (10, -0.1), (15, -0.1))
 ] + [
-    aim_pull_in_full_ps.update(
-        ps=aim_ps_pull_in.update(phaseshift_l=psl, nanofin_w=nanofin_w),
-        anchor=aim_pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
+    pull_in_full_ps.update(
+        ps=ps_pull_in.update(phaseshift_l=psl, nanofin_w=nanofin_w),
+        anchor=pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
         clearout_dim=(psl, 0.3)
     )
     for psl in (20, 30) for nanofin_w in (0.2, 0.25, 0.3)
 ] + [
-    aim_tether_full_ps.update(
-        ps=aim_tether_ps.update(phaseshift_l=psl),
-        anchor=aim_tether_anchor_ps.update(
+    tether_full_ps.update(
+        ps=tether_ps.update(phaseshift_l=psl),
+        anchor=tether_anchor_ps.update(
             spring_dim=(psl + 10, 0.22),
             pos_electrode_dim=(psl - 5, 4, 0.3),
             fin_dim=(psl, 0.15),
@@ -481,11 +481,11 @@ extreme = [
         clearout_dim=(psl + 5, 0.3)
     ) for psl in (15, 30)
 ] + [
-    aim_tether_full_tdc.update(
-        ps=aim_tether_tdc.update(interaction_l=il, dc_gap_w=0.125,
-                                 bend_dim=(test_tdc_radius,
-                                           test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2),),
-        anchor=aim_tether_anchor_tdc.update(
+    tether_full_tdc.update(
+        ps=tether_tdc.update(interaction_l=il, dc_gap_w=0.125,
+                             bend_dim=(test_tdc_radius,
+                                           test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2), ),
+        anchor=tether_anchor_tdc.update(
             spring_dim=(il, 0.22),
             pos_electrode_dim=(il - 5, 4, 0.4),
             fin_dim=(il, 0.3),
@@ -564,9 +564,9 @@ test_columns.append(
 middle_mesh_pull_apart = [
     chip.mzi_node(chip.mzi_arms([ps], [1], interport_w=mesh_interport_w, name=f'middle_mesh_pull_apart_ps_{i}'),
                   dc, include_input_ps=False,
-                  name=f'mzi_middle_mesh_pull_apart_ps_{i}') for i, ps in enumerate((aim_pull_apart_full_ps,
-                                                                                     aim_pull_apart_full_ps.update(
-                                                                                         ps=aim_ps_pull_apart.update(
+                  name=f'mzi_middle_mesh_pull_apart_ps_{i}') for i, ps in enumerate((pull_apart_full_ps,
+                                                                                     pull_apart_full_ps.update(
+                                                                                         ps=ps_pull_apart.update(
                                                                                              **ps_taper(-0.05, 30))
                                                                                      )))
 ]
@@ -576,17 +576,17 @@ middle_mesh_pull_in = [
                                 [delay_line_200],
                                 interport_w=mesh_interport_w, name=f'middle_mesh_pull_in_ps_{i}'),
                   dc, include_input_ps=False,
-                  name=f'mzi_middle_mesh_pull_in_ps_{i}') for i, ps in enumerate((aim_pull_in_full_ps,
-                                                                                  aim_pull_in_full_ps.update(
-                                                                                      ps=aim_ps_pull_in.update(
+                  name=f'mzi_middle_mesh_pull_in_ps_{i}') for i, ps in enumerate((pull_in_full_ps,
+                                                                                  pull_in_full_ps.update(
+                                                                                      ps=ps_pull_in.update(
                                                                                           **ps_taper(-0.05, 10))
                                                                                   )))
 ]
 
-middle_mesh_tdc = [aim_pull_apart_full_tdc.nazca_cell('middle_mesh_pull_apart_tdc'),
-                   aim_pull_in_full_tdc.nazca_cell('middle_mesh_pull_in_tdc'),
-                   aim_pull_apart_full_tdc.update(
-                       tdc=aim_tdc_pull_apart.update(**tdc_taper(-0.2, 40))
+middle_mesh_tdc = [pull_apart_full_tdc.nazca_cell('middle_mesh_pull_apart_tdc'),
+                   pull_in_full_tdc.nazca_cell('middle_mesh_pull_in_tdc'),
+                   pull_apart_full_tdc.update(
+                       tdc=tdc_pull_apart.update(**tdc_taper(-0.2, 40))
 ).nazca_cell('middle_mesh_pull_apart_taper_tdc')]
 
 middle_mesh_test_structures = middle_mesh_pull_apart + middle_mesh_pull_in + middle_mesh_tdc
@@ -785,7 +785,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             len_x = 0 * (mesh_ts_idx >= num_ps_middle_mesh)
             # Nate: added a quick 0, -20 hack to fix drc
             ts = test_structure.put(1250 + shift_x + mesh_layer_x * (layer - 3),
-                                    output_interposer.pin['a7'].y + 20, flip=True)
+                                   output_interposer.pin['a7'].y + 20, flip=True)
             chip.m1_ic.bend_strt_bend_p2p(ts.pin['gnd_l'], autoroute_nems_gnd.pin['a5'], radius=4).put()
             chip.m2_ic.bend_strt_bend_p2p(ts.pin['pos_l'], autoroute_nems_pos.pin['a6'], radius=4).put()
             chip.v1_via_4.put(flop=True)
@@ -869,7 +869,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
 
             # mesh tap test
             test_tap = tap_detector.put(output_interposer.pin['a6'].x - 40,
-                                        output_interposer.pin['a6'].y, flip=False)
+                                       output_interposer.pin['a6'].y, flip=False)
             d = detector.put(test_tap.pin['a0'])
             extra_bend_p2p(d.pin['n'], autoroute_therm_anode.pin['a5'], 4, -90, 60)
             extra_bend_p2p(d.pin['p'], autoroute_therm_cathode.pin['a5'], 10, -90, 70)
@@ -1003,14 +1003,14 @@ with nd.Cell('aim_layout') as aim_layout:
     bb_goos_1.put(chiplet_divider_x + 350, standard_grating_interport - 3)
     bb_goos_2.put(input_interposer.bbox[0] + chip_w - 535, standard_grating_interport - 3)
     chip_horiz_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],
-                        -standard_grating_interport + edge_shift_dim[1] - perimeter_w)
+                       -standard_grating_interport + edge_shift_dim[1] - perimeter_w)
     chip_horiz_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],
-                        -standard_grating_interport + edge_shift_dim[1] + chip_h)
+                       -standard_grating_interport + edge_shift_dim[1] + chip_h)
     chip_vert_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],
-                       -standard_grating_interport + edge_shift_dim[1])
+                      -standard_grating_interport + edge_shift_dim[1])
     chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
-                       -standard_grating_interport + edge_shift_dim[1])
+                      -standard_grating_interport + edge_shift_dim[1])
 
-# nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly
-nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+# nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])

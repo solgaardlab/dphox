@@ -74,11 +74,11 @@ if __name__ == 'main':
         gratings_4.put(splitter_tree.bbox[2], 6 * interport_w)
         gratings_4_length.put(mesh.bbox[2] - mzi_no_tap.bbox[2], 6 * interport_w, flop=True)
         chip.cutback_coupler_test(3, gap_w, interaction_l, interport_w, cp_radius).put(cp_len * 5.5 + arm_l,
-                                                                                       6 * interport_w)
+                                                                                      6 * interport_w)
         gratings_3.put(cp_len * 5.5 + arm_l, 6 * interport_w, flop=True)
         chip.sampling_test(gap_ws=[0.3, 0.35, 0.4, 0.45], **mzi_kwargs).put(cp_len * 10.85 + arm_l, 6 * interport_w)
         chip.coupler(gap_w, interaction_l, interport_w, arm_l, cp_radius, with_gratings=False).put(cp_len * 8.5 + arm_l,
-                                                                                                   6 * interport_w)
+                                                                                                  6 * interport_w)
         gratings_4.put(cp_len * 10.85 + arm_l, 6 * interport_w, flop=True)
         gratings_4.put(cp_len * 12.85 + 2 * arm_l, 6 * interport_w)
         gratings_2.put(cp_len * 8.5 + arm_l, 6 * interport_w, flop=True)
@@ -126,13 +126,13 @@ if __name__ == 'main':
                                 pin_prefix=f'v{idx // 2}.{idx % 2}.').put(start_x, 0)
             chip.autoroute_turn(cxns, period=70, final_period=15,
                                 pin_prefix=f'g{idx // 2}.{idx % 2}.', connector_x=65).put(start_x - ground_dist, 0,
-                                                                                          flop=True)
+                                                                                         flop=True)
             chip.autoroute_turn(cxns, period=70, final_period=20,
                                 pin_prefix=f'v{idx // 2}.{idx % 2}.').put(start_x, 15 * interport_w, flip=True)
             chip.autoroute_turn(cxns, period=70, final_period=15,
                                 pin_prefix=f'g{idx // 2}.{idx % 2}.', connector_x=65).put(start_x - ground_dist,
-                                                                                          15 * interport_w,
-                                                                                          flop=True, flip=True)
+                                                                                         15 * interport_w,
+                                                                                         flop=True, flip=True)
             end_x.append(start_x - (num_cxns + 1) * 7.5 - 65 - ground_dist)
             end_x.append(start_x + np.arange(num_cxns) * 20 + 15)
             if idx < num_layers // 2:
@@ -221,10 +221,10 @@ if __name__ == 'main':
                         coupler.put(s * (j + 2) + 2 * radius_id + cx, 2 * radius_id + 0.1 + 150 + cy)
                     elif i == 2:
                         chip.waveguide_ic.strt(interaction_l_id).put(s * (j + 2) + 2 * radius_id,
-                                                                     2 * radius_id + 0.1 + 200 + gap_w_id + waveguide_w)
+                                                                    2 * radius_id + 0.1 + 200 + gap_w_id + waveguide_w)
                     else:
                         chip.waveguide_ic.strt(interaction_l_id).put(s * (j + 2) + 2 * radius_id,
-                                                                     2 * radius_id + 0.1 + 100)
+                                                                    2 * radius_id + 0.1 + 100)
 
         id_x = splitter_tree_test.bbox[2] - 320
         invdes_mesh.put(id_x, 22 * interport_w, flip=True)
@@ -233,9 +233,9 @@ if __name__ == 'main':
                        with_gratings=False, output_phase_shift=False, tap_notch=0,
                        input_phase_shift=False).put(-horiz_dist - 150, 17 * interport_w)
         chip.cutback_coupler_test(4, gap_w, interaction_l, interport_w, cp_radius).put(-horiz_dist - 150,
-                                                                                       13 * interport_w)
+                                                                                      13 * interport_w)
         chip.coupler(gap_w, interaction_l, interport_w, arm_l, cp_radius, with_gratings=False).put(-horiz_dist,
-                                                                                                   11 * interport_w)
+                                                                                                  11 * interport_w)
 
         # gratings and interposers
 
@@ -284,13 +284,13 @@ if __name__ == 'main':
 
         chip.autoroute_turn(cxns, period=70, final_period=15, pin_prefix=f'g0.').put(cp_len + 7, 0)
         chip.autoroute_turn(cxns, period=70, final_period=25, pin_prefix=f'v0.').put(cp_len + 7 - ground_dist, 0,
-                                                                                     flop=True)
+                                                                                    flop=True)
         end_x.extend([cp_len + 7 - 25 * np.flipud(np.arange(4)) - 15 - ground_dist, cp_len + 7 + 37.5])
         end_lengths.extend([25 * np.arange(4), 0])
         widths.extend([np.ones(4) * 15, 60])
         chip.autoroute_turn(cxns, period=70, final_period=15, pin_prefix=f'v1.').put(start_splitter_x, 0)
         chip.autoroute_turn(cxns, period=70, final_period=25, pin_prefix=f'g1.').put(start_splitter_x - ground_dist, 0,
-                                                                                     flop=True)
+                                                                                    flop=True)
         chip.autoroute_turn(cxns, period=70, final_period=25, pin_prefix=f'g2.').put(
             start_splitter_x + inter_heater_dist, 0)
         chip.autoroute_turn(cxns, period=70, final_period=15, pin_prefix=f'v2.').put(
@@ -368,7 +368,7 @@ if __name__ == 'main':
             start_x = cp_len + 7
             chip.autoroute_turn(cxns_top1, period=70, final_period=25, pin_prefix=f'vt0.').put(start_x, 0)
             chip.autoroute_turn(cxns_top1, period=70, final_period=15, pin_prefix=f'gt0.').put(start_x - ground_dist, 0,
-                                                                                               flop=True)
+                                                                                              flop=True)
             end_x.extend([start_x - ground_dist - 37.5, start_x + 25 * np.arange(4) + 15])
             end_lengths.extend([0, np.zeros(4)])  # 25 * np.arange(4)
             widths.extend([60, np.ones(4) * 15])
@@ -431,7 +431,7 @@ if __name__ == 'main':
 
         invdes_chiplet = nd.netlist.load_gds('invdes_chiplet.design', newcellname='invdes_chiplet', cellname='Design2')
         invdes_chiplet.put(-invdes_chiplet.bbox[0] + invdes_chiplet.bbox[2] + splitter_tree.bbox[2] - 550,
-                           22 * interport_w - invdes_chiplet.bbox[3] + 25.109, flop=True)
+                          22 * interport_w - invdes_chiplet.bbox[3] + 25.109, flop=True)
 
     sensor_and_inv_design_chiplet_x = sensor_and_inv_design_chiplet.bbox[2] - sensor_and_inv_design_chiplet.bbox[
         0] + meshes_chiplet_x + CHIPLET_SEP + 70

@@ -11,7 +11,6 @@ MEEP_IMPORTED = False  # for meep sims
 try:
     SIMPHOX_IMPORTED = True
     from simphox.device import ModeDevice, MaterialBlock, SILICON, Material
-
     AIR = Material('Air', (0, 0, 0), 1)
 except ImportError:
     SIMPHOX_IMPORTED = False
@@ -123,10 +122,10 @@ class LateralNemsPS(Pattern):
                                  symmetric=False
                                  )
             rib_brims_etch = [copy(rib_etch).translate(rib_brim_x),
-                              copy(rib_etch).flip(horiz=True).translate(wg.size[0] - rib_brim_x)]
+                              copy(rib_etch).flip(horiz=True).translate(wg.size[0])]
 
             rib_brims = [copy(rib_brim).translate(rib_brim_x),
-                         copy(rib_brim).flip(horiz=True).translate(wg.size[0] - rib_brim_x)]
+                         copy(rib_brim).flip(horiz=True).translate(wg.size[0])]
 
             gnd_connections = [
                 Box(gnd_connector[1:]).align(rib_brims[0]).valign(rib_brim, bottom=True, opposite=True),
@@ -510,10 +509,10 @@ class NemsAnchor(Pattern):
             return NemsAnchor(**config)
 
 
-class GndWaveguide(Pattern):
+class ContactWaveguide(Pattern):
     def __init__(self, waveguide_w: float, length: float, rib_brim_w: float, gnd_connector_dim: Optional[Dim2],
-                 gnd_contact_dim: Optional[Dim2], flip: bool = False):
-        """Grounded waveguide, typically required for photonic MEMS, consisting of a rib brim
+                 gnd_contact_dim: Optional[Dim2], rib_etch_grow: float, flipped: bool = False):
+        """Contacted waveguide, typically required for photonic MEMS, consisting of a rib brim
         around an (optionally) tapered waveguide.
 
         Args:
@@ -522,13 +521,16 @@ class GndWaveguide(Pattern):
             gnd_contact_dim:
             rib_brim_w:
             gnd_connector_dim:
-            flip:
+            rib_etch_grow:
+            flipped:
         """
         self.waveguide_w = waveguide_w
         self.rib_brim_w = rib_brim_w
         self.length = length
         self.gnd_contact_dim = gnd_contact_dim
         self.gnd_connector_dim = gnd_connector_dim
+        self.rib_etch_grow = rib_etch_grow
+        self.flipped = flipped
 
         pads = []
 
@@ -538,23 +540,22 @@ class GndWaveguide(Pattern):
         brim_l = min(length / 2, brim_l)
 
         wg = Waveguide(waveguide_w=waveguide_w, length=length)
+        rib_brim_etch = Waveguide(waveguide_w=waveguide_w + 2 * rib_etch_grow, length=2 * brim_l, taper_ls=(brim_l,),
+                                  taper_params=(brim_taper,)).align(wg)
+        gnd_connection = Box(gnd_connector_dim).align(wg).valign(wg, bottom=not flipped, opposite=True)
         rib_brim = Waveguide(waveguide_w=waveguide_w, length=2 * brim_l, taper_ls=(brim_l,),
                              taper_params=(brim_taper,)).align(wg)
-        ream_grow = 0.25
-        rib_brim_ream = Waveguide(waveguide_w=waveguide_w + 2 * ream_grow, length=2 * brim_l, taper_ls=(brim_l,),
-                                  taper_params=(brim_taper,)).align(wg)
-        gnd_connection = Box(gnd_connector_dim).align(wg).valign(wg, bottom=not flip, opposite=True)
         rib_brim = [Pattern(poly) for poly in (rib_brim.shapely - wg.shapely)]
-        rib_brim_ream = [Pattern(poly) for poly in (rib_brim_ream.shapely - wg.shapely)]
+        rib_brim_etch = [Pattern(poly) for poly in (rib_brim_etch.shapely - wg.shapely)]
 
         if gnd_contact_dim is not None:
-            pad = Box(gnd_contact_dim).align(gnd_connection).valign(gnd_connection, bottom=not flip, opposite=True)
+            pad = Box(gnd_contact_dim).align(gnd_connection).valign(gnd_connection, bottom=not flipped, opposite=True)
             pads.append(pad)
 
         patterns = rib_brim + [wg, gnd_connection] + pads
 
-        super(GndWaveguide, self).__init__(*patterns)
-        self.wg, self.rib_brim, self.pads = wg, rib_brim_ream, pads
+        super(ContactWaveguide, self).__init__(*patterns)
+        self.wg, self.rib_brim, self.pads = wg, rib_brim_etch, pads
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['b0'] = Port(length, 0)
         if gnd_contact_dim is not None:
@@ -688,8 +689,8 @@ class LateralNemsFull(Multilayer):
             'gnd_via': gnd_via.config,
         })
 
-        top = anchor.copy.put(device.port['fin0'])
-        bot = anchor.copy.put(device.port['fin1'])
+        top = anchor.copy.to(device.port['fin0'])
+        bot = anchor.copy.to(device.port['fin1'])
         full = Pattern(top, bot, device)
         vias = []
         device_pads = device.pads if device.pads is not None else []
@@ -782,64 +783,66 @@ class LateralNemsFull(Multilayer):
 
 class NemsMillerNode(Multilayer):
     def __init__(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
-                 gap_w: float, bend_radius: float, bend_extension: float, lr_nanofin_w: float,
-                 ud_nanofin_w: float, lr_gap_w: float, ud_gap_w: float, lr_pad_dim: Optional[Dim2] = None,
-                 ud_pad_dim: Optional[Dim2] = None, lr_connector_dim: Optional[Dim2] = None,
-                 ud_connector_dim: Optional[Dim2] = None):
+                 gap_w: float, bend_radius: float, upper_bend_extension: float, lower_bend_extension: float,
+                 ps_comb: SimpleComb, comb_wg: ContactWaveguide, gnd_wg: ContactWaveguide, tdc_pad_dim: Dim4,
+                 connector_dim: Dim2, gnd_wg_l: Optional[float] = None):
         self.waveguide_w = waveguide_w
         self.upper_interaction_l = upper_interaction_l
         self.lower_interaction_l = lower_interaction_l
         self.bend_radius = bend_radius
-        self.bend_extension = bend_extension
-        self.lr_nanofin_w = lr_nanofin_w
-        self.ud_nanofin_w = ud_nanofin_w
-        self.lr_pad_dim = lr_pad_dim
-        self.ud_pad_dim = ud_pad_dim
-        self.lr_connector_dim = lr_connector_dim
-        self.ud_connector_dim = ud_connector_dim
+        self.upper_bend_extension = upper_bend_extension
+        self.lower_bend_extension = lower_bend_extension
         self.gap_w = gap_w
+        self.tdc_pad_dim = tdc_pad_dim
+        self.connector_dim = connector_dim
 
-        connectors, pads = [], []
-
-        bend_height = 2 * bend_radius + bend_extension
-        interport_distance = waveguide_w + 2 * bend_height + gap_w
+        lower_bend_height = 2 * bend_radius + lower_bend_extension
+        upper_bend_height = 2 * bend_radius + upper_bend_extension
+        interport_w = waveguide_w + upper_bend_height + lower_bend_height + gap_w
 
         if not upper_interaction_l <= lower_interaction_l:
             raise ValueError("Require upper_interaction_l <= lower_interaction_l by convention.")
 
-        lower_path = Path(waveguide_w).dc((bend_radius, bend_height), lower_interaction_l, use_radius=True)
-        upper_path = Path(waveguide_w).dc((bend_radius, bend_height), upper_interaction_l,
+        lower_path = Path(waveguide_w).dc((bend_radius, lower_bend_height), lower_interaction_l, use_radius=True)
+        upper_path = Path(waveguide_w).dc((bend_radius, upper_bend_height), upper_interaction_l,
                                           (lower_interaction_l - upper_interaction_l) / 2,
                                           inverted=True, use_radius=True)
-        upper_path.translate(dx=0, dy=interport_distance)
+        upper_path.translate(dx=0, dy=interport_w)
 
         dc = Pattern(lower_path, upper_path)
+        gnd_wg_l = gnd_wg_l if gnd_wg_l is not None else upper_bend_extension
+        wg = Waveguide(waveguide_w, gnd_wg_l)
+        comb_base = Pattern(
+            comb_wg.copy.halign(wg),
+            comb_wg.copy.halign(wg, left=False)
+        )
 
-        nanofin_y = ud_nanofin_w / 2 + gap_w / 2 + waveguide_w + ud_gap_w
-        nanofins = [Box((lower_interaction_l, ud_nanofin_w)).align(dc).translate(dx=0, dy=-nanofin_y)]
-        pad_y = ud_connector_dim[1] + ud_pad_dim[1] / 2
-        pads += [Box(ud_pad_dim).align(nanofins[0]).translate(dy=-pad_y)]
-        connector = Box(ud_connector_dim).align(pads[0])
-        connectors += [connector.copy.valign(pads[0], bottom=True, opposite=True).halign(pads[0]),
-                       connector.copy.valign(pads[0], bottom=True, opposite=True).halign(pads[0], left=False)]
+        patterns = [dc]
 
-        nanofin_x = lr_nanofin_w / 2 + lr_gap_w + upper_interaction_l / 2 + bend_radius + waveguide_w / 2
-        pad_x = lr_connector_dim[0] + lr_pad_dim[0] / 2
-        nanofin_y = bend_radius + waveguide_w + gap_w / 2 + bend_extension / 2
+        nanofin_y = -dc.center[1] + lower_bend_height - waveguide_w / 2 - tdc_pad_dim[-1] / 2 - tdc_pad_dim[2]
+        nanofin = Box((lower_interaction_l, tdc_pad_dim[-1])).align(dc).translate(dx=0, dy=nanofin_y)
+        connector = Box(connector_dim).align(nanofin)
+        connector = Pattern(connector.copy.valign(nanofin, bottom=False, opposite=True).halign(nanofin),
+                            connector.copy.valign(nanofin, bottom=False, opposite=True).halign(nanofin, left=False))
+        tdc_pad = Box(tdc_pad_dim[:2]).align(connector).valign(connector, opposite=True, bottom=False)
+        patterns += [connector, tdc_pad, nanofin]
 
-        nanofins += [Box((lr_nanofin_w, bend_extension)).align(dc).translate(dx=-nanofin_x, dy=nanofin_y),
-                     Box((lr_nanofin_w, bend_extension)).align(dc).translate(dx=nanofin_x, dy=nanofin_y)]
-        pads += [Box(lr_pad_dim).align(nanofins[1]).translate(dx=-pad_x, dy=0),
-                 Box(lr_pad_dim).align(nanofins[2]).translate(dx=pad_x, dy=0)]
-        connector = Box(lr_connector_dim).align(pads[1])
-        connectors += [connector.copy.halign(pads[1], left=True, opposite=True).valign(pads[1]),
-                       connector.copy.halign(pads[1], left=True, opposite=True).valign(pads[1], bottom=False)]
-        connector = Box(lr_connector_dim).align(pads[2])
-        connectors += [connector.copy.halign(pads[2], left=False, opposite=True).valign(pads[2]),
-                       connector.copy.halign(pads[2], left=False, opposite=True).valign(pads[2], bottom=False)]
+        connector_pattern = Pattern(ps_comb.align(comb_base).valign(comb_base, opposite=True), comb_base, wg,
+                                    call_union=False)
+        connect_port = Port(bend_radius + (lower_interaction_l - upper_interaction_l) / 2,
+                            interport_w - bend_radius - upper_bend_extension + gnd_wg_l, -np.pi / 2)
+        connector_left = connector_pattern.copy.to(connect_port)
+        connector_right = connector_pattern.copy.flip().to(connect_port).translate(bend_radius * 2 + upper_interaction_l)
+        patterns += [connector_left, connector_right]
 
-        super(NemsMillerNode, self).__init__(*([dc] + nanofins + connectors + pads))
-        self.dc, self.connectors, self.nanofins, self.pads = dc, connectors, nanofins, pads
+        patterns += [gnd_wg.copy.to(Port(0, 0, -np.pi)), gnd_wg.copy.flip().to(Port(0, interport_w, -np.pi)),
+                     gnd_wg.copy.flip().to(Port(dc.size[0], 0)), gnd_wg.copy.to(Port(dc.size[0], interport_w))]
+
+        super(NemsMillerNode, self).__init__([(Pattern(*patterns), 'seam')])
+        self.port['a0'] = Port(-gnd_wg.size[0], 0, -np.pi)
+        self.port['a1'] = Port(-gnd_wg.size[0], interport_w, -np.pi)
+        self.port['b0'] = Port(dc.size[0] + gnd_wg.size[0], 0)
+        self.port['b1'] = Port(dc.size[0] + gnd_wg.size[0], interport_w)
 
 
 # class RingResonator(Pattern):
