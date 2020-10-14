@@ -3,9 +3,9 @@ import itertools
 import nazca as nd
 from datetime import date
 from dphox.aim import *
-from dphox.schematic import AIMNazca
+from dphox.layout import NazcaLayout
 
-chip = AIMNazca(
+chip = NazcaLayout(
     passive_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_passive.gds',
     waveguides_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35_waveguides.gds',
     active_filepath='/Users/sunilpai/Documents/research/dphox/aim_lib/APSUNY_v35a_active.gds',
@@ -830,13 +830,11 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             chip.m2_ic.bend_strt_bend_p2p(mzi_node_nems.pin['n2'], autoroute_nems_anode.pin['a6'], radius=8).put()
             chip.m1_ic.bend_strt_bend_p2p(mzi_node_nems.pin['p1'], autoroute_nems_cathode.pin['a5'], radius=8).put()
             chip.m2_ic.bend_strt_bend_p2p(mzi_node_nems.pin['p2'], autoroute_nems_cathode.pin['a6'], radius=8).put()
-            chip.v1_via_4.put(mzi_node_nems.pin['p1'])
             chip.v1_via_4.put(autoroute_nems_cathode.pin['p1'], flop=True)
             chip.m2_ic.bend_strt_bend_p2p(mzi_node_thermal.pin['n1'], autoroute_therm_anode.pin['a5'], radius=8).put()
             chip.m2_ic.bend_strt_bend_p2p(mzi_node_thermal.pin['n2'], autoroute_therm_anode.pin['a6'], radius=8).put()
             chip.m1_ic.bend_strt_bend_p2p(mzi_node_thermal.pin['p1'], autoroute_therm_cathode.pin['a5'], radius=8).put()
             chip.m2_ic.bend_strt_bend_p2p(mzi_node_thermal.pin['p2'], autoroute_therm_cathode.pin['a6'], radius=8).put()
-            chip.v1_via_4.put(mzi_node_thermal.pin['p1'])
             chip.v1_via_4.put(autoroute_therm_cathode.pin['p1'], flop=True)
 
         if layer == 13:
@@ -849,6 +847,8 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             extra_bend_p2p(d2.pin['n'], autoroute_therm_anode.pin['a6'], 6, 180, 20)
             extra_bend_p2p(d1.pin['p'], autoroute_therm_cathode.pin['a5'], 3, -180, 20)
             extra_bend_p2p(d2.pin['p'], autoroute_therm_cathode.pin['a6'], 3, -180, 20)
+
+            node = miller_node.nazca_cell('miller_node')
 
         if layer == 14:
             # mesh TDC test

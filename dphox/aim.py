@@ -57,11 +57,11 @@ class AIMNemsTDC(LateralNemsTDC):
 class AIMNemsAnchor(NemsAnchor):
     def __init__(self, fin_dim=(100, 0.22), shuttle_dim=(50, 2), spring_dim=None, straight_connector=(0.25, 1),
                  tether_connector=(2, 1, 0.5, 1), pos_electrode_dim=(90, 4, 0.5), gnd_electrode_dim=(3, 4),
-                 include_fin_dummy=True, shuttle_stripe_w=1):
+                 include_support_spring=True, shuttle_stripe_w=1):
         super(AIMNemsAnchor, self).__init__(fin_dim=fin_dim, shuttle_dim=shuttle_dim, spring_dim=spring_dim,
                                             straight_connector=straight_connector, tether_connector=tether_connector,
                                             pos_electrode_dim=pos_electrode_dim, gnd_electrode_dim=gnd_electrode_dim,
-                                            include_fin_dummy=include_fin_dummy, shuttle_stripe_w=shuttle_stripe_w)
+                                            include_support_spring=include_support_spring, shuttle_stripe_w=shuttle_stripe_w)
 
 
 class AIMNemsFull(LateralNemsFull):
@@ -72,8 +72,8 @@ class AIMNemsFull(LateralNemsFull):
                  trace_w=3):
         super(AIMNemsFull, self).__init__(device=device, anchor=anchor, gnd_via=gnd_via,
                                           pos_via=pos_via, trace_w=trace_w, pos_box_w=pos_box_w,
-                                          gnd_box_h=gnd_box_h, clearout_dim=clearout_dim, dope_expand=0.3,
-                                          dope_grow=0.1, ridge='seam', rib='ream', shuttle_dope='pdam',
+                                          gnd_box_h=gnd_box_h, clearout_dim=clearout_dim,  clearout_etch_stop_grow=0.5,
+                                          dope_expand=0.3, dope_grow=0.1, ridge='seam', rib='ream', shuttle_dope='pdam',
                                           spring_dope='pdam', pad_dope='pppam', pos_metal='m2am',
                                           gnd_metal='m1am', clearout_layer='clearout', clearout_etch_stop_layer='snam')
 
@@ -87,7 +87,7 @@ pull_apart_anchor = AIMNemsAnchor()
 pull_in_anchor = AIMNemsAnchor(
     fin_dim=(50, 0.22), shuttle_dim=(40, 3),
     pos_electrode_dim=None, gnd_electrode_dim=None,
-    spring_dim=None, include_fin_dummy=False, shuttle_stripe_w=0
+    spring_dim=None, include_support_spring=False, shuttle_stripe_w=0
 )
 tether_anchor_tdc = AIMNemsAnchor(
     spring_dim=(tether_interaction_l + 5, 0.22),
@@ -95,7 +95,7 @@ tether_anchor_tdc = AIMNemsAnchor(
     fin_dim=(tether_interaction_l, 0.4),
     shuttle_dim=(10, 3),
     straight_connector=None,
-    include_fin_dummy=False
+    include_support_spring=False
 )
 tether_anchor_ps = AIMNemsAnchor(
     shuttle_dim=(10, 3),
@@ -103,7 +103,7 @@ tether_anchor_ps = AIMNemsAnchor(
     pos_electrode_dim=(tether_phaseshift_l, 4, 0.5),
     fin_dim=(tether_phaseshift_l, 0.22),
     straight_connector=None,
-    include_fin_dummy=False
+    include_support_spring=False
 )
 
 pull_in_full_ps = AIMNemsFull(device=ps_pull_in, anchor=pull_in_anchor,
@@ -145,3 +145,33 @@ tether_full_tdc = pull_apart_full_tdc.update(
     anchor=tether_anchor_tdc,
     tdc=tether_tdc,
     clearout_dim=(tether_interaction_l + 5, 0.5))
+
+miller_node = NemsMillerNode(
+    waveguide_w=0.48, upper_interaction_l=50, lower_interaction_l=55,
+    gap_w=0.1, bend_radius=5, upper_bend_extension=58, lower_bend_extension=10,
+    tdc_pad_dim=(55, 5, 0.5, 0.15), connector_dim=(0.1, 0.5),
+    ps_comb=SimpleComb(
+        tooth_dim=(0.3, 3, 0.15),
+        gnd_electrode_dim=(20, 5),
+        pos_electrode_dim=(80, 10),
+        overlap=0,
+        edge_tooth_factor=5,
+        side_align=True
+    ),
+    comb_wg=ContactWaveguide(
+        waveguide_w=0.48, length=5, gnd_contact_dim=(1, 2),
+        rib_brim_w=2, gnd_connector_dim=(1, 2),
+        flipped=False, rib_etch_grow=0.25
+    ),
+    gnd_wg=ContactWaveguide(
+        waveguide_w=0.48, length=5, gnd_contact_dim=(3, 3),
+        rib_brim_w=2, gnd_connector_dim=(0.5, 2),
+        flipped=False, rib_etch_grow=0.25
+    ),
+    gnd_wg_l=20, clearout_etch_stop_grow=0.5,
+    ridge='seam', rib='ream', dope='pppam', pos_metal='m2am',
+    gnd_metal='m1am', clearout_layer='clearout', clearout_etch_stop_layer='snam',
+    gnd_via=Via((0.4, 0.4), 0.1, metal='m1am', via='cbam', shape=(2, 2), pitch=1),
+    pos_via=Via((0.4, 0.4), 0.1, metal=['m1am', 'm2am'], via=['cbam', 'v1am'], shape=(20, 2), pitch=1),
+    trace_w=3, dope_expand=0.3, dope_grow=0.1, ps_clearout_dim=(20, 70), tdc_clearout_dim=(20, 70),
+)

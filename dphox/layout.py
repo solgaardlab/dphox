@@ -13,7 +13,7 @@ from .constants import AIM_PDK_WAVEGUIDE_PATH, AIM_PDK_PASSIVE_PATH, AIM_PDK_ACT
 from .typing import Optional
 
 
-class AIMNazca:
+class NazcaLayout:
     def __init__(self, passive_filepath: str = AIM_PDK_PASSIVE_PATH, waveguides_filepath: str = AIM_PDK_WAVEGUIDE_PATH,
                  active_filepath: str = AIM_PDK_ACTIVE_PATH, stack: Dict = AIM_STACK, pdk_dict: Dict = AIM_PDK,
                  accuracy: float = 0.001, waveguide_w: float = 0.48):
@@ -208,7 +208,7 @@ class AIMNazca:
     def bond_pad_array(self, n_pads: Shape2, pitch: Union[float, Dim2] = 100,
                        pad_dim: Dim2 = (40, 40), labels: Optional[np.ndarray] = None,
                        use_labels: bool = True, stagger_x_frac: float = 0, use_ml_only: bool = False):
-        # TODO(): move this out of schematic.py
+        # TODO(): move this out of layout.py
         pad_w, pad_l = pad_dim
         pitch = pitch if isinstance(pitch, tuple) else (pitch, pitch)
         with nd.Cell(name=f'bond_pad_array_{n_pads}_{pitch}') as bond_pad_array:
@@ -234,7 +234,7 @@ class AIMNazca:
         return bond_pad_array
 
     def eutectic_array(self, n_pads: Shape2, pitch: float = 20, width: float = 12, strip: bool = True):
-        # TODO(): move this out of schematic.py
+        # TODO(): move this out of layout.py
         def oct(w: float):
             a = w / (1 + np.sqrt(2)) / 2
             return [(w / 2, a), (a, w / 2), (-a, w / 2), (-w / 2, a),

@@ -232,18 +232,24 @@ class Pattern:
             self.port[name] = Port(port.x + dx, port.y + dy, port.a)
         return self
 
-    def align(self, c: Union["Pattern", Tuple[float, float]]) -> "Pattern":
+    def align(self, pattern_or_center: Union["Pattern", Tuple[float, float]],
+              other: Union["Pattern", Tuple[float, float]] = None) -> "Pattern":
         """Align center of pattern
 
         Args:
-            c: A pattern (align to the pattern's center) or a center point for alignment
+            pattern_or_center: A pattern (align to the pattern's center) or a center point for alignment
+            other: If specified, instead of aligning based on this pattern's center,
+                align based on another pattern's center and translate accordingly.
 
         Returns:
             Aligned pattern
 
         """
-        old_x, old_y = self.center
-        center = c if isinstance(c, tuple) else c.center
+        if other is None:
+            old_x, old_y = self.center
+        else:
+            old_x, old_y = other if isinstance(other, tuple) else other.center
+        center = pattern_or_center if isinstance(pattern_or_center, tuple) else pattern_or_center.center
         self.translate(center[0] - old_x, center[1] - old_y)
         return self
 
@@ -413,6 +419,7 @@ class Pattern:
         box = Pattern(Path(dim[1]).segment(dim[0]).translate(dx=0, dy=dim[1] / 2)).align(center)
         box_grow = box.offset(clearout_etch_stop_grow)
         return [(box, clearout_layer), (box_grow, clearout_etch_stop_layer)]
+
 
     def replace(self, pattern: "Pattern", center: Optional[Dim2] = None, raise_port: bool = True):
         pattern_bbox = Pattern(Path(pattern.size[1]).segment(pattern.size[0]))
