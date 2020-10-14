@@ -78,7 +78,7 @@ class Multilayer:
         self.translate(center[0] - old_x, center[1] - old_y)
         return self
 
-    def translate(self, dx: float, dy: float) -> "Multilayer":
+    def translate(self, dx: float = 0, dy: float = 0) -> "Multilayer":
         """Translate the multilayer by translating all of the patterns within it individually
 
         Args:
@@ -108,6 +108,25 @@ class Multilayer:
             pattern.rotate(angle, origin)
         self.layer_to_pattern, self.port = self._init_multilayer()
         return self
+
+    def flip(self, center: Tuple[float, float] = (0, 0), horiz: bool = False) -> "Multilayer":
+        """Flip the multilayer about center (vertical, or about x-axis, by default)
+
+        Args:
+            center: center about which to flip
+            horiz: flip horizontally instead of vertically
+
+        Returns:
+            Flipped pattern
+
+        """
+        for pattern, _ in self.pattern_to_layer:
+            pattern.flip(center, horiz)
+        self.layer_to_pattern, self.port = self._init_multilayer()
+        return self
+
+    def to(self, port: Port):
+        return self.rotate(port.a_deg).translate(port.x, port.y)
 
     @property
     def copy(self) -> "Multilayer":
@@ -183,8 +202,17 @@ class Multilayer:
         def _add_trimesh_layer(pattern, zrange, layer):
             if layer in layer_to_color:
                 zmin, zmax = zrange
-                layer_meshes = [trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
-                                for poly in pattern]
+                # layer_meshes = [trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
+                #                 for poly in pattern]
+                layer_meshes = []
+                for poly in pattern:
+                    try:
+                        layer_meshes.append(
+                            trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
+                        )
+                    except IndexError:
+                        print('WARNING: bad polygon, skipping')
+                        print(poly)
                 mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
                 mesh.visual.face_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
                 meshes[layer] = mesh
@@ -269,6 +297,7 @@ class Multilayer:
                                   for comp, layer in self.pattern_to_layer}
         self.layer_to_pattern, self.port = self._init_multilayer()
         return [(fill, layer_name)]
+
 
 
 class Via(Multilayer):
