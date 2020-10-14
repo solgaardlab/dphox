@@ -589,7 +589,8 @@ middle_mesh_tdc = [pull_apart_full_tdc.nazca_cell('middle_mesh_pull_apart_tdc'),
                        tdc=tdc_pull_apart.update(**tdc_taper(-0.2, 40))
 ).nazca_cell('middle_mesh_pull_apart_taper_tdc')]
 
-middle_mesh_test_structures = middle_mesh_pull_apart + middle_mesh_pull_in + middle_mesh_tdc
+middle_mesh_test_structures = middle_mesh_pull_apart + middle_mesh_pull_in + middle_mesh_tdc + [
+    miller_node.nazca_cell('miller_node')]
 
 # gnd pad (testing side)
 with nd.Cell('gnd_pad') as gnd_pad:
@@ -778,7 +779,8 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         autoroute_therm_cathode = autoroute_4.put(layer * mesh_layer_x + 178, 1208, flip=True)
         autoroute_therm_anode = autoroute_4_extended.put(layer * mesh_layer_x + 178, 1200, flip=True)
 
-        if layer in [3, 4, 5, 9, 10, 11, 12]:
+        miller_node_pin = None
+        if layer in [3, 4, 5, 9, 10, 11, 12, 13]:
             # mid-mesh test structures
             test_structure = middle_mesh_test_structures[mesh_ts_idx]
             shift_x = 140 * (mesh_ts_idx >= num_ps_middle_mesh)
@@ -787,7 +789,17 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             ts = test_structure.put(1250 + shift_x + mesh_layer_x * (layer - 3),
                                    output_interposer.pin['a7'].y + 20, flip=True)
             chip.m1_ic.bend_strt_bend_p2p(ts.pin['gnd_l'], autoroute_nems_gnd.pin['a5'], radius=4).put()
-            chip.m2_ic.bend_strt_bend_p2p(ts.pin['pos_l'], autoroute_nems_pos.pin['a6'], radius=4).put()
+            if layer == 13:
+                chip.m2_ic.bend_strt_bend_p2p(ts.pin['pos_c'], autoroute_nems_pos.pin['a6'], radius=8).put()
+                chip.m2_ic.bend_strt_bend_p2p(ts.pin['pos_l'], autoroute_nems_pos.pin['a5'], radius=8).put()
+                chip.m2_ic.bend(4, 90).put(ts.pin['pos_r'])
+                chip.m2_ic.strt(12).put()
+                chip.m2_ic.bend(4, 90).put()
+                chip.m2_ic.strt(95).put()
+                x = chip.m2_ic.bend(4, -90).put()
+                miller_node_pin = x.pin['b0']
+            else:
+                chip.m2_ic.bend_strt_bend_p2p(ts.pin['pos_l'], autoroute_nems_pos.pin['a6'], radius=4).put()
             chip.v1_via_4.put(flop=True)
             chip.waveguide_ic.strt(shift_x + len_x).put(ts.pin['a0'])
             chip.waveguide_ic.bend(radius=7, angle=-90).put()
@@ -796,7 +808,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             grating.put(bend.pin['b0'].x, bend.pin['b0'].y, -90)
             chip.waveguide_ic.strt(7 + shift_x + len_x).put(ts.pin['a1'])
             chip.waveguide_ic.bend(radius=7, angle=-90).put()
-            chip.waveguide_ic.strt(113).put()
+            chip.waveguide_ic.strt(113 + 40 * (layer == 13)).put()
             chip.waveguide_ic.bend(radius=7, angle=-90).put()
             bend = chip.waveguide_ic.strt(7).put()
             grating.put(bend.pin['b0'].x, bend.pin['b0'].y, -90)
@@ -873,6 +885,9 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             d = detector.put(test_tap.pin['a0'])
             extra_bend_p2p(d.pin['n'], autoroute_therm_anode.pin['a5'], 4, -90, 60)
             extra_bend_p2p(d.pin['p'], autoroute_therm_cathode.pin['a5'], 10, -90, 70)
+
+        if layer == 14:  # see miller_node_pin, hacky way to add final connection for the miller node test
+            chip.m2_ic.bend_strt_bend_p2p(miller_node_pin, autoroute_nems_pos.pin['a6'], radius=8).put()
 
         for pin_nems, pin_thermal in zip(reversed([autoroute_nems_pos.pin[f'p{n}'] for n in range(7)]),
                                          reversed([autoroute_thermal_pos.pin[f'p{n}'] for n in range(7)])):

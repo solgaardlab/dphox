@@ -4,7 +4,7 @@ import gdspy as gy
 import nazca as nd
 from copy import deepcopy as copy
 from shapely.vectorized import contains
-from shapely.geometry import Polygon, MultiPolygon, GeometryCollection
+from shapely.geometry import Polygon, MultiPolygon, GeometryCollection, Point
 from shapely.ops import cascaded_union
 from shapely.affinity import translate, rotate
 from descartes import PolygonPatch
@@ -153,7 +153,7 @@ class Pattern:
 
     @classmethod
     def from_shapely(cls, shapely_pattern: Union[Polygon, GeometryCollection]) -> "Pattern":
-        collection = shapely_pattern if isinstance(shapely_pattern, Polygon)\
+        collection = shapely_pattern if isinstance(shapely_pattern, Polygon) \
             else MultiPolygon([g for g in shapely_pattern.geoms if isinstance(g, Polygon)])
         return cls(collection)
 
@@ -175,8 +175,7 @@ class Pattern:
             An array of indicators of whether a volumetric image contains the mask
 
         """
-        x_, y_ = np.mgrid[0:grid_spacing[0] * shape[0]:grid_spacing[0],
-                          0:grid_spacing[1] * shape[1]:grid_spacing[1]]
+        x_, y_ = np.mgrid[0:grid_spacing[0] * shape[0]:grid_spacing[0], 0:grid_spacing[1] * shape[1]:grid_spacing[1]]
 
         return contains(self.shapely, x_, y_)
 
@@ -311,6 +310,8 @@ class Pattern:
         # any patterns in this pattern should also be flipped
         for pattern in self.reference_patterns:
             pattern.flip(center, horiz)
+        self.port = {name: Port(-port.x + 2 * center[0], port.y, port.a) if horiz else
+                     Port(port.x, -port.y + 2 * center[1], port.a) for name, port in self.port.items()}
         return self
 
     def rotate(self, angle: float, origin: str = (0, 0)) -> "Pattern":
@@ -329,6 +330,10 @@ class Pattern:
         # any patterns in this pattern should also be rotated
         for pattern in self.reference_patterns:
             pattern.rotate(angle, origin)
+        port_to_point = {name: rotate(Point(*port.xy), angle, origin)
+                         for name, port in self.port.items()}
+        self.port = {name: Port(float(point.x), float(point.y), self.port[name].a + angle / 180 * np.pi)
+                     for name, point in port_to_point.items()}
         return self
 
     @property

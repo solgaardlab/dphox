@@ -387,7 +387,7 @@ class NemsAnchor(Pattern):
         self.tether_connector = tether_connector
         self.pos_electrode_dim = pos_electrode_dim
         self.gnd_electrode_dim = gnd_electrode_dim
-        self.include_support_fin = include_support_spring
+        self.include_support_spring = include_support_spring
         self.tooth_dim = tooth_dim
         self.shuttle_stripe_w = shuttle_stripe_w
 
@@ -638,7 +638,7 @@ class SimpleComb(Pattern):
         self.pos_pad = pos_pad
         self.gnd_comb = gnd_comb
         self.pos_comb = pos_comb
-        self.port['pos'] = Port(pos_pad.center[0], pos_pad.bounds[3], np.pi / 2)
+        self.port['pos'] = Port(pos_pad.bounds[0], pos_pad.center[1], np.pi)
 
 
 class LateralNemsFull(Multilayer):
