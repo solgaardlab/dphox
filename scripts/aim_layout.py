@@ -728,7 +728,8 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         (230, 231), (250, 252),
         (253, 254), (273, 275),
         (276, 277), (296, 298),
-        (319, 321), (323, 324),
+        (299, 301),
+        (319, 321), (322, 324),
         (342, 344)
     ]
 
@@ -740,8 +741,8 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
                        (41, 1), (46, 0), (45, 2),
                        (48, 0), (50, 1), (51, 0), (50, 2),
                        (54, 1), (54, 2), (55, 0),
-                       (59, 0), (59, 1),
-                       (63, 2), (64, 0), (64, 1),
+                       (59, 0), (59, 1), (59, 2), (60, 1),
+                       (63, 2), (64, 0), (64, 1), (64, 2),
                        (66, 1), (67, 0)
                        ]
 
@@ -765,6 +766,8 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
     alignment_mark.put(-500, 1700)
 
     mesh_ts_idx = 0
+    middle_mesh_ts_layers = [3, 4, 5, 9, 10, 11, 12, 13]
+    miller_node_pin = None
 
     for layer in range(15):
         # autoroute
@@ -779,8 +782,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         autoroute_therm_cathode = autoroute_4.put(layer * mesh_layer_x + 178, 1208, flip=True)
         autoroute_therm_anode = autoroute_4_extended.put(layer * mesh_layer_x + 178, 1200, flip=True)
 
-        miller_node_pin = None
-        if layer in [3, 4, 5, 9, 10, 11, 12, 13]:
+        if layer in middle_mesh_ts_layers:
             # mid-mesh test structures
             test_structure = middle_mesh_test_structures[mesh_ts_idx]
             shift_x = 140 * (mesh_ts_idx >= num_ps_middle_mesh)
@@ -859,8 +861,6 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             extra_bend_p2p(d2.pin['n'], autoroute_therm_anode.pin['a6'], 6, 180, 20)
             extra_bend_p2p(d1.pin['p'], autoroute_therm_cathode.pin['a5'], 3, -180, 20)
             extra_bend_p2p(d2.pin['p'], autoroute_therm_cathode.pin['a6'], 3, -180, 20)
-
-            node = miller_node.nazca_cell('miller_node')
 
         if layer == 14:
             # mesh TDC test
