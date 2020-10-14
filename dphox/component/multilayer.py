@@ -7,7 +7,8 @@ from collections import defaultdict
 import numpy as np
 import gdspy as gy
 import nazca as nd
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import Polygon, MultiPolygon, Point
+from shapely.affinity import rotate
 from shapely.ops import cascaded_union
 from descartes import PolygonPatch
 import trimesh
@@ -106,7 +107,10 @@ class Multilayer:
         """
         for pattern, _ in self.pattern_to_layer:
             pattern.rotate(angle, origin)
-        self.layer_to_pattern, self.port = self._init_multilayer()
+        self.layer_to_pattern, _ = self._init_multilayer()
+        port_to_point = {name: rotate(Point(*port.xy), angle, origin) for name, port in self.port.items()}
+        self.port = {name: Port(float(point.x), float(point.y), self.port[name].a + angle / 180 * np.pi)
+                     for name, point in port_to_point.items()}
         return self
 
     def flip(self, center: Tuple[float, float] = (0, 0), horiz: bool = False) -> "Multilayer":
@@ -122,7 +126,7 @@ class Multilayer:
         """
         for pattern, _ in self.pattern_to_layer:
             pattern.flip(center, horiz)
-        self.layer_to_pattern, self.port = self._init_multilayer()
+        self.layer_to_pattern, _ = self._init_multilayer()
         return self
 
     def to(self, port: Port):
