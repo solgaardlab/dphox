@@ -22,8 +22,8 @@ except ImportError:
 
 class Multilayer:
     def __init__(self, pattern_to_layer: List[Tuple[Union[Pattern, Path, gy.Polygon, gy.FlexPath, Polygon],
-                                                    Union[int, str]]]):
-        self.pattern_to_layer = pattern_to_layer
+                                                    Union[int, str]]] = None):
+        self.pattern_to_layer = [] if pattern_to_layer is None else pattern_to_layer
         self.layer_to_pattern, self.port = self._init_multilayer()
 
     @classmethod
@@ -186,6 +186,10 @@ class Multilayer:
         port = dict(sum([list(pattern.port.items()) for pattern, _ in self.pattern_to_layer], []))
         return pattern_dict, port
 
+    def add(self, pattern: Pattern, layer: str):
+        self.pattern_to_layer.append((pattern, layer))
+        self.layer_to_pattern, self.port = self._init_multilayer()
+
     def plot(self, ax, layer_to_color: Dict[Union[int, str], Union[Dim3, str]], alpha: float = 0.5):
         for layer, pattern in self.layer_to_pattern.items():
             ax.add_patch(PolygonPatch(pattern, facecolor=layer_to_color[layer], edgecolor='none', alpha=alpha))
@@ -194,16 +198,31 @@ class Multilayer:
         ax.set_ylim((b[1], b[3]))
         ax.set_aspect('equal')
 
+    @property
+    def size(self) -> Dim2:
+        """Size of the pattern
+
+        Returns:
+            Tuple of the form :code:`(sizex, sizey)`
+
+        """
+        b = self.bounds  # (minx, miny, maxx, maxy)
+        return b[2] - b[0], b[3] - b[1]  # (maxx - minx, maxy - miny)
+
     def to_trimesh_dict(self, layer_to_zrange: Dict[str, Tuple[float, float]],
                         process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
-                        layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad'):
+                        layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad',
+                        include_oxide: bool = True):
+        if include_oxide and 'oxide' not in self.layer_to_pattern:
+            print('WARNING: oxide not included, so adding to multilayer')
+            self.pattern_to_layer.append((Box(self.size).align(self.center), 'oxide'))
+            self.layer_to_pattern, self.port = self._init_multilayer()
         meshes = {}
 
+        # TODO(sunil): start using logging rather than printing
         def _add_trimesh_layer(pattern, zrange, layer):
             if layer in layer_to_color:
                 zmin, zmax = zrange
-                # layer_meshes = [trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
-                #                 for poly in pattern]
                 layer_meshes = []
                 for poly in pattern:
                     try:
@@ -217,7 +236,6 @@ class Multilayer:
                 mesh.visual.face_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
                 meshes[layer] = mesh
             else:
-                # TODO(sunil): start using logging
                 print(f'WARNING: layer {layer} does not have a color, skipping...')
 
         if process_extrusion is not None:
