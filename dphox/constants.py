@@ -331,7 +331,7 @@ AIM_STACK = {
         # fnam, nitride waveguide
         'etch_fn': [('fnam', 'diam', 'difference')],
         # snam, nitride waveguide
-        'etch_sn': [('snam', 'tzam', 'difference'), ('snam', 'diam', 'difference')],
+        'etch_sn': [('snam', 'tzam', 'difference'), ('snam', 'diam', 'difference'), ('snam', 'clearout', 'difference')],
         # tram, detector trench # guessing
         'etch_tr': [('tram', 'diam', 'difference')],
         # ngam, n-type ion # guessing
@@ -376,7 +376,7 @@ AIM_STACK = {
         'nnam': (1.0, 0.3, 0.3, 0.7),
         'nnnam': (1.0, 0.3, 0.3, 0.9),
         'fnam': (0.8, 0, 0, 0.5),
-        'snam': (0.8, 0, 0, 0.5)
+        'snam': (0.8, 0.5, 0, 0.5)
     },
     'cross_sections': {
         'v1_xs': [

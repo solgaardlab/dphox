@@ -420,7 +420,6 @@ class Pattern:
         box_grow = box.offset(clearout_etch_stop_grow)
         return [(box, clearout_layer), (box_grow, clearout_etch_stop_layer)]
 
-
     def replace(self, pattern: "Pattern", center: Optional[Dim2] = None, raise_port: bool = True):
         pattern_bbox = Pattern(Path(pattern.size[1]).segment(pattern.size[0]))
         align = self if center is None else center

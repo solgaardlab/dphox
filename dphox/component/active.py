@@ -891,9 +891,9 @@ class NemsMillerNode(Multilayer):
         gnd_vias = sum([gnd_via.copy.align(gwg.pads[0]).pattern_to_layer for gwg in gnd_wgs], [])
 
         ps_clearout = Box((lower_interaction_l + bend_radius + ps_clearout_dim[0],
-                           upper_bend_extension + bend_radius)).align(dc).valign(
+                           upper_bend_extension + bend_radius + ps_clearout_dim[1])).align(dc).valign(
                             interport_w - bend_radius, bottom=False)
-        ps_clearout_fill = Box((comb_drives[1].bounds[0] - comb_drives[0].bounds[2],
+        ps_clearout_fill = Box((comb_drives[1].bounds[0] - comb_drives[0].bounds[2] + 2 * ps_comb.pos_pad.size[1],
                                 upper_bend_extension)).align(ps_clearout).valign(ps_clearout, bottom=False)
         ps_clearout = ps_clearout.difference(ps_clearout_fill)
 
