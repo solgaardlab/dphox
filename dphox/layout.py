@@ -349,7 +349,7 @@ class NazcaLayout:
     def mzi_node(self, diff_ps: nd.Cell, dc: nd.Cell, tap_internal: Optional[nd.Cell] = None,
                  tap_external: Optional[nd.Cell] = None, name: Optional[str] = 'mzi',
                  include_input_ps: bool = True, grating: Optional[nd.Cell] = None, detector: Optional[nd.Cell] = None,
-                 detector_loopback_params: Dim2 = None, sep: float = 0):
+                 detector_loopback_params: Dim2 = None, sep: float = 0, extend_detector: float = 10):
         with nd.Cell(name=name) as node:
             if include_input_ps:
                 input_ps = diff_ps.put()
@@ -397,10 +397,12 @@ class NazcaLayout:
                     nd.Pin('p2').put(d.pin['p'])
                     nd.Pin('n2').put(d.pin['n'])
                 else:
-                    d = detector.put(node.pin['b1'], flip=True)
+                    self.waveguide_ic.strt(extend_detector).put(node.pin['b1'])
+                    d = detector.put(flip=True)
                     nd.Pin('p1').put(d.pin['p'])
                     nd.Pin('n1').put(d.pin['n'])
-                    d = detector.put(node.pin['b0'])
+                    self.waveguide_ic.strt(extend_detector).put(node.pin['b0'])
+                    d = detector.put()
                     nd.Pin('p2').put(d.pin['p'])
                     nd.Pin('n2').put(d.pin['n'])
             nd.put_stub()
