@@ -80,7 +80,7 @@ test_pad_x = [tapline_x[0] - 80, tapline_x[1] - 80, tapline_x[2] - 250, tapline_
 
 left_bp_x = 100
 right_bp_x = 3070
-test_pad_y = 995
+test_pad_y = 180
 test_bp_w = 212
 via_y = -770
 
@@ -597,7 +597,9 @@ with nd.Cell('gnd_pad') as gnd_pad:
     chip.ml_ic.strt(width=1716, length=60).put()
 
 with nd.Cell('test_pad') as test_pad:
-    chip.ml_ic.strt(width=1716, length=60).put()
+    for i in range(17):
+        chip.ml_ic.strt(width=90, length=60).put(0, 101 * i)
+
 
 chiplet_divider = chip.dice_box((100, 1973))
 chip_horiz_dice = chip.dice_box((chip_w, perimeter_w))
@@ -816,17 +818,16 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             grating.put(bend.pin['b0'].x, bend.pin['b0'].y, -90)
             d1 = detector.put(ts.pin['b0'], flip=True)
             d2 = detector.put(ts.pin['b1'])
-            chip.m2_ic.bend_strt_bend_p2p(d2.pin['n'], autoroute_nems_anode.pin['b5'], radius=4).put()
-            chip.m1_ic.bend_strt_bend_p2p(d2.pin['p'], autoroute_nems_cathode.pin['b5'], radius=4).put()
+            c = 'b' if layer != 13 else 'a'
+            chip.m2_ic.bend_strt_bend_p2p(d2.pin['n'], autoroute_nems_anode.pin[f'{c}5'], radius=4).put()
+            chip.m1_ic.bend_strt_bend_p2p(d2.pin['p'], autoroute_nems_cathode.pin[f'{c}5'], radius=4).put()
             chip.v1_via_4.put()
-            chip.m2_ic.bend_strt_bend_p2p(d1.pin['n'], autoroute_nems_anode.pin['b6'], radius=4).put()
-            chip.m1_ic.bend_strt_bend_p2p(d1.pin['p'], autoroute_nems_cathode.pin['b6'], radius=4).put()
+            chip.m2_ic.bend_strt_bend_p2p(d1.pin['n'], autoroute_nems_anode.pin[f'{c}6'], radius=4).put()
+            chip.m1_ic.bend_strt_bend_p2p(d1.pin['p'], autoroute_nems_cathode.pin[f'{c}6'], radius=4).put()
             chip.v1_via_4.put()
             chip.v1_via_4.put(d1.pin['p'])
             chip.v1_via_4.put(d2.pin['p'])
             mesh_ts_idx += 1
-            chip.m2_ic.bend_strt_bend_p2p(d1.pin['n'], autoroute_nems_anode.pin['b6'], radius=4).put()
-            chip.m1_ic.bend_strt_bend_p2p(d1.pin['p'], autoroute_nems_cathode.pin['b6'], radius=4).put()
 
         def extra_bend_p2p(p1, p2, radius, angle, strt, use_m1=False):
             if use_m1:
@@ -952,7 +953,7 @@ with nd.Cell('test_chiplet') as test_chiplet:
     alignment_mark_small.put(3120, 0)
 
     # place ground bus
-    gnd_pad.put(-15, test_pad_y)
+    gnd_pad.put(-15, 995)
 
     # TODO(Nate): space these pads as columns are filled
     # place test pads
