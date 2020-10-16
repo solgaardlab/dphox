@@ -394,9 +394,9 @@ tether = [
         fin_dim=(test_tdc_interaction_l_extr, 0.22),
         pos_electrode_dim=(test_tdc_interaction_l_extr, 4, 0.5)
     ),
-                           clearout_dim=(test_tdc_interaction_l_extr + 5, 0.3),
-                           pos_box_w=12,
-                           )
+        clearout_dim=(test_tdc_interaction_l_extr + 5, 0.3),
+        pos_box_w=12,
+    )
 ]
 
 tether_column = [chip.mzi_arms([dev], [1], name=f'tether_{i}') if i < 6 else dev.nazca_cell(f'tether_{i}')
@@ -484,7 +484,7 @@ extreme = [
     tether_full_tdc.update(
         ps=tether_tdc.update(interaction_l=il, dc_gap_w=0.125,
                              bend_dim=(test_tdc_radius,
-                                           test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2), ),
+                                       test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2), ),
         anchor=tether_anchor_tdc.update(
             spring_dim=(il, 0.22),
             pos_electrode_dim=(il - 5, 4, 0.4),
@@ -791,7 +791,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             len_x = 0 * (mesh_ts_idx >= num_ps_middle_mesh)
             # Nate: added a quick 0, -20 hack to fix drc
             ts = test_structure.put(1250 + shift_x + mesh_layer_x * (layer - 3),
-                                   output_interposer.pin['a7'].y + 20, flip=True)
+                                    output_interposer.pin['a7'].y + 20, flip=True)
             chip.m1_ic.bend_strt_bend_p2p(ts.pin['gnd_l'], autoroute_nems_gnd.pin['a5'], radius=4).put()
             if layer == 13:
                 chip.m2_ic.bend_strt_bend_p2p(ts.pin['pos_c'], autoroute_nems_pos.pin['a6'], radius=8).put()
@@ -882,7 +882,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
 
             # mesh tap test
             test_tap = tap_detector.put(output_interposer.pin['a6'].x - 40,
-                                       output_interposer.pin['a6'].y, flip=False)
+                                        output_interposer.pin['a6'].y, flip=False)
             d = detector.put(test_tap.pin['a0'])
             extra_bend_p2p(d.pin['n'], autoroute_therm_anode.pin['a5'], 4, -90, 60)
             extra_bend_p2p(d.pin['p'], autoroute_therm_cathode.pin['a5'], 10, -90, 70)
@@ -1019,13 +1019,13 @@ with nd.Cell('aim_layout') as aim_layout:
     bb_goos_1.put(chiplet_divider_x + 350, standard_grating_interport - 3)
     bb_goos_2.put(input_interposer.bbox[0] + chip_w - 535, standard_grating_interport - 3)
     chip_horiz_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],
-                       -standard_grating_interport + edge_shift_dim[1] - perimeter_w)
+                        -standard_grating_interport + edge_shift_dim[1] - perimeter_w)
     chip_horiz_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],
-                       -standard_grating_interport + edge_shift_dim[1] + chip_h)
+                        -standard_grating_interport + edge_shift_dim[1] + chip_h)
     chip_vert_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],
-                      -standard_grating_interport + edge_shift_dim[1])
+                       -standard_grating_interport + edge_shift_dim[1])
     chip_vert_dice.put(input_interposer.bbox[0] + chip_w - perimeter_w + edge_shift_dim[0],
-                      -standard_grating_interport + edge_shift_dim[1])
+                       -standard_grating_interport + edge_shift_dim[1])
 
 nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly

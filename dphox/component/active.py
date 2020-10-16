@@ -6,7 +6,7 @@ from .multilayer import Multilayer, Via
 from copy import deepcopy as copy
 
 SIMPHOX_IMPORTED = False
-MEEP_IMPORTED = False  # for meep sims
+MEEP_IMPORTED = False  # for meep sims, thanks =)
 
 try:
     SIMPHOX_IMPORTED = True
@@ -892,7 +892,7 @@ class NemsMillerNode(Multilayer):
 
         ps_clearout = Box((lower_interaction_l + bend_radius + ps_clearout_dim[0],
                            upper_bend_extension + bend_radius + ps_clearout_dim[1])).align(dc).valign(
-                            interport_w - bend_radius, bottom=False)
+            interport_w - bend_radius, bottom=False)
         ps_clearout_fill = Box((comb_drives[1].bounds[0] - comb_drives[0].bounds[2] + 2 * ps_comb.pos_pad.size[1],
                                 upper_bend_extension)).align(ps_clearout).valign(ps_clearout, bottom=False)
         ps_clearout = ps_clearout.difference(ps_clearout_fill)

@@ -488,6 +488,34 @@ AIM_PDK = {
     }
 }
 
+GF_PSUEDO_STACK = {
+    'layers': {
+        'ream': (2, 0),  # ream, ridge etch
+        'seam': (1, 0),  # seam, silicon etch
+        'fnam': (997, 1),  # fnam, nitride waveguide
+        'snam': (996, 1),  # snam, nitride waveguide
+        'ndam': (31, 0),  # ndam, n implant
+        'nnam': (32, 0),  # nnam, nn implant
+        'nnnam': (33, 0),  # nnnam, nnn implant
+        'pdam': (41, 0),  # pdam, p implant
+        'ppam': (42, 0),  # ppam, pp implant
+        'pppam': (43, 0),  # pppam, ppp implant
+        'tram': (995, 1),  # tram, detector trench
+        'ngam': (994, 1),  # ngam, n-type ion
+        'esam': (993, 1),  # esam, etch nitride etch stop
+        'caam': (992, 1),  # detector contact
+        'cbam': (15, 0),  # contact to Si Level
+        'm1am': (5, 0),  # metal 1 contact to caam/cbam
+        'v1am': (56, 0),  # via to m1am
+        'm2am': (6, 0),  # metal 2 level
+        'vaam': (67, 0),  # aluminum via to m2am
+        'tzam': (989, 1),  # tzam
+        'diam': (991, 1),  # diam, dicing channel
+        'paam': (990, 1),  # metal passivation
+        'mlam': (7, 0),  # aluminum metal layer
+        'oxide': (998, 1),  # oxide fill
+        'clearout': (999, 1),  # pseudo clearout for nems devices
+    }
 
 AIM_PDK_PASSIVE_PATH = '../../aim_lib/APSUNY_v35a_passive.design'
 AIM_PDK_WAVEGUIDE_PATH = '../../aim_lib/APSUNY_v35_waveguides.design'
