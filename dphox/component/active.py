@@ -508,22 +508,23 @@ class NemsAnchor(Pattern):
 
 
 class ContactWaveguide(Pattern):
-    def __init__(self, waveguide_w: float, length: float, rib_brim_w: float, gnd_connector_dim: Optional[Dim2],
-                 gnd_contact_dim: Optional[Dim2], rib_etch_grow: float, flipped: bool = False):
+    def __init__(self, waveguide_w: float, length: float, rib_taper_param: Tuple[float, ...],
+                 gnd_connector_dim: Optional[Dim2], gnd_contact_dim: Optional[Dim2],
+                 rib_etch_grow: float, flipped: bool = False):
         """Contacted waveguide, typically required for photonic MEMS, consisting of a rib brim
         around an (optionally) tapered waveguide.
 
         Args:
             waveguide_w: waveguide width
             length: length of waveguide
+            rib_taper_param: rib taper params
             gnd_contact_dim:
-            rib_brim_w:
             gnd_connector_dim:
             rib_etch_grow:
             flipped:
         """
         self.waveguide_w = waveguide_w
-        self.rib_brim_w = rib_brim_w
+        self.rib_taper_param = rib_taper_param
         self.length = length
         self.gnd_contact_dim = gnd_contact_dim
         self.gnd_connector_dim = gnd_connector_dim
@@ -533,16 +534,17 @@ class ContactWaveguide(Pattern):
         pads = []
 
         # TODO(): remove the hidden hardcoding
-        brim_l, brim_taper = get_linear_adiabatic(min_width=waveguide_w, max_width=rib_brim_w, aggressive=True)
-        brim_taper = cubic_taper(brim_taper[1])
-        brim_l = min(length / 2, brim_l)
+        # min_brim_l, brim_taper = get_linear_adiabatic(min_width=waveguide_w, max_width=sum(rib_taper_param) + waveguide_w, aggressive=True)
+        # if not sum(rib_taper_param) > 0 or not min_brim_l <= length / 2:
+        #     raise ValueError(f"Expected sum(rib_taper_param) > 0 and min_brim_l <= length / 2, but got:"
+        #                      f"sum(rib_taper_param), min_brim_l, length / 2 = {sum(rib_taper_param), min_brim_l, length / 2}")
 
         wg = Waveguide(waveguide_w=waveguide_w, length=length)
-        rib_brim_etch = Waveguide(waveguide_w=waveguide_w + 2 * rib_etch_grow, length=2 * brim_l, taper_ls=(brim_l,),
-                                  taper_params=(brim_taper,)).align(wg)
+        rib_brim_etch = Waveguide(waveguide_w=waveguide_w + 2 * rib_etch_grow, length=length, taper_ls=(length / 2,),
+                                  taper_params=(rib_taper_param,)).align(wg)
         gnd_connection = Box(gnd_connector_dim).align(wg).valign(wg, bottom=not flipped, opposite=True)
-        rib_brim = Waveguide(waveguide_w=waveguide_w, length=2 * brim_l, taper_ls=(brim_l,),
-                             taper_params=(brim_taper,)).align(wg)
+        rib_brim = Waveguide(waveguide_w=waveguide_w, length=length, taper_ls=(length / 2,),
+                             taper_params=(rib_taper_param,)).align(wg)
         rib_brim = [Pattern(poly) for poly in (rib_brim.shapely - wg.shapely)]
         rib_brim_etch = [Pattern(poly) for poly in (rib_brim_etch.shapely - wg.shapely)]
 
@@ -554,6 +556,7 @@ class ContactWaveguide(Pattern):
 
         super(ContactWaveguide, self).__init__(*patterns)
         self.wg, self.rib_brim, self.pads = wg, rib_brim_etch, pads
+        self.rib_brim_w = sum(rib_taper_param) + waveguide_w
         self.reference_patterns = [wg] + rib_brim_etch + pads
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['b0'] = Port(length, 0)
@@ -629,7 +632,7 @@ class SimpleComb(Pattern):
         edges = [fat_tooth.copy.align(gnd_comb).halign(gnd_comb, left=False, opposite=True).translate(tooth_dim[0]),
                  fat_tooth.copy.align(gnd_comb).halign(gnd_comb, left=True, opposite=True).translate(-tooth_dim[0])]
         pos_comb.align(gnd_comb).translate(0, -overlap + tooth_dim[1])
-        pos_pad.halign(gnd_pad, left=False) if side_align else pos_pad.align(gnd_pad)
+        pos_pad.halign(gnd_pad, left=True) if side_align else pos_pad.align(gnd_pad)
         pos_pad.valign(pos_comb, bottom=True, opposite=True)
         gnd_comb = Pattern(gnd_comb, *edges)
         super(SimpleComb, self).__init__(gnd_comb, pos_comb, pos_pad, gnd_pad)
@@ -639,6 +642,11 @@ class SimpleComb(Pattern):
         self.gnd_comb = gnd_comb
         self.pos_comb = pos_comb
         self.port['pos'] = Port(pos_pad.bounds[0], pos_pad.center[1], np.pi)
+
+    def clearout(self, buffer: float = 1):
+        bounding_pattern = Pattern(self.gnd_pad, self.pos_comb, self.gnd_comb)
+        size = (bounding_pattern.size[0] + buffer, bounding_pattern.size[1])
+        return Box(size).align(bounding_pattern)
 
 
 class LateralNemsFull(Multilayer):
@@ -791,12 +799,12 @@ class LateralNemsFull(Multilayer):
 class NemsMillerNode(Multilayer):
     def __init__(self, waveguide_w: float, upper_interaction_l: float, lower_interaction_l: float,
                  gap_w: float, bend_radius: float, upper_bend_extension: float, lower_bend_extension: float,
-                 ps_comb: SimpleComb, comb_wg: ContactWaveguide, gnd_wg: ContactWaveguide,
-                 pos_via: Via, gnd_via: Via, tdc_pad_dim: Dim4, ps_clearout_dim: Dim2, tdc_clearout_dim: Dim2,
+                 ps_comb: SimpleComb, tdc_comb: SimpleComb, comb_wg: ContactWaveguide, gnd_wg: ContactWaveguide,
+                 pos_via: Via, gnd_via: Via, tdc_pad_dim: Dim4, ps_clearout_dim: Dim2,
+                 ps_spring_dim: Dim2, tdc_spring_dim: Dim2, ps_shuttle_w: float, tdc_shuttle_w: float, end_l: float,
                  trace_w: float, connector_dim: Dim2, ridge: str, rib: str, dope: str, pos_metal: str, gnd_metal: str,
-                 clearout_layer: str, clearout_etch_stop_layer: str, clearout_etch_stop_grow: float,
-                 dope_grow: float, dope_expand: float,
-                 gnd_wg_l: Optional[float] = None):
+                 clearout_buffer_w: float, clearout_layer: str, clearout_etch_stop_layer: str, clearout_etch_stop_grow: float,
+                 dope_grow: float, dope_expand: float):
         self.waveguide_w = waveguide_w
         self.upper_interaction_l = upper_interaction_l
         self.lower_interaction_l = lower_interaction_l
@@ -818,19 +826,20 @@ class NemsMillerNode(Multilayer):
         self.clearout_etch_stop_layer = clearout_etch_stop_layer
         self.dope_grow = dope_grow
         self.dope_expand = dope_expand
-        self.gnd_wg_l = gnd_wg_l
         self.clearout_etch_stop_grow = clearout_etch_stop_grow
+        self.ps_spring_dim = ps_spring_dim
+        self.tdc_spring_dim = tdc_spring_dim
+        self.end_l = end_l
 
         self.config = copy(self.__dict__)
         self.config.update({
             'ps_comb': ps_comb.config,
+            'tdc_comb': tdc_comb.config,
             'comb_wg': comb_wg.config,
             'gnd_wg': gnd_wg.config,
             'pos_via': pos_via.config,
             'gnd_via': gnd_via.config,
         })
-
-        port = {}
 
         lower_bend_height = 2 * bend_radius + lower_bend_extension
         upper_bend_height = 2 * bend_radius + upper_bend_extension
@@ -846,37 +855,66 @@ class NemsMillerNode(Multilayer):
         upper_path.translate(dx=0, dy=interport_w)
 
         dc = Pattern(lower_path, upper_path)
+        ridge_patterns = [dc]
 
-        # tdc portion
+        # ps comb drive attachment
 
-        nanofin_y = -dc.center[1] + lower_bend_height - waveguide_w / 2 - tdc_pad_dim[-1] / 2 - tdc_pad_dim[2]
-        nanofin = Box((lower_interaction_l, tdc_pad_dim[-1])).align(dc).translate(dx=0, dy=nanofin_y)
-        connector = Box(connector_dim).align(nanofin)
-        connector = Pattern(connector.copy.valign(nanofin, bottom=False, opposite=True).halign(nanofin),
-                            connector.copy.valign(nanofin, bottom=False, opposite=True).halign(nanofin, left=False))
-        tdc_pad = Box(tdc_pad_dim[:2]).align(connector).valign(connector, opposite=True, bottom=False)
-        ridge_patterns = [dc, connector, tdc_pad, nanofin]
+        wg = Waveguide(waveguide_w, ps_comb.gnd_pad.size[0])
+        ps_comb_1 = comb_wg.copy.halign(wg)
+        ps_comb_2 = comb_wg.copy.halign(wg, left=False)
+        ps_comb_connector = Pattern(ps_comb_1, ps_comb_2)
+        ps_comb_rib_etch = Pattern(*ps_comb_1.rib_brim, *ps_comb_2.rib_brim)
+        ps_comb.align(ps_comb_connector, ps_comb.gnd_pad).valign(ps_comb_connector, opposite=True)
 
-        # comb drive attachment
+        # tdc comb drive attachment
 
-        gnd_wg_l = gnd_wg_l if gnd_wg_l is not None else upper_bend_extension
-        wg = Waveguide(waveguide_w, gnd_wg_l)
-        comb_1 = comb_wg.copy.halign(wg)
-        comb_2 = comb_wg.copy.halign(wg, left=False)
-        comb_connector = Pattern(comb_1, comb_2)
-        comb_rib_etch = Pattern(*comb_1.rib_brim, *comb_2.rib_brim)
+        wg = Waveguide(waveguide_w, tdc_comb.gnd_pad.size[0])
+        tdc_comb_1 = comb_wg.copy.halign(wg)
+        tdc_comb_2 = comb_wg.copy.halign(wg, left=False)
+        tdc_comb_connector = Pattern(tdc_comb_1, tdc_comb_2)
+        tdc_comb_rib_etch = Pattern(*tdc_comb_1.rib_brim, *tdc_comb_2.rib_brim)
+        tdc_comb.align(tdc_comb_connector, tdc_comb.gnd_pad).valign(tdc_comb_connector, opposite=True)
 
-        # comb drive definition
+        # clamped flexures
+        ps_connector_dim = (1, upper_interaction_l + 2 * bend_radius)
+        tdc_connector_dim = (1, 2 * bend_radius)
 
-        ps_comb.align(comb_connector, ps_comb.gnd_pad).valign(comb_connector, opposite=True)
-        comb_drive = Multilayer([(comb_connector, ridge), (comb_rib_etch, rib), (ps_comb, ridge)] +
-                                pos_via.copy.align(ps_comb.pos_pad).pattern_to_layer +
-                                [(ps_comb.pos_pad.copy, pos_metal)])
-        connect_port = Port(bend_radius + (lower_interaction_l - upper_interaction_l) / 2,
-                            interport_w - bend_radius - upper_bend_extension + gnd_wg_l, -np.pi / 2)
-        comb_drives = [comb_drive.copy.to(connect_port),
-                       comb_drive.copy.flip().to(connect_port).translate(bend_radius * 2 + upper_interaction_l)]
-        comb_drive_p2l = sum([cd.pattern_to_layer for cd in comb_drives], [])
+        # comb drive definitions
+
+        ps_comb_drive = Multilayer([(ps_comb_connector, ridge), (ps_comb_rib_etch, rib), (ps_comb, ridge)] +
+                                   pos_via.copy.align(ps_comb.pos_pad).pattern_to_layer +
+                                   [(ps_comb.pos_pad.copy, pos_metal),
+                                    (ps_comb.clearout(), clearout_layer),
+                                    (ps_comb.clearout().offset(clearout_etch_stop_grow), clearout_etch_stop_layer)
+                                    ])
+        ps_connect_port = Port(bend_radius + (lower_interaction_l - upper_interaction_l) / 2,
+                               interport_w - bend_radius - upper_bend_extension / 2 - ps_comb.gnd_pad.size[0] / 2,
+                               np.pi / 2)
+        ps_comb_drives = [ps_comb_drive.copy.to(ps_connect_port),
+                          ps_comb_drive.copy.flip().to(
+                              ps_connect_port).translate(bend_radius * 2 + upper_interaction_l)]
+
+        # TODO(sunil): bad decomposition here... these should be multilayers!
+        tdc_comb_drive = Multilayer([(tdc_comb_connector, ridge), (tdc_comb_rib_etch, rib), (tdc_comb, ridge)] +
+                                    pos_via.copy.align(tdc_comb.pos_pad).pattern_to_layer +
+                                    [(tdc_comb.pos_pad.copy, pos_metal),
+                                     (tdc_comb.clearout(), clearout_layer),
+                                     (tdc_comb.clearout().offset(clearout_etch_stop_grow), clearout_etch_stop_layer)])
+        tdc_connect_port = Port(2 * bend_radius + tdc_spring_dim[0], lower_bend_height, 0)
+        tdc_comb_drives = [tdc_comb_drive.copy.to(tdc_connect_port),
+                           tdc_comb_drive.copy.flip(horiz=True).to(tdc_connect_port).translate(
+                               lower_interaction_l - tdc_spring_dim[0] * 2)]
+
+        comb_drive_p2l = sum([cd.pattern_to_layer for cd in ps_comb_drives + tdc_comb_drives], [])
+        ps_flexure = Box((ps_comb.pos_pad.size[0] - gnd_wg.length + tdc_connector_dim[0] / 2, ps_shuttle_w)).flexure(
+            (upper_bend_extension, ps_spring_dim[1]), ps_connector_dim
+        ).rotate(90).align(ps_comb_drives[0]).halign(
+            bend_radius + (lower_interaction_l - upper_interaction_l) / 2 + waveguide_w / 2,
+            opposite=True)
+        tdc_flexure = Box((lower_interaction_l - tdc_spring_dim[0] * 2 - gnd_wg.length, tdc_shuttle_w)).flexure(
+            (lower_interaction_l, ps_spring_dim[1]), tdc_connector_dim, False).align(
+            dc).valign(lower_bend_height - waveguide_w / 2, opposite=True, bottom=False)
+        ridge_patterns += [ps_flexure, tdc_flexure]
 
         # ground waveguide connections
 
@@ -890,25 +928,29 @@ class NemsMillerNode(Multilayer):
         gnd_trace = Box(gnd_wg_pattern.size).align(gnd_wg_pattern).hollow(trace_w)
         gnd_vias = sum([gnd_via.copy.align(gwg.pads[0]).pattern_to_layer for gwg in gnd_wgs], [])
 
-        ps_clearout = Box((lower_interaction_l + bend_radius + ps_clearout_dim[0],
-                           upper_bend_extension + bend_radius + ps_clearout_dim[1])).align(dc).valign(
-                            interport_w - bend_radius, bottom=False)
-        ps_clearout_fill = Box((comb_drives[1].bounds[0] - comb_drives[0].bounds[2] + 2 * ps_comb.pos_pad.size[1],
-                                upper_bend_extension)).align(ps_clearout).valign(ps_clearout, bottom=False)
-        ps_clearout = ps_clearout.difference(ps_clearout_fill)
+        ps_flexure_clearout = Box((upper_interaction_l + 2 * bend_radius +
+                                   2 * comb_wg.gnd_connector_dim[1] + 2 * comb_wg.rib_brim_w + waveguide_w + clearout_buffer_w,
+                                   ps_comb.pos_pad.size[0])).align(ps_flexure)
+        ps_clearout = Box((ps_shuttle_w + clearout_buffer_w, ps_spring_dim[0])).align(ps_flexure)
+        tdc_clearout = Box((lower_interaction_l - bend_radius + ps_clearout_dim[0],
+                            lower_bend_height + bend_radius + comb_wg.rib_brim_w / 2 + waveguide_w / 2
+                            )).align(dc).valign(0)
+        wg_clearout_1 = Box((upper_bend_extension, comb_wg.rib_brim_w + clearout_buffer_w)).rotate(90).align(
+            (bend_radius + (lower_interaction_l - upper_interaction_l) / 2,
+             interport_w - bend_radius - upper_bend_extension / 2))
+        wg_clearout_2 = wg_clearout_1.copy.translate(bend_radius * 2 + upper_interaction_l)
 
-        super(NemsMillerNode, self).__init__([(Pattern(*ridge_patterns), ridge), (gnd_trace, gnd_metal),
-                                              (tdc_pad.copy, pos_metal)]
-                                             + gnd_wg_rib_etch + gnd_vias + comb_drive_p2l
-                                             + pos_via.copy.align(tdc_pad).pattern_to_layer +
-                                             [(ps_clearout, clearout_layer),
-                                              (ps_clearout.offset(clearout_etch_stop_grow), clearout_etch_stop_layer)]
+        clearout = Pattern(ps_flexure_clearout, ps_clearout, tdc_clearout, wg_clearout_1, wg_clearout_2)
+        super(NemsMillerNode, self).__init__([(Pattern(*ridge_patterns), ridge), (gnd_trace, gnd_metal)]
+                                             + gnd_wg_rib_etch + gnd_vias + comb_drive_p2l +
+                                             [(clearout, clearout_layer),
+                                              (clearout.offset(clearout_etch_stop_grow), clearout_etch_stop_layer)]
                                              )
         self.port['gnd_l'] = Port(gnd_trace.bounds[0] + trace_w / 2, gnd_trace.bounds[3], np.pi / 2)
         self.port['gnd_r'] = Port(gnd_trace.bounds[2] - trace_w / 2, gnd_trace.bounds[3], np.pi / 2)
-        self.port['pos_l'] = comb_drives[0].port['pos']
-        self.port['pos_r'] = comb_drives[1].port['pos']
-        self.port['pos_c'] = Port(tdc_pad.center[0], tdc_pad.bounds[1], -np.pi / 2)
+        self.port['pos_l'] = ps_comb_drives[0].port['pos']
+        self.port['pos_r'] = ps_comb_drives[1].port['pos']
+        # self.port['pos_c'] = Port(tdc_pad.center[0], tdc_pad.bounds[1], -np.pi / 2)
         self.port['a0'] = Port(-gnd_wg.size[0], 0, -np.pi)
         self.port['a1'] = Port(-gnd_wg.size[0], interport_w, -np.pi)
         self.port['b0'] = Port(dc.size[0] + gnd_wg.size[0], 0)

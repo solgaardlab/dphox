@@ -59,7 +59,7 @@ class NazcaLayout:
                rib_brim_w: float = 2, gnd_connector_dim: Optional[Dim2] = (1, 2),
                flip: bool = False, dope_grow: float = 0.25, name='gnd_wg') -> nd.Cell:
         c = ContactWaveguide(waveguide_w=waveguide_w, length=length, gnd_contact_dim=gnd_contact_dim,
-                             rib_brim_w=rib_brim_w, gnd_connector_dim=gnd_connector_dim, flipped=flip,
+                             rib_taper_param=cubic_taper(1.52), gnd_connector_dim=gnd_connector_dim, flipped=flip,
                              rib_etch_grow=0.25)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
         dopes = list(zip([p.offset(dope_grow) for p in c.pads], ('pppam',)))

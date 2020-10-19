@@ -147,31 +147,40 @@ tether_full_tdc = pull_apart_full_tdc.update(
     clearout_dim=(tether_interaction_l + 5, 0.5))
 
 miller_node = NemsMillerNode(
-    waveguide_w=0.48, upper_interaction_l=50, lower_interaction_l=55,
-    gap_w=0.1, bend_radius=5, upper_bend_extension=58, lower_bend_extension=10,
+    waveguide_w=0.48, upper_interaction_l=30, lower_interaction_l=120,
+    gap_w=0.3, bend_radius=5, upper_bend_extension=58, lower_bend_extension=10,
     tdc_pad_dim=(55, 5, 1, 0.22), connector_dim=(0.1, 0.5),
     ps_comb=SimpleComb(
         tooth_dim=(0.3, 3, 0.15),
         gnd_electrode_dim=(20, 3),
-        pos_electrode_dim=(60, 3),
+        pos_electrode_dim=(20, 6),
+        overlap=0,
+        edge_tooth_factor=5,
+        side_align=True
+    ),
+    tdc_comb=SimpleComb(
+        tooth_dim=(0.3, 3, 0.15),
+        gnd_electrode_dim=(15, 3),
+        pos_electrode_dim=(15, 6),
         overlap=0,
         edge_tooth_factor=5,
         side_align=True
     ),
     comb_wg=ContactWaveguide(
         waveguide_w=0.48, length=5, gnd_contact_dim=(1, 2),
-        rib_brim_w=2, gnd_connector_dim=(1, 2),
+        rib_taper_param=cubic_taper(1.52), gnd_connector_dim=(1, 2),
         flipped=False, rib_etch_grow=0.25
     ),
     gnd_wg=ContactWaveguide(
         waveguide_w=0.48, length=5, gnd_contact_dim=(3, 3),
-        rib_brim_w=2, gnd_connector_dim=(0.5, 2),
+        rib_taper_param=cubic_taper(1.52), gnd_connector_dim=(0.5, 2),
         flipped=False, rib_etch_grow=0.25
     ),
-    gnd_wg_l=20, clearout_etch_stop_grow=0.5,
+    ps_spring_dim=(50, 0.25), tdc_spring_dim=(20, 0.25),
+    ps_shuttle_w=20, tdc_shuttle_w=5, clearout_etch_stop_grow=0.5, clearout_buffer_w=2,
     ridge='seam', rib='ream', dope='pppam', pos_metal='m2am',
     gnd_metal='m1am', clearout_layer='clearout', clearout_etch_stop_layer='snam',
     gnd_via=Via((0.4, 0.4), 0.1, metal='m1am', via='cbam', shape=(2, 2), pitch=1),
-    pos_via=Via((0.4, 0.4), 0.1, metal=['m1am', 'm2am'], via=['cbam', 'v1am'], shape=(20, 2), pitch=1),
-    trace_w=3, dope_expand=0.3, dope_grow=0.1, ps_clearout_dim=(4, 1.9), tdc_clearout_dim=(1, 1),
+    pos_via=Via((0.4, 0.4), 0.1, metal=['m1am', 'm2am'], via=['cbam', 'v1am'], shape=(15, 2), pitch=1),
+    trace_w=3, dope_expand=0.3, dope_grow=0.1, ps_clearout_dim=(4, 1.9), end_l=0
 )
