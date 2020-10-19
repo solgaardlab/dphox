@@ -17,6 +17,7 @@ class Box(Pattern):
     Args:
         box_dim: Box dimension (box width, box height)
     """
+
     def __init__(self, box_dim: Dim2):
         self.box_dim = box_dim
         super(Box, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2))
@@ -41,6 +42,21 @@ class Box(Pattern):
             ys = np.mgrid[self.bounds[1] + pitch[1]:self.bounds[3]:pitch[1]]
             patterns.append(Pattern(*[Box((self.size[0], stripe_w)).valign(y) for y in ys]).align(patterns[0]))
         return Pattern(*patterns, call_union=False)
+
+    def flexure(self, spring_dim: Dim2, connector_dim: Dim2 = None, symmetric_connector: bool = True,
+                stripe_w: float = 1):
+        spring = Box(spring_dim).align(self)
+        connector = Box(connector_dim).align(self)
+        connectors = []
+        if symmetric_connector:
+            connectors += [connector.copy.halign(self), connector.copy.halign(self, left=False)]
+        else:
+            connectors += [
+                connector.copy.valign(self).halign(self),
+                connector.copy.valign(self).halign(self, left=False)
+            ]
+        return Pattern(self.striped(stripe_w),
+                       spring.copy.valign(self), spring.copy.valign(self, bottom=False), *connectors)
 
 
 class DC(Pattern):
