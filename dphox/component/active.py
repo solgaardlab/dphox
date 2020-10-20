@@ -293,7 +293,7 @@ class LateralNemsTDC(Pattern):
                     f'Not enough room in s-bend to ground waveguide with bend_dim[0] of {bend_dim[0]}'
                     f'need at least {(gnd_wg[0] + (waveguide_w / 2 + np.sum(brim_taper) / 2 + gnd_contact_dim[0]))}')
 
-            rib_etch, gnd_connections, gnd_wg_pads = [], [], []
+            rib_brim, rib_etch, gnd_connections, gnd_wg_pads = [], [], [], []
             dx_brim = bend_dim[0]
             dy_brim = (dc_gap_w + waveguide_w + bend_dim[1]) / 2
             min_x, min_y, max_x, max_y = dc.shapely.bounds
@@ -303,12 +303,12 @@ class LateralNemsTDC(Pattern):
             for x in (min_x + dx_brim, max_x - dx_brim):
                 for y in (center_y - dy_brim, center_y + dy_brim):
                     flip_y = not flip_y
-                    rib_brim = [Waveguide(
+                    rib_brim.append(Waveguide(
                         waveguide_w,
                         taper_ls=(brim_l,),
                         taper_params=(brim_taper,),
                         length=2 * brim_l + gnd_contact_dim[-1],
-                        rotate_angle=np.pi / 2).translate(dx=x, dy=y - brim_l)]
+                        rotate_angle=np.pi / 2).translate(dx=x, dy=y - brim_l))
 
                     # TODO(Nate): make not clunky, and foundry agnostic
                     #  (rule for how etches are handled at different foundries?)
@@ -325,11 +325,12 @@ class LateralNemsTDC(Pattern):
                         gnd_connections.append(
                             Box(gnd_contact_dim[:2]).translate(dx=x - waveguide_w / 2 - gnd_contact_dim[0], dy=y))
                     gnd_wg_pads.append(
-                        Box(gnd_wg[:2]).align(rib_brim[0]).halign(gnd_connections[-1],
-                                                                  left=flip_x,
-                                                                  opposite=True))
+                        Box(gnd_wg[:2]).align(rib_brim[-1]).halign(gnd_connections[-1],
+                                                                   left=flip_x,
+                                                                   opposite=True))
                 flip_x = not flip_x
             rib_etch = [Pattern(poly) for brim in rib_etch for poly in (brim.shapely - dc.shapely)]
+            rib_brim = [Pattern(poly) for brim in rib_brim for poly in (brim.shapely - dc.shapely)]
             patterns += gnd_connections + rib_brim + gnd_wg_pads
         super(LateralNemsTDC, self).__init__(*patterns, call_union=False)
         self.dc, self.connectors, self.pads, self.nanofins = dc, connectors, gnd_wg_pads, nanofins
@@ -647,7 +648,9 @@ class LateralNemsFull(Multilayer):
                  pos_box_w: float, gnd_box_h: float, clearout_dim: Dim2, dope_grow: float, dope_expand: float,
                  ridge: str, rib: str, shuttle_dope: str,
                  spring_dope: str, pad_dope: str, pos_metal: str, gnd_metal: str,
-                 clearout_layer: str, clearout_etch_stop_layer: str, clearout_etch_stop_grow: float):
+                 clearout_layer: str, clearout_etch_stop_layer: str, clearout_etch_stop_grow: float,
+                 separate_fin_drive: bool = False,
+                 single_metal: bool = False):
         """Full multilayer NEMS design assuming positive and ground pads defined in silicon layer
 
         Args:
@@ -720,6 +723,8 @@ class LateralNemsFull(Multilayer):
         if gnd_pads:
             gnd = Pattern(*gnd_pads)
             gnd_box = Box((gnd.size[0], gnd.size[1] + 2 * gnd_box_h)).hollow(trace_w).align(gnd)
+            if single_metal:
+                gnd_box = gnd_box.difference(Box((2 * (gnd.size[0] / 2 - trace_w), gnd.size[1] + 2 * (gnd_box_h - trace_w))).align(gnd_box).halign(gnd_box).translate(dx=-2 * trace_w, dy=0))
             metals.append((gnd_box, gnd_metal))
             vias.extend(sum([gnd_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
             port['gnd_l'] = Port(gnd_box.bounds[0] + trace_w / 2, gnd_box.bounds[3], np.pi / 2)
@@ -727,11 +732,27 @@ class LateralNemsFull(Multilayer):
         if top.pos_pads and pos_metal is not None:
             pos_pads = top.pos_pads + bot.pos_pads
             pos = Pattern(*pos_pads)
-            pos_box = Box((pos.size[0] + 2 * pos_box_w, pos.size[1])).hollow(trace_w).align(pos)
-            metals.append((pos_box, pos_metal))
+            # TODO(Nate): add boolean to pos box for asymmetric drive
+            if separate_fin_drive:
+                top_pads = Pattern(*top.pos_pads)
+                bot_pads = Pattern(*bot.pos_pads)
+                pos_top = Box((top_pads.size[0], trace_w)).align(top_pads)
+                pos_bot = Box((bot_pads.size[0], trace_w)).align(bot_pads)
+                metals.append((pos_top, pos_metal))
+                metals.append((pos_bot, pos_metal))
+                port['pos_t'] = Port(pos_top.center[0], pos_top.bounds[3], np.pi / 2)
+                port['pos_b'] = Port(pos_bot.center[0], pos_bot.bounds[1], -np.pi / 2)
+            else:
+                if single_metal:
+                    pos_box = Box((pos.size[0] + 2 * pos_box_w, pos.size[1])).hollow(trace_w).align(pos)
+                    pos_box = pos_box.difference(Box((2 * (pos_box_w + trace_w), pos.size[1])).align(pos).halign(pos_box, left=False).translate(dx=2 * trace_w, dy=0))
+                    metals.append((pos_box, pos_metal))
+                else:
+                    pos_box = Box((pos.size[0] + 2 * pos_box_w, pos.size[1])).hollow(trace_w).align(pos)
+                    metals.append((pos_box, pos_metal))
+                port['pos_l'] = Port(pos_box.bounds[0], pos_box.center[1], -np.pi)
+                port['pos_r'] = Port(pos_box.bounds[2], pos_box.center[1], 0)
             vias.extend(sum([pos_via.copy.align(pad).pattern_to_layer for pad in pos_pads], []))
-            port['pos_l'] = Port(pos_box.bounds[0], pos_box.center[1], -np.pi)
-            port['pos_r'] = Port(pos_box.bounds[2], pos_box.center[1], 0)
             clearout_h = pos_pads[0].bounds[1] - pos_pads[1].bounds[3]
             clearout = full.clearout_box(clearout_layer, clearout_etch_stop_layer, (clearout_dim[0],
                                                                                     clearout_h + clearout_dim[1]))
@@ -742,6 +763,8 @@ class LateralNemsFull(Multilayer):
             gnd_pads = device.gnd_wg_pads
             gnd = Pattern(*gnd_pads)
             gnd_box = Box((gnd.size[0], gnd.size[1])).hollow(trace_w).align(gnd)
+            if single_metal:
+                gnd_box = gnd_box.difference(Box((2 * (gnd.size[0] / 2 - trace_w), gnd.size[1] + 2 * (0 - trace_w))).align(gnd_box).halign(gnd_box).translate(dx=-2 * trace_w, dy=0))
             metals.append((gnd_box, gnd_metal))
             vias.extend(sum([gnd_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
             if anchor.gnd_electrode_dim is None:
@@ -753,7 +776,7 @@ class LateralNemsFull(Multilayer):
         self.port = port
         self.port.update(device.port)
 
-    @classmethod
+    @ classmethod
     def from_config(cls, config):
         """Initialize via configuration dictionary (useful for importing from a JSON file)
 
@@ -917,33 +940,64 @@ class NemsMillerNode(Multilayer):
         self.gnd_wg_rib_etch = gnd_wg_rib_etch
 
 
-# class RingResonator(Pattern):
-#     def __init__(self, waveguide_w: float, taper_l: float = 0,
-#                  taper_params: Union[np.ndarray, List[float]] = None,
-#                  length: float = 5, num_taper_evaluations: int = 100, end_l: float = 0,
-#                  shift: Dim2 = (0, 0), layer: int = 0):
-#         self.end_l = end_l
-#         self.length = length
-#         self.waveguide_w = waveguide_w
-#         p = Path(waveguide_w).segment(end_l, layer=layer) if end_l > 0 else Path(waveguide_w)
-#         if end_l > 0:
-#             p.segment(end_l, layer=layer)
-#         if taper_l > 0 or taper_params is not None:
-#             p.polynomial_taper(taper_l, taper_params, num_taper_evaluations, layer)
-#         p.segment(length, layer=layer)
-#         if taper_l > 0 or taper_params is not None:
-#             p.polynomial_taper(taper_l, taper_params, num_taper_evaluations, layer, inverted=True)
-#         if end_l > 0:
-#             p.segment(end_l, layer=layer)
-#         super(RingResonator, self).__init__(p, shift=shift)
-#
-#     @property
-#     def input_ports(self) -> np.ndarray:
-#         return np.asarray((0, 0)) + self.shift
-#
-#     @property
-#     def output_ports(self) -> np.ndarray:
-#         return self.input_ports + np.asarray((self.size[0], 0))
+class FakeGratingCoupler(Multilayer):
+    def __init__(self, waveguide_w, bounds, wg_layer, box_layer):
+        waveguide_input = Waveguide(waveguide_w, length=bounds[0] / 4)
+        area = Box(bounds).align(waveguide_input).halign(waveguide_input, left=True)
+        super(FakeGratingCoupler, self).__init__([(waveguide_input, wg_layer), (area, box_layer)])
+        self.port['a0'] = Port(0, 0, -np.pi)
+
+
+class FakePDKDC(Multilayer):
+    def __init__(self, waveguide_w, bounds, interport_w, wg_layer, box_layer):
+
+        waveguide_input_u = Waveguide(waveguide_w, length=bounds[0]).translate(dx=0, dy=interport_w / 2)
+        waveguide_input_l = Waveguide(waveguide_w, length=bounds[0]).translate(dx=0, dy=-interport_w / 2)
+        w_u_cross = Pattern(Path(width=waveguide_w).sbend((bounds[0], interport_w))).translate(dx=0, dy=-interport_w / 2)
+        w_l_cross = Pattern(Path(width=waveguide_w).sbend((bounds[0], -interport_w))).translate(dx=0, dy=interport_w / 2)
+        waveguides = Pattern(*[waveguide_input_u, waveguide_input_l, w_u_cross, w_l_cross])
+        area = Box(bounds).align(waveguides)
+        super(FakePDKDC, self).__init__([(waveguides, wg_layer), (area, box_layer)])
+        self.port['a0'] = Port(0, -interport_w / 2, -np.pi)
+        self.port['a1'] = Port(0, interport_w / 2, -np.pi)
+        self.port['b0'] = Port(bounds[0], -interport_w / 2, 0)
+        self.port['b1'] = Port(bounds[0], interport_w / 2, 0)
+
+
+class FakePhotodetector(Multilayer):
+    def __init__(self, waveguide_w, bounds, wg_layer, box_layer):
+        waveguide_input = Waveguide(waveguide_w, length=bounds[0] / 4)
+        area = Box(bounds).align(waveguide_input).halign(waveguide_input, left=True)
+        super(FakePhotodetector, self).__init__([(waveguide_input, wg_layer), (area, box_layer)])
+        self.port['a0'] = Port(0, 0, -np.pi)
+
+        # class RingResonator(Pattern):
+        #     def __init__(self, waveguide_w: float, taper_l: float = 0,
+        #                  taper_params: Union[np.ndarray, List[float]] = None,
+        #                  length: float = 5, num_taper_evaluations: int = 100, end_l: float = 0,
+        #                  shift: Dim2 = (0, 0), layer: int = 0):
+        #         self.end_l = end_l
+        #         self.length = length
+        #         self.waveguide_w = waveguide_w
+        #         p = Path(waveguide_w).segment(end_l, layer=layer) if end_l > 0 else Path(waveguide_w)
+        #         if end_l > 0:
+        #             p.segment(end_l, layer=layer)
+        #         if taper_l > 0 or taper_params is not None:
+        #             p.polynomial_taper(taper_l, taper_params, num_taper_evaluations, layer)
+        #         p.segment(length, layer=layer)
+        #         if taper_l > 0 or taper_params is not None:
+        #             p.polynomial_taper(taper_l, taper_params, num_taper_evaluations, layer, inverted=True)
+        #         if end_l > 0:
+        #             p.segment(end_l, layer=layer)
+        #         super(RingResonator, self).__init__(p, shift=shift)
+        #
+        #     @property
+        #     def input_ports(self) -> np.ndarray:
+        #         return np.asarray((0, 0)) + self.shift
+        #
+        #     @property
+        #     def output_ports(self) -> np.ndarray:
+        #         return self.input_ports + np.asarray((self.size[0], 0))
 
 
 def _handle_nems_config(config):

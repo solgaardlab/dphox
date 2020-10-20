@@ -515,8 +515,80 @@ GF_PSUEDO_STACK = {
         'mlam': (7, 0),  # aluminum metal layer
         'oxide': (998, 1),  # oxide fill
         'clearout': (999, 1),  # pseudo clearout for nems devices
+    },
+    'cross_sections': {
+        'v1_xs': [
+            {
+                'layer': 'm2am'
+            },
+            {
+                'layer': 'v1am',
+                'growx': -0.05,
+                'growy': -0.05
+            },
+            {
+                'layer': 'm1am'
+            },
+        ],
+        'pad_xs': [
+            {
+                'layer': 'm2am'
+            },
+            {
+                'layer': 'mlam'  # aluminum pads
+            },
+            {
+                'layer': 'vaam',  # via to aluminum layer
+                'growx': -2,
+                'growy': -2
+            }
+        ],
+        'waveguide_xs': [
+            {
+                'layer': 'seam'
+            }
+        ],
+        'dice_xs': [
+            {
+                'layer': 'diam'
+            }
+        ],
+        'm1_xs': [
+            {
+                'layer': 'm1am'
+            }
+        ],
+        'm2_xs': [
+            {
+                'layer': 'm2am'
+            }
+        ],
+        'ml_xs': [
+            {
+                'layer': 'mlam'
+            }
+        ],
+        'va_xs': [
+            {
+                'layer': 'mlam'
+            },
+            {
+                'layer': 'vaam',
+                'growx': -0.75,
+                'growy': -0.75
+            },
+            {
+                'layer': 'm2am'
+            }
+        ]
     }
-
+}
+GF_PSUEDO_PDK = {
+    'empty': {
+        'a0': (0, 0, 180),
+        'b0': (10, 0, 0)
+    }
+}
 AIM_PDK_PASSIVE_PATH = '../../aim_lib/APSUNY_v35a_passive.design'
 AIM_PDK_WAVEGUIDE_PATH = '../../aim_lib/APSUNY_v35_waveguides.design'
 AIM_PDK_ACTIVE_PATH = '../../aim_lib/APSUNY_v35_actives.design'
