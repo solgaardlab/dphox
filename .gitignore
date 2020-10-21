@@ -11,3 +11,4 @@ __pycache__
 data/*
 aim_lib/*
 *.gds
+*.stl

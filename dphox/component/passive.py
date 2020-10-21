@@ -22,6 +22,10 @@ class Box(Pattern):
         self.box_dim = box_dim
         super(Box, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2))
 
+    @classmethod
+    def bbox(cls, pattern: Pattern):
+        return cls(pattern.size).align(pattern)
+
     def expand(self, grow: float):
         big_box_dim = (self.box_dim[0] + grow, self.box_dim[1] + grow)
         return Pattern(Path(big_box_dim[1]).segment(big_box_dim[0]).translate(dx=0, dy=big_box_dim[1] / 2)).align(self)
