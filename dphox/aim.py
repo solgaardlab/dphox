@@ -177,7 +177,7 @@ miller_node = NemsMillerNode(
         flipped=False, rib_etch_grow=0.25
     ),
     ps_spring_dim=(50, 0.25), tdc_spring_dim=(20, 0.25),
-    ps_shuttle_w=20, tdc_shuttle_w=5, clearout_etch_stop_grow=0.5, clearout_buffer_w=2,
+    ps_shuttle_w=20, tdc_shuttle_w=15, clearout_etch_stop_grow=0.5, clearout_buffer_w=2,
     ridge='seam', rib='ream', dope='pppam', pos_metal='m2am',
     gnd_metal='m1am', clearout_layer='clearout', clearout_etch_stop_layer='snam',
     gnd_via=Via((0.4, 0.4), 0.1, metal='m1am', via='cbam', shape=(2, 2), pitch=1),

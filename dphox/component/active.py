@@ -877,7 +877,7 @@ class NemsMillerNode(Multilayer):
 
         # clamped flexures
         ps_connector_dim = (1, upper_interaction_l + 2 * bend_radius)
-        tdc_connector_dim = (1, 2 * bend_radius)
+        tdc_connector_dim = (1, tdc_shuttle_w + bend_radius / 2)  # TODO(sunil): fix dis
 
         # comb drive definitions
 
@@ -912,7 +912,7 @@ class NemsMillerNode(Multilayer):
             bend_radius + (lower_interaction_l - upper_interaction_l) / 2 + waveguide_w / 2,
             opposite=True)
         tdc_flexure = Box((lower_interaction_l - tdc_spring_dim[0] * 2 - gnd_wg.length, tdc_shuttle_w)).flexure(
-            (lower_interaction_l, ps_spring_dim[1]), tdc_connector_dim, False).align(
+            (lower_interaction_l + bend_radius, ps_spring_dim[1]), tdc_connector_dim, False).align(
             dc).valign(lower_bend_height - waveguide_w / 2, opposite=True, bottom=False)
         ridge_patterns += [ps_flexure, tdc_flexure]
 
@@ -940,17 +940,23 @@ class NemsMillerNode(Multilayer):
              interport_w - bend_radius - upper_bend_extension / 2))
         wg_clearout_2 = wg_clearout_1.copy.translate(bend_radius * 2 + upper_interaction_l)
 
+        tdc_pad_bbox = Pattern(tdc_comb_drives[0].layer_to_pattern[ridge], tdc_comb_drives[1].layer_to_pattern[ridge])
+        pos_trace = Box((dc.size[0] - 2 * trace_w, tdc_pad_bbox.bounds[3] + trace_w + gnd_wg.size[1])).align(
+            dc).valign(tdc_pad_bbox, bottom=False).hollow(trace_w)
+        pos_trace = pos_trace.difference(Box((tdc_pad_bbox.size[0], 2 * trace_w)).align(pos_trace).valign(pos_trace, bottom=False))
+
         clearout = Pattern(ps_flexure_clearout, ps_clearout, tdc_clearout, wg_clearout_1, wg_clearout_2)
         super(NemsMillerNode, self).__init__([(Pattern(*ridge_patterns), ridge), (gnd_trace, gnd_metal)]
                                              + gnd_wg_rib_etch + gnd_vias + comb_drive_p2l +
                                              [(clearout, clearout_layer),
-                                              (clearout.offset(clearout_etch_stop_grow), clearout_etch_stop_layer)]
+                                              (clearout.offset(clearout_etch_stop_grow), clearout_etch_stop_layer),
+                                              (pos_trace, pos_metal)]
                                              )
         self.port['gnd_l'] = Port(gnd_trace.bounds[0] + trace_w / 2, gnd_trace.bounds[3], np.pi / 2)
         self.port['gnd_r'] = Port(gnd_trace.bounds[2] - trace_w / 2, gnd_trace.bounds[3], np.pi / 2)
         self.port['pos_l'] = ps_comb_drives[0].port['pos']
         self.port['pos_r'] = ps_comb_drives[1].port['pos']
-        # self.port['pos_c'] = Port(tdc_pad.center[0], tdc_pad.bounds[1], -np.pi / 2)
+        self.port['pos_c'] = Port(pos_trace.center[0], pos_trace.bounds[1], -np.pi / 2)
         self.port['a0'] = Port(-gnd_wg.size[0], 0, -np.pi)
         self.port['a1'] = Port(-gnd_wg.size[0], interport_w, -np.pi)
         self.port['b0'] = Port(dc.size[0] + gnd_wg.size[0], 0)

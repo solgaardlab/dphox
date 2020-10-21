@@ -213,6 +213,7 @@ class Multilayer:
         b = self.bounds  # (minx, miny, maxx, maxy)
         return b[2] - b[0], b[3] - b[1]  # (maxx - minx, maxy - miny)
 
+
     def to_trimesh_dict(self, layer_to_zrange: Dict[str, Tuple[float, float]],
                         process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
                         layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad',
@@ -255,6 +256,16 @@ class Multilayer:
                 except KeyError:
                     print(f"No zranges given for the layer {layer}")
             return meshes
+
+    def to_stls(self, prefix: str, layer_to_zrange: Dict[str, Tuple[float, float]],
+                process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
+                layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad',
+                layers: Optional[List[str]] = None,
+                include_oxide: bool = True):
+        meshes = self.to_trimesh_dict(layer_to_zrange, process_extrusion, layer_to_color, engine, include_oxide)
+        for layer, mesh in meshes.items():
+            if layers and layer in layers:
+                mesh.export(f'{prefix}_{layer}.stl')
 
     def to_trimesh_scene(self, layer_to_zrange: Dict[str, Tuple[float, float]],
                          process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
