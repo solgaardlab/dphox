@@ -32,7 +32,7 @@ class GFNemsPS(LateralNemsPS):
     def __init__(self, waveguide_w=waveguide_w, nanofin_w=0.2, phaseshift_l=phaseshift_l_pull_apart,
                  gap_w=0.10, num_taper_evaluations=100, gnd_connector=(2, 0.2, 5),
                  gnd_pad_dim=None, taper_l=0, end_ls=(end_l,), gap_taper=None, wg_taper=None, boundary_taper=None,
-                 fin_end_bend_dim=(2, 1), end_taper=((0, -0.08),), gnd_connector_idx=-1, rib_etch_grow=0.1):
+                 fin_end_bend_dim=(2, 1), end_taper=((0, -0.08),), gnd_connector_idx=-1, rib_etch_grow=0.2):
         super(GFNemsPS, self).__init__(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l,
                                        gap_w=gap_w, num_taper_evaluations=num_taper_evaluations,
                                        gnd_connector=gnd_connector, taper_l=taper_l, gnd_pad_dim=gnd_pad_dim,
@@ -66,30 +66,30 @@ class GFNemsAnchor(NemsAnchor):
 
 class GFNemsFull(LateralNemsFull):
     def __init__(self, device, anchor, clearout_dim,
-                 pos_box_w=8, gnd_box_h=0,
-                 gnd_via=Via((0.4, 0.4), 0.1, metal='mlam', via='cbam', shape=(2, 2), pitch=1),
-                 pos_via=Via((0.4, 0.4), 0.1, metal=['mlam'], via=['cbam'], shape=(20, 2), pitch=1),
+                 pos_box_w=8, gnd_box_h=8,
+                 gnd_via=Via((0.12, 0.12), 0.1, metal='mlam', via='cbam', shape=(2, 2), pitch=1),
+                 pos_via=Via((0.12, 0.12), 0.1, metal=['mlam'], via=['cbam'], shape=(20, 2), pitch=1),
                  trace_w=3, separate_fin_drive=False, single_metal=True):
         super(GFNemsFull, self).__init__(device=device, anchor=anchor, gnd_via=gnd_via,
                                          pos_via=pos_via, trace_w=trace_w, pos_box_w=pos_box_w,
                                          gnd_box_h=gnd_box_h, clearout_dim=clearout_dim, clearout_etch_stop_grow=0.5,
-                                         dope_expand=0.3, dope_grow=0.1, ridge='seam', rib='ream', shuttle_dope='pdam',
+                                         dope_expand=0.5, dope_grow=0.0, ridge='seam', rib='ream', shuttle_dope='pdam',
                                          spring_dope='pdam', pad_dope='pppam', pos_metal='mlam',
                                          gnd_metal='mlam', clearout_layer='clearout', clearout_etch_stop_layer='snam', separate_fin_drive=separate_fin_drive)
 
 
 class GFFakeGratingCoupler(FakeGratingCoupler):
-    def __init__(self, waveguide_w=0.5, bounds=(40, 40), wg_layer='seam', box_layer='tzam'):
+    def __init__(self, waveguide_w=0.5, bounds=(40, 40), wg_layer='paam', box_layer='tzam'):
         super(GFFakeGratingCoupler, self).__init__(waveguide_w=waveguide_w, bounds=bounds, wg_layer=wg_layer, box_layer=box_layer)
 
 
 class GFFakePDKDC(FakePDKDC):
-    def __init__(self, waveguide_w=0.5, bounds=(51.63, 42.75), interport_w=42.75, wg_layer='seam', box_layer='tzam'):
+    def __init__(self, waveguide_w=0.5, bounds=(51.63, 42.75), interport_w=42.75, wg_layer='paam', box_layer='tzam'):
         super(GFFakePDKDC, self).__init__(waveguide_w=waveguide_w, bounds=bounds, interport_w=interport_w, wg_layer=wg_layer, box_layer=box_layer)
 
 
 class GFFakePhotodetector(FakePhotodetector):
-    def __init__(self, waveguide_w=0.5, bounds=(60, 10), wg_layer='seam', box_layer='tzam'):
+    def __init__(self, waveguide_w=0.5, bounds=(60, 10), wg_layer='paam', box_layer='tzam'):
         super(GFFakePhotodetector, self).__init__(waveguide_w=waveguide_w, bounds=bounds, wg_layer=wg_layer, box_layer=box_layer)
 
 

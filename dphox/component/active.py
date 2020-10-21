@@ -330,7 +330,7 @@ class LateralNemsTDC(Pattern):
                                                                    opposite=True))
                 flip_x = not flip_x
             rib_etch = [Pattern(poly) for brim in rib_etch for poly in (brim.shapely - dc.shapely)]
-            rib_brim = [Pattern(poly) for brim in rib_brim for poly in (brim.shapely - dc.shapely)]
+            # rib_brim = [Pattern(poly) for brim in rib_brim for poly in (brim.shapely - dc.shapely)]
             patterns += gnd_connections + rib_brim + gnd_wg_pads
         super(LateralNemsTDC, self).__init__(*patterns, call_union=False)
         self.dc, self.connectors, self.pads, self.nanofins = dc, connectors, gnd_wg_pads, nanofins
@@ -762,9 +762,10 @@ class LateralNemsFull(Multilayer):
         if device_name == 'tdc':
             gnd_pads = device.gnd_wg_pads
             gnd = Pattern(*gnd_pads)
-            gnd_box = Box((gnd.size[0], gnd.size[1])).hollow(trace_w).align(gnd)
+            gnd_box = Box((gnd.size[0], gnd.size[1] + 2 * trace_w)).hollow(trace_w).align(gnd)
             if single_metal:
-                gnd_box = gnd_box.difference(Box((2 * (gnd.size[0] / 2 - trace_w), gnd.size[1] + 2 * (0 - trace_w))).align(gnd_box).halign(gnd_box).translate(dx=-2 * trace_w, dy=0))
+                gnd_box = Box((gnd.size[0], gnd.size[1] + 2 * trace_w)).hollow(2 * trace_w).align(gnd)
+                gnd_box = gnd_box.difference(Box((gnd.size[0], gnd.size[1] + 2 * (gnd_box_h - trace_w))).align(gnd_box).halign(gnd_box).translate(dx=-2 * trace_w, dy=0))
             metals.append((gnd_box, gnd_metal))
             vias.extend(sum([gnd_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
             if anchor.gnd_electrode_dim is None:

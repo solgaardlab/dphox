@@ -53,7 +53,7 @@ def pa_nems_MZI(length, no_MZI=False):
             ps=ps_pull_apart.update(phaseshift_l=length),
             anchor=pull_apart_anchor.update(pos_electrode_dim=(length - 10, 4, 0.5),
                                             fin_dim=(length, 0.22)),
-            clearout_dim=(length, 0.3), single_metal=True
+            clearout_dim=(length, 0.3), gnd_box_h=11, single_metal=True
         ).nazca_cell(f'pull_apart_phase_shifter_{length}')
         if no_MZI:
             ps = chip.waveguide_ic.strt(length)
@@ -88,7 +88,7 @@ def pi_nems_MZI(length, no_MZI=False):
             anchor=pull_apart_anchor.update(fin_dim=(length, 0.22), shuttle_dim=(length - 10, 3),
                                             pos_electrode_dim=None, gnd_electrode_dim=None,
                                             spring_dim=None, include_support_spring=False, shuttle_stripe_w=0),
-            clearout_dim=(length, 0.3), single_metal=True
+            clearout_dim=(length, 0.3), gnd_box_h=8, single_metal=True
         ).nazca_cell(f'pull_in_phase_shifter_{length}')
         if no_MZI:
             ps = chip.waveguide_ic.strt(length)
@@ -127,7 +127,7 @@ def tdc_taper(taper_length: float, taper_change: float):
 def tdc_test_cell(length, dc_gap_w=0.2):
     shuttle_dim = (50, 2)
     if length < shuttle_dim[0]:
-        shuttle_dim = (length - 10, 2)
+        shuttle_dim = (np.around(length - 10, 0), 2)
     with nd.Cell(f'tunable_splitter_{length}_{dc_gap_w}_test_cell') as tdc_cell:
         buffer_length = 25
         # interaction_length = length
@@ -141,8 +141,9 @@ def tdc_test_cell(length, dc_gap_w=0.2):
                                             spring_dim=(length, 0.2),
                                             fin_dim=(length, 0.2),
                                             shuttle_dim=shuttle_dim),
-            pos_via=Via((0.4, 0.4), 0.1, metal=['mlam'], via=['cbam'], shape=(length - 15, 2), pitch=1),
+            pos_via=Via((0.12, 0.12), 0.1, metal=['mlam'], via=['cbam'], shape=(length - 15, 2), pitch=1),
             clearout_dim=(length, 0.3),
+            gnd_box_h=11,
             separate_fin_drive=True, single_metal=True,
         ).nazca_cell(f'tunable_splitter_{length}_{dc_gap_w}')
         gc = grating.put(0, 0, -180)
