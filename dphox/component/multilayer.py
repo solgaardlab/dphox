@@ -332,7 +332,6 @@ class Multilayer:
         return [(fill, layer_name)]
 
 
-
 class Via(Multilayer):
     def __init__(self, via_dim: Dim2, boundary_grow: float, metal: Union[str, List[str]],
                  via: Union[str, List[str]], pitch: float = 0, shape: Optional[Shape2] = None):
@@ -366,3 +365,4 @@ class Via(Multilayer):
         super(Via, self).__init__(layers)
         self.port['a0'] = Port(self.bounds[0], 0, np.pi)
         self.port['b0'] = Port(self.bounds[2], 0)
+
