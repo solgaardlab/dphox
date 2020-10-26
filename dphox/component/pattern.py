@@ -310,8 +310,8 @@ class Pattern:
         # any patterns in this pattern should also be flipped
         for pattern in self.reference_patterns:
             pattern.flip(center, horiz)
-        self.port = {name: Port(-port.x + 2 * center[0], port.y, port.a) if horiz else
-                     Port(port.x, -port.y + 2 * center[1], port.a) for name, port in self.port.items()}
+        self.port = {name: Port(-port.x + 2 * center[0], port.y, -port.a) if horiz else
+                     Port(port.x, -port.y + 2 * center[1], -port.a) for name, port in self.port.items()}
         return self
 
     def rotate(self, angle: float, origin: str = (0, 0)) -> "Pattern":

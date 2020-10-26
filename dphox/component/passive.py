@@ -36,6 +36,12 @@ class Box(Pattern):
             self.difference(Box((self.box_dim[0], self.box_dim[1] - 2 * thickness)).align(self)),
         )
 
+    def u(self, thickness: float):
+        return Pattern(
+            self.difference(Box((self.box_dim[0] - 2 * thickness, self.box_dim[1])).align(self)),
+            self.difference(Box((self.box_dim[0], self.box_dim[1] - thickness)).align(self).valign(self)),
+        )
+
     def striped(self, stripe_w: float, pitch: Optional[Dim2] = None):
         pitch = (stripe_w * 2, stripe_w * 2) if pitch is None else pitch
         patterns = [self.hollow(stripe_w)]
@@ -60,7 +66,7 @@ class Box(Pattern):
                 connector.copy.valign(self).halign(self, left=False)
             ]
         return Pattern(self.striped(stripe_w),
-                       spring.copy.valign(self), spring.copy.valign(self, bottom=False), *connectors)
+                       spring.copy.valign(self), spring.copy.valign(self, bottom=False), *connectors, call_union=False)
 
 
 class DC(Pattern):

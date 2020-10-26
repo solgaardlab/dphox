@@ -512,7 +512,9 @@ class NazcaLayout:
                 else:
                     node = device.put(line.pin[f'a{2 * i + 1}'])
                 if 'gnd_r' in node.pin:
-                    node.raise_pins(['gnd_r', 'pos_r' if left_pad_orientation else 'pos_l'], [f'gnd{i}', f'pos{i}'])
+                    node.raise_pins(['gnd_r', 'pos_r' if left_pad_orientation else 'pos_l', 'pos_b'], [f'gnd{i}',
+                                                                                                       f'pos{i}',
+                                                                                                       f'pos2_{i}'])
                 d1 = detector.put(node.pin['b0'])
                 d2 = detector.put(node.pin['b1'], flip=True)
                 autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])

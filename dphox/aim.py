@@ -57,11 +57,12 @@ class AIMNemsTDC(LateralNemsTDC):
 class AIMNemsAnchor(NemsAnchor):
     def __init__(self, fin_dim=(100, 0.22), shuttle_dim=(50, 2), spring_dim=None, straight_connector=(0.25, 1),
                  tether_connector=(2, 1, 0.5, 1), pos_electrode_dim=(90, 4, 0.5), gnd_electrode_dim=(3, 4),
-                 include_support_spring=True, shuttle_stripe_w=1):
+                 include_support_spring=True, shuttle_stripe_w=1, tooth_param=None):
         super(AIMNemsAnchor, self).__init__(fin_dim=fin_dim, shuttle_dim=shuttle_dim, spring_dim=spring_dim,
                                             straight_connector=straight_connector, tether_connector=tether_connector,
                                             pos_electrode_dim=pos_electrode_dim, gnd_electrode_dim=gnd_electrode_dim,
-                                            include_support_spring=include_support_spring, shuttle_stripe_w=shuttle_stripe_w)
+                                            include_support_spring=include_support_spring, shuttle_stripe_w=shuttle_stripe_w,
+                                            tooth_param=tooth_param)
 
 
 class AIMNemsFull(LateralNemsFull):
@@ -105,6 +106,9 @@ tether_anchor_ps = AIMNemsAnchor(
     straight_connector=None,
     include_support_spring=False
 )
+tether_anchor_ps_comb = tether_anchor_ps.update(tooth_param=(0.3, 2, 0.15),
+                                                pos_electrode_dim=(tether_phaseshift_l, 4, 3.7),
+                                                shuttle_dim=(30, 3))
 
 pull_in_full_ps = AIMNemsFull(device=ps_pull_in, anchor=pull_in_anchor,
                               clearout_dim=(phaseshift_l_pull_in, 0.3))
@@ -146,25 +150,28 @@ tether_full_tdc = pull_apart_full_tdc.update(
     tdc=tether_tdc,
     clearout_dim=(tether_interaction_l + 5, 0.5))
 
+tether_full_comb_ps = pull_apart_full_ps.update(
+    anchor=tether_anchor_ps_comb,
+    ps=tether_ps,
+    clearout_dim=(tether_phaseshift_l + 5, 0.5),
+    gnd_box_h=10
+)
+
 miller_node = NemsMillerNode(
     waveguide_w=0.48, upper_interaction_l=30, lower_interaction_l=120,
     gap_w=0.3, bend_radius=5, upper_bend_extension=58, lower_bend_extension=10,
     tdc_pad_dim=(55, 5, 1, 0.22), connector_dim=(0.1, 0.5),
     ps_comb=SimpleComb(
-        tooth_dim=(0.3, 3, 0.15),
-        gnd_electrode_dim=(20, 3),
-        pos_electrode_dim=(20, 6),
-        overlap=0,
-        edge_tooth_factor=5,
-        side_align=True
+        tooth_param=(0.3, 3, 0.15),
+        shuttle_pad_dim=(20, 3),
+        pos_pad_dim=(20, 6),
+        edge_tooth_factor=5
     ),
     tdc_comb=SimpleComb(
-        tooth_dim=(0.3, 3, 0.15),
-        gnd_electrode_dim=(15, 3),
-        pos_electrode_dim=(15, 6),
-        overlap=0,
-        edge_tooth_factor=5,
-        side_align=True
+        tooth_param=(0.3, 3, 0.15),
+        shuttle_pad_dim=(15, 3),
+        pos_pad_dim=(15, 6),
+        edge_tooth_factor=5
     ),
     comb_wg=ContactWaveguide(
         waveguide_w=0.48, length=5, gnd_contact_dim=(1, 2),
@@ -177,7 +184,7 @@ miller_node = NemsMillerNode(
         flipped=False, rib_etch_grow=0.25
     ),
     ps_spring_dim=(50, 0.25), tdc_spring_dim=(20, 0.25),
-    ps_shuttle_w=20, tdc_shuttle_w=15, clearout_etch_stop_grow=0.5, clearout_buffer_w=2,
+    ps_shuttle_w=30, tdc_shuttle_w=15, clearout_etch_stop_grow=0.5, clearout_buffer_w=2,
     ridge='seam', rib='ream', dope='pppam', pos_metal='m2am',
     gnd_metal='m1am', clearout_layer='clearout', clearout_etch_stop_layer='snam',
     gnd_via=Via((0.4, 0.4), 0.1, metal='m1am', via='cbam', shape=(2, 2), pitch=1),
