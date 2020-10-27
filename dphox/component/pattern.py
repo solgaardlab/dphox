@@ -127,12 +127,14 @@ class Pattern:
             *patterns: A list of polygons specified by the user, can be a Path, gdspy Polygon, shapely Polygon,
             shapely MultiPolygon or Pattern
             call_union: Do not call union
+            decimal_places: decimal places for rounding (in case of tiny errors in polygons)
     """
 
     def __init__(self, *patterns: Union[Path, gy.Polygon, gy.FlexPath, Polygon, MultiPolygon, "Pattern", np.ndarray],
-                 call_union: bool = True):
+                 call_union: bool = True, decimal_places: int = 3):
         self.config = copy(self.__dict__)
         self.polys = []
+        self.decimal_places = decimal_places
         for pattern in patterns:
             if isinstance(pattern, Pattern):
                 self.polys += pattern.polys
@@ -397,7 +399,8 @@ class Pattern:
     def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> nd.Cell:
         with nd.Cell(cell_name) as cell:
             for poly in self.polys:
-                nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
+                nd.Polygon(points=np.around(np.asarray(poly.exterior.coords.xy).T,
+                                            decimals=self.decimal_places), layer=layer).put()
             for name, port in self.port.items():
                 nd.Pin(name).put(*port.xya_deg)
             nd.put_stub()

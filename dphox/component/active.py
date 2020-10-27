@@ -299,10 +299,11 @@ class LateralNemsTDC(Pattern):
             # remaking the y coordinate center referenced for symmetry
             center_y = (max_y + min_y) / 2 - gnd_contact_dim[-1] / 2
             flip_x = flip_y = True
+            rib_brim = []
             for x in (min_x + dx_brim, max_x - dx_brim):
                 for y in (center_y - dy_brim, center_y + dy_brim):
                     flip_y = not flip_y
-                    rib_brim = [Waveguide(
+                    rib_brim += [Waveguide(
                         waveguide_w,
                         taper_ls=(brim_l,),
                         taper_params=(brim_taper,),
@@ -318,13 +319,12 @@ class LateralNemsTDC(Pattern):
                             taper_params=(brim_taper,), length=2 * brim_l + gnd_contact_dim[-1],
                             rotate_angle=np.pi / 2).translate(dx=x, dy=y - brim_l)
                     )
-                    if flip_x:
-                        gnd_connections.append(Box(gnd_contact_dim[:2]).translate(dx=x + waveguide_w / 2, dy=y))
-                    else:
-                        gnd_connections.append(
-                            Box(gnd_contact_dim[:2]).translate(dx=x - waveguide_w / 2 - gnd_contact_dim[0], dy=y))
+                    gnd_connections.append(
+                        Box(gnd_contact_dim[:2]).align(rib_brim[-1]).halign(rib_brim[-1],
+                                                                            opposite=True,
+                                                                            left=flip_x))
                     gnd_wg_pads.append(
-                        Box(gnd_wg[:2]).align(rib_brim[0]).halign(gnd_connections[-1],
+                        Box(gnd_wg[:2]).align(rib_brim[-1]).halign(gnd_connections[-1],
                                                                   left=flip_x,
                                                                   opposite=True))
                 flip_x = not flip_x
@@ -862,7 +862,6 @@ class NemsMillerNode(Multilayer):
         ps_comb_connector = Pattern(ps_comb_1, ps_comb_2)
         ps_comb_rib_etch = Pattern(*ps_comb_1.rib_brim, *ps_comb_2.rib_brim)
         ps_comb.align(ps_comb_connector, ps_comb.shuttle_pad).valign(ps_comb_connector, opposite=True)
-        # ps_comb_dopes = [Box.bbox(psc).expand(dope_expand).dope(dope, dope_grow) for psc in (ps_comb_1, ps_comb_2)]
 
         # tdc comb drive attachment
 
@@ -872,10 +871,9 @@ class NemsMillerNode(Multilayer):
         tdc_comb_connector = Pattern(tdc_comb_1, tdc_comb_2)
         tdc_comb_rib_etch = Pattern(*tdc_comb_1.rib_brim, *tdc_comb_2.rib_brim)
         tdc_comb.align(tdc_comb_connector, tdc_comb.shuttle_pad).valign(tdc_comb_connector, opposite=True)
-        tdc_comb_dopes = [Box.bbox(tc).expand(dope_expand).dope(dope, dope_grow) for tc in (tdc_comb_1, tdc_comb_2)]
 
         # clamped flexures
-        ps_connector_dim = (1, upper_interaction_l + 2 * bend_radius)
+        ps_connector_dim = (1, upper_interaction_l + 2 * bend_radius - waveguide_w)
         tdc_connector_dim = (1, tdc_shuttle_w + bend_radius / 2)  # TODO(sunil): fix dis
 
         # comb drive definitions

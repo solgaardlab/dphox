@@ -171,7 +171,9 @@ class Multilayer:
         with nd.Cell(cell_name) as cell:
             for pattern, layer in self._pattern_to_layer.items():
                 for poly in pattern.polys:
-                    nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
+                    nd.Polygon(points=np.around(np.asarray(poly.exterior.coords.xy).T,
+                                                decimals=pattern.decimal_places),
+                               layer=layer).put()
             for name, port in self.port.items():
                 nd.Pin(name).put(*port.xya_deg)
             if callback is not None:
@@ -335,6 +337,16 @@ class Multilayer:
 class Via(Multilayer):
     def __init__(self, via_dim: Dim2, boundary_grow: float, metal: Union[str, List[str]],
                  via: Union[str, List[str]], pitch: float = 0, shape: Optional[Shape2] = None):
+        """Via / metal multilayer stack (currently all params should be specified to 2 decimal places)
+
+        Args:
+            via_dim: dimensions of the via (or each via in via array)
+            boundary_grow: boundary growth around the via or via array
+            metal: Metal layers
+            via: Via layers
+            pitch: Pitch of the vias (center to center)
+            shape: Shape of the array (rows, cols)
+        """
         self.via_dim = via_dim
         self.boundary_grow = boundary_grow
         self.metal = metal
@@ -343,15 +355,15 @@ class Via(Multilayer):
         self.shape = shape
         self.config = copy(self.__dict__)
 
-        via_pattern = Box(via_dim)
+        via_pattern = Box(via_dim, decimal_places=2)
         if pitch > 0 and shape is not None:
             patterns = []
             x, y = np.meshgrid(np.arange(shape[0]) * pitch, np.arange(shape[1]) * pitch)
             for x, y in zip(x.flatten(), y.flatten()):
-                patterns.append(copy(via_pattern).translate(x, y))
-            via_pattern = Pattern(*patterns)
+                patterns.append(via_pattern.copy.translate(x, y))
+            via_pattern = Pattern(*patterns, decimal_places=2)
         boundary = Box((via_pattern.size[0] + 2 * boundary_grow,
-                        via_pattern.size[1] + 2 * boundary_grow)).align((0, 0)).halign(0)
+                        via_pattern.size[1] + 2 * boundary_grow), decimal_places=2).align((0, 0)).halign(0)
         via_pattern.align(boundary)
         layers = []
         if isinstance(via, list):
@@ -365,4 +377,3 @@ class Via(Multilayer):
         super(Via, self).__init__(layers)
         self.port['a0'] = Port(self.bounds[0], 0, np.pi)
         self.port['b0'] = Port(self.bounds[2], 0)
-

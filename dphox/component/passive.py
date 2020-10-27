@@ -2,7 +2,7 @@ from ..typing import *
 from .pattern import Pattern, Path, Port
 
 from copy import deepcopy as copy
-from shapely.geometry import MultiPolygon
+from shapely.geometry import MultiPolygon, box, Polygon
 import numpy as np
 
 try:
@@ -18,9 +18,10 @@ class Box(Pattern):
         box_dim: Box dimension (box width, box height)
     """
 
-    def __init__(self, box_dim: Dim2):
+    def __init__(self, box_dim: Dim2, decimal_places: int = 3):
         self.box_dim = box_dim
-        super(Box, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2))
+        super(Box, self).__init__(box(-box_dim[0] / 2, -box_dim[1] / 2, box_dim[0] / 2, box_dim[1] / 2),
+                                  decimal_places=decimal_places)
 
     @classmethod
     def bbox(cls, pattern: Pattern):
@@ -28,7 +29,7 @@ class Box(Pattern):
 
     def expand(self, grow: float):
         big_box_dim = (self.box_dim[0] + grow, self.box_dim[1] + grow)
-        return Pattern(Path(big_box_dim[1]).segment(big_box_dim[0]).translate(dx=0, dy=big_box_dim[1] / 2)).align(self)
+        return Box(big_box_dim).align(self)
 
     def hollow(self, thickness: float):
         return Pattern(
