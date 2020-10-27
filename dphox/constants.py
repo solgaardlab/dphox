@@ -493,3 +493,211 @@ AIM_PDK = {
 AIM_PDK_PASSIVE_PATH = '../../aim_lib/APSUNY_v35a_passive.design'
 AIM_PDK_WAVEGUIDE_PATH = '../../aim_lib/APSUNY_v35_waveguides.design'
 AIM_PDK_ACTIVE_PATH = '../../aim_lib/APSUNY_v35_actives.design'
+
+
+sinx280_STACK = {  # gotta makeup a mapping scheme (material, 0 = real layer / 1 = dummy layer)
+    'layers': {
+        'handle': (99, 0),  # si handle that is probabaly only useful for generating full sims
+        'box': (98, 0),  # bottom oxide, proabably most useful for grating simulations
+        'nit1': (1, 0),  # nitride waveguide layer
+        'tox': (2, 0),  # top oxide etch mask (data clear), most useful for gratings
+        # TODO: Add internal process check/warning for no etch stop
+        'asi1': (3, 0),  # etch of sacricificial layer of amorphous (data clear)
+        # TODO:ADD layers
+        'snam': (735, 727),  # snam, nitride waveguide
+        'ndam': (791, 727),  # ndam, n implant
+        'nnam': (792, 727),  # nnam, nn implant
+        'nnnam': (793, 727),  # nnnam, nnn implant
+        'pdam': (794, 727),  # pdam, p implant
+        'ppam': (795, 727),  # ppam, pp implant
+        'pppam': (796, 727),  # pppam, ppp implant
+        'tram': (718, 727),  # tram, detector trench
+        'ngam': (776, 727),  # ngam, n-type ion
+        'esam': (720, 727),  # esam, etch nitride etch stop
+        'caam': (721, 727),  # detector contact
+        'cbam': (722, 727),  # contact to Si Level
+        'm1am': (710, 727),  # metal 1 contact to caam/cbam
+        'v1am': (715, 727),  # via to m1am
+        'm2am': (725, 727),  # metal 2 level
+        'vaam': (771, 727),  # aluminum via to m2am
+        'tzam': (737, 727),  # tzam
+        'diam': (726, 727),  # diam, dicing channel
+        'paam': (779, 727),  # metal passivation
+        'mlam': (780, 727),  # aluminum metal layer
+        'oxide': (998, 1),  # oxide fill
+        'clearout': (999, 1),  # pseudo clearout for nems devices
+    },
+
+    'zranges': {
+        'handle': (-3, -2.16),  # si handle that is probabaly only useful for generating full sims
+        'box': (-2.16, 0),  # bottom oxide, proabably most useful for grating simulations
+        'nit1': (0, 0.28),  # nitride waveguide layer
+        'tox': (0.28, 0.97),  # top oxide, 690nm thick 0.97=0.69+0.28
+        # TODO:ADD layers
+        'asi1': (0.97, 1.10),  # sacricificial layer of amorphous si
+        'snam': (0.64, 0.86),  # snam, nitride waveguide
+        'ndam': (0.00, 0.11),  # ndam, n implant #this is a depth estimate
+        'nnam': (0.00, 0.11),  # nnam, nn implant #this is a depth estimate
+        'nnnam': (0.00, 0.22),  # nnnam, nnn implant #this is a depth estimate
+        'pdam': (0.11, 0.22),  # pdam, p implant #this is a depth estimate
+        'ppam': (0.11, 0.22),  # ppam, pp implant #this is a depth estimate
+        'pppam': (0.11, 0.22),  # pppam, ppp implant #this is a depth estimate
+        'tram': (0.22, 1.00),  # tram, detector trench # guessing
+        'ngam': (0.78, 1.00),  # ngam, n-type ion # guessing
+        'esam': (1.00, 1.100),  # esam, etch nitride etch stop # guessing
+        'caam': (0.93, 1.135),  # detector contact # guessing
+        'cbam': (0.22, 1.135),  # contact to Si Level # guessing
+        'm1am': (1.135, 1.24),  # metal 1 contact to caam/cbam # guessing
+        'v1am': (1.24, 1.74),  # via to m1am # guessing
+        'm2am': (1.74, 1.83),  # metal 2 level # guessing
+        'vaam': (1.83, 2.03),  # aluminum via to m2am # guessing
+        'tzam': (0.64, 2.00),  # tzam # guessing
+        'diam': (-2.00, 2.00),  # diam, dicing channel # guessing
+        'paam': (1.95, 2.00),  # metal passivation # guessing
+        'mlam': (1.73, 1.95),  # mteal pad layer # guessing
+        'oxide': (-2.00, 2.00),  # oxide fill
+        'clearout': (-2.00, 2.00),  # pseudo clearout for nems devices
+    },
+    'process_extrusion': {
+        # ream, si ridge remaining
+        'etch_re': [('ream', 'seam', 'intersection'), ('ream', 'diam', 'difference')],
+        'etch_se': [('seam', 'ream', 'difference'), ('seam', 'diam', 'difference')],
+        'dope_nd': [('ndam', 'seam', 'intersection'), ('ndam', 'ream', 'intersection')],
+        'dope_nn': [('nnam', 'seam', 'intersection'), ('nnam', 'ream', 'intersection')],
+        'dope_nnn': [('nnnam', 'seam', 'intersection'), ('nnnam', 'ream', 'intersection')],
+        'dope_pd': [('pdam', 'seam', 'intersection'), ('pdam', 'ream', 'intersection')],
+        'dope_pp': [('ppam', 'seam', 'intersection'), ('ppam', 'ream', 'intersection')],
+        'dope_ppp': [('pppam', 'seam', 'intersection'), ('pppam', 'ream', 'intersection')],
+        # fnam, nitride waveguide
+        'etch_fn': [('fnam', 'diam', 'difference')],
+        # snam, nitride waveguide
+        'etch_sn': [('snam', 'tzam', 'difference'), ('snam', 'diam', 'difference'), ('snam', 'clearout', 'difference')],
+        # tram, detector trench # guessing
+        'etch_tr': [('tram', 'diam', 'difference')],
+        # ngam, n-type ion # guessing
+        'dope_ng': [('ngam', 'tram', 'intersection'), ('ngam', 'diam', 'difference')],
+        # esam, etch nitride etch stop # guessing
+        'etch_es': [('esam', 'caam', 'difference'), ('esam', 'diam', 'difference')],
+        # detector contact # guessing
+        'via_ca': [('caam', 'diam', 'difference')],
+        # contact to Si Level # guessing
+        'via_cb': [('cbam', 'diam', 'difference')],
+        # metal 1 contact to caam/cbam # guessing
+        'metal_m1': [('m1am', 'diam', 'difference')],
+        # via to m1am # guessing
+        'via_v1': [('v1am', 'diam', 'difference')],
+        # metal 2 level # guessing
+        'metal_m2': [('m2am', 'diam', 'difference')],
+        # aluminum via to m2am # guessing
+        'via_va': [('vaam', 'diam', 'difference')],
+        # mteal pad layer # guessing
+        'metal_ml': [('mlam', 'diam', 'difference')],
+        # metal passivation # guessing
+        'fill_pa': [('paam', 'diam', 'difference')],
+        # oxide fill
+        'etch_ox': [('oxide', 'clearout', 'difference'), ('oxide', 'tzam', 'difference'), ('oxide', 'diam', 'difference')],
+        # air in case it's needed for
+        'etch_air': [('clearout', 'diam', 'difference')],
+    },
+    'layer_to_color': {
+        'seam': (0.5, 0.5, 0.5, 1),
+        'ream': (0.5, 0.5, 0.5, 1),
+        'oxide': (0.8, 0, 0, 0.5),
+        'cbam': (0.9, 0.5, 0.0, 1),
+        'v1am': (0.9, 0.5, 0.0, 1),
+        'vaam': (0.9, 0.5, 0.0, 1),
+        'm1am': (0.1, 0.5, 0.3, 1),
+        'm2am': (0.1, 0.2, 0.6, 1),
+        'mlam': (0.0, 0.7, 0.8, 1),
+        'pdam': (0.4, 0.2, 0.6, 0.5),
+        'ppam': (0.4, 0.2, 0.6, 0.7),
+        'pppam': (0.4, 0.2, 0.6, 0.9),
+        'ndam': (1.0, 0.3, 0.3, 0.5),
+        'nnam': (1.0, 0.3, 0.3, 0.7),
+        'nnnam': (1.0, 0.3, 0.3, 0.9),
+        'fnam': (0.8, 0, 0, 0.5),
+        'snam': (0.8, 0.5, 0, 0.5),
+        'clearout': (0.7, 0.7, 0.2, 0.5),
+    },
+    'cross_sections': {
+        'v1_xs': [
+            {
+                'layer': 'm2am'
+            },
+            {
+                'layer': 'v1am',
+                'growx': -0.05,
+                'growy': -0.05
+            },
+            {
+                'layer': 'm1am'
+            },
+        ],
+        'pad_xs': [
+            {
+                'layer': 'm2am'
+            },
+            {
+                'layer': 'mlam'  # aluminum pads
+            },
+            {
+                'layer': 'vaam',  # via to aluminum layer
+                'growx': -2,
+                'growy': -2
+            }
+        ],
+        'waveguide_xs': [
+            {
+                'layer': 'seam'
+            }
+        ],
+        'dice_xs': [
+            {
+                'layer': 'diam'
+            }
+        ],
+        'm1_xs': [
+            {
+                'layer': 'm1am'
+            }
+        ],
+        'm2_xs': [
+            {
+                'layer': 'm2am'
+            }
+        ],
+        'ml_xs': [
+            {
+                'layer': 'mlam'
+            }
+        ],
+        'va_xs': [
+            {
+                'layer': 'mlam'
+            },
+            {
+                'layer': 'vaam',
+                'growx': -0.75,
+                'growy': -0.75
+            },
+            {
+                'layer': 'm2am'
+            }
+        ]
+    }
+}
+
+GCMESHMSDLA_PDK = {
+    'dc_exp': {
+        'a0': (-7600, -1800, 180)
+    },
+    'mmi_exp': {
+        'a0': (-7600, -1800, 180)
+    },
+    'gc_exp': {
+        'a0': (-7600, -1800, 180)
+    },
+    'mmi_mzi': {
+        'a0': (-7600, -1800, 180)
+    }
+}

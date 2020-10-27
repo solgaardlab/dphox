@@ -291,6 +291,8 @@ class Multilayer:
         layers = self.layer_to_pattern.keys()
         layer_to_pattern_processed = self.layer_to_pattern.copy()
 
+        # TODO(Nate):Add Conformal deposition logic
+
         for step, operations in process_extrusion.items():
             for layer_relation in operations:
                 layer, other_layer, operation = layer_relation
