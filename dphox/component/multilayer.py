@@ -265,7 +265,7 @@ class Multilayer:
                 include_oxide: bool = True):
         meshes = self.to_trimesh_dict(layer_to_zrange, process_extrusion, layer_to_color, engine, include_oxide)
         for layer, mesh in meshes.items():
-            if layers and layer in layers:
+            if layers is None or layer in layers:
                 mesh.export(f'{prefix}_{layer}.stl')
 
     def to_trimesh_scene(self, layer_to_zrange: Dict[str, Tuple[float, float]],
