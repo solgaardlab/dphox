@@ -12,7 +12,7 @@ chip = NazcaLayout(
 )
 
 # #Please leave this so Nate can run this quickly
-# chip = AIMNazca(
+# chip = NazcaLayout(
 #     passive_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_passive.gds',
 #     waveguides_filepath='../../../20200819_sjby_aim_run/APSUNY_v35_waveguides.gds',
 #     active_filepath='../../../20200819_sjby_aim_run/APSUNY_v35a_active.gds',
@@ -103,11 +103,11 @@ dc_invdes = AIMDC(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes), gap_w=t
     Pattern.from_gds('alex_directional.gds')
 ).nazca_cell('dc_invdes', layer='seam')
 dc_invdes_bb1 = AIMDC(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes_bb), gap_w=test_gap_w_invdes_bb,
-                  interaction_l=6.08).replace(
+                      interaction_l=6.08).replace(
     Pattern.from_gds('coupler_480nm_BW100nm.gds')
 ).nazca_cell('dc_invdes_bb100nm', layer='seam')
 dc_invdes_bb2 = AIMDC(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes_bb), gap_w=test_gap_w_invdes_bb,
-                  interaction_l=6.08).replace(
+                      interaction_l=6.08).replace(
     Pattern.from_gds('coupler_480nm_BW200nm.gds')
 ).nazca_cell('dc_invdes_bb200nm', layer='seam')
 dc_millernode = AIMDC(bend_dim=(aggressive_dc_radius, miller_node_bend_dim)).nazca_cell('dc_millernode', layer='seam')
@@ -384,39 +384,39 @@ but we lose extra mechanical support and are susceptible to warping/cantilever e
 print('Defining tether structures...')
 
 tether = [
-             tether_full_ps.update(
-                 ps=tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
-                 anchor=tether_anchor_ps.update(
-                     spring_dim=(psl + 10, 0.22),
-                     pos_electrode_dim=(psl, 4, 0.5),
-                     fin_dim=(psl, 0.22)
-                 ),
-                 clearout_dim=(psl + 5, 0.3),
-             )
-             for psl in (60, 80) for taper_l, taper_change in ((5, -0.05), (10, -0.1), (15, -0.1))
-         ] + [
-             tether_full_tdc.update(
-                 tdc=tether_tdc.update(interaction_l=il, **tdc_taper(taper_l, taper_change)),
-                 anchor=tether_anchor_tdc.update(
-                     spring_dim=(il + 5, 0.22),
-                     pos_electrode_dim=(il - 5, 4, 0.5),
-                     fin_dim=(il, 0.3),
-                 ),
-                 clearout_dim=(il + 5, 0.3),
-             )
-             for il in (80, 100) for taper_l, taper_change in
-             ((10, -0.1), (15, -0.1), (20, -0.16), (20, -0.32), (20, -0.52))
-         ] + [
-             tether_full_tdc.update(tdc=tether_tdc.update(interaction_l=test_tdc_interaction_short_l),
-                                    anchor=tether_anchor_tdc.update(
-                                        spring_dim=(test_tdc_interaction_short_l + 12, 0.22),
-                                        fin_dim=(test_tdc_interaction_short_l, 0.22),
-                                        pos_electrode_dim=(test_tdc_interaction_short_l, 4, 0.5)
-                                    ),
-                                    clearout_dim=(test_tdc_interaction_short_l + 5, 0.3),
-                                    pos_box_w=12,
-                                    )
-         ]
+    tether_full_ps.update(
+        ps=tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
+        anchor=tether_anchor_ps.update(
+            spring_dim=(psl + 10, 0.22),
+            pos_electrode_dim=(psl, 4, 0.5),
+            fin_dim=(psl, 0.22)
+        ),
+        clearout_dim=(psl + 5, 0.3),
+    )
+    for psl in (60, 80) for taper_l, taper_change in ((5, -0.05), (10, -0.1), (15, -0.1))
+] + [
+    tether_full_tdc.update(
+        tdc=tether_tdc.update(interaction_l=il, **tdc_taper(taper_l, taper_change)),
+        anchor=tether_anchor_tdc.update(
+            spring_dim=(il + 5, 0.22),
+            pos_electrode_dim=(il - 5, 4, 0.5),
+            fin_dim=(il, 0.3),
+        ),
+        clearout_dim=(il + 5, 0.3),
+    )
+    for il in (80, 100) for taper_l, taper_change in
+    ((10, -0.1), (15, -0.1), (20, -0.16), (20, -0.32), (20, -0.52))
+] + [
+    tether_full_tdc.update(tdc=tether_tdc.update(interaction_l=test_tdc_interaction_short_l),
+                           anchor=tether_anchor_tdc.update(
+        spring_dim=(test_tdc_interaction_short_l + 12, 0.22),
+        fin_dim=(test_tdc_interaction_short_l, 0.22),
+        pos_electrode_dim=(test_tdc_interaction_short_l, 4, 0.5)
+    ),
+        clearout_dim=(test_tdc_interaction_short_l + 5, 0.3),
+        pos_box_w=12,
+    )
+]
 
 tether_column = [chip.mzi_arms([dev], [1], name=f'tether_{i}') if i < 6 else dev.nazca_cell(f'tether_{i}')
                  for i, dev in enumerate(tether)]
@@ -433,46 +433,46 @@ This includes inv design and aggressive, broadband directional couplers
 print('Defining aggressive structures...')
 
 tether_ps_safe = tether_full_ps.update(
-     ps=tether_ps.update(phaseshift_l=80),
-     anchor=tether_anchor_tdc.update(
-         spring_dim=(80 + 10, 0.22),
-         pos_electrode_dim=(75, 4, 0.4),
-         fin_dim=(80, 0.3),
-         shuttle_dim=(10, 1.5),
-         shuttle_stripe_w=0
-     ),
-     clearout_dim=(85, 0.3)
- )
+    ps=tether_ps.update(phaseshift_l=80),
+    anchor=tether_anchor_tdc.update(
+        spring_dim=(80 + 10, 0.22),
+        pos_electrode_dim=(75, 4, 0.4),
+        fin_dim=(80, 0.3),
+        shuttle_dim=(10, 1.5),
+        shuttle_stripe_w=0
+    ),
+    clearout_dim=(85, 0.3)
+)
 
 aggressive = [
-                 tether_full_ps.update(ps=tether_ps.update(taper_l=10,
-                                                           boundary_taper=cubic_taper(-0.25),
-                                                           wg_taper=cubic_taper(-0.4),
-                                                           gap_taper=cubic_taper(-0.4),
-                                                           ))  # slot
-             ] + [tether_full_comb_ps] + [tether_ps_safe] * 2 + [pull_in_full_ps] * 2 + [tether_ps_safe] * 2 + [
-                 tether_full_ps.update(
-                     ps=tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
-                     anchor=tether_anchor_tdc.update(
-                         spring_dim=(psl + 10, 0.22),
-                         pos_electrode_dim=(psl - 5, 4, 0.4),
-                         fin_dim=(psl, 0.3),
-                         shuttle_dim=(10, 1.5),
-                         shuttle_stripe_w=0
-                     ),
-                     clearout_dim=(psl + 5, 0.3)
-                 )
-                 for psl in (50, 70) for taper_l, taper_change in ((10, -0.05), (15, -0.1), (20, -0.1))
-             ] + [
-                 tether_full_tdc.update(tdc=tether_tdc.update(**tdc_taper(taper_l, taper_change)))
-                 for taper_l, taper_change in ((20, -0.32), (20, -0.42), (20, -0.52))
-             ]
+    tether_full_ps.update(ps=tether_ps.update(taper_l=10,
+                                              boundary_taper=cubic_taper(-0.25),
+                                              wg_taper=cubic_taper(-0.4),
+                                              gap_taper=cubic_taper(-0.4),
+                                              ))  # slot
+] + [tether_full_comb_ps] + [tether_ps_safe] * 2 + [pull_in_full_ps] * 2 + [tether_ps_safe] * 2 + [
+    tether_full_ps.update(
+        ps=tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
+        anchor=tether_anchor_tdc.update(
+            spring_dim=(psl + 10, 0.22),
+            pos_electrode_dim=(psl - 5, 4, 0.4),
+            fin_dim=(psl, 0.3),
+            shuttle_dim=(10, 1.5),
+            shuttle_stripe_w=0
+        ),
+        clearout_dim=(psl + 5, 0.3)
+    )
+    for psl in (50, 70) for taper_l, taper_change in ((10, -0.05), (15, -0.1), (20, -0.1))
+] + [
+    tether_full_tdc.update(tdc=tether_tdc.update(**tdc_taper(taper_l, taper_change)))
+    for taper_l, taper_change in ((20, -0.32), (20, -0.42), (20, -0.52))
+]
 aggressive_column = [chip.mzi_arms([dev], [1], name=f'aggressive_{i}') if i < 14
                      else dev.nazca_cell(f'aggressive_{i}') for i, dev in enumerate(aggressive)]
 
 aggressive_column_dcs = [dc_short] * 2\
-                        + [dc_aggressive, dc_invdes, dc_aggressive, dc_invdes, dc_invdes_bb1, dc_invdes_bb2]\
-                        + [dc_short] * 6 + [None] * 3
+    + [dc_aggressive, dc_invdes, dc_aggressive, dc_invdes, dc_invdes_bb1, dc_invdes_bb2]\
+    + [dc_short] * 6 + [None] * 3
 
 
 '''
@@ -486,46 +486,46 @@ More inv design and aggressive coupler variations
 '''
 
 extreme = [
-              pull_in_full_ps.update(
-                  ps=ps_pull_in.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
-                  anchor=pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
-                  clearout_dim=(psl, 0.3)
-              )
-              for psl in (30, 40) for taper_l, taper_change in ((5, -0.1), (10, -0.1), (15, -0.1))
-          ] + [
-              pull_in_full_ps.update(
-                  ps=ps_pull_in.update(phaseshift_l=psl, nanofin_w=nanofin_w),
-                  anchor=pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
-                  clearout_dim=(psl, 0.3)
-              )
-              for psl in (20, 30) for nanofin_w in (0.2, 0.25, 0.3)
-          ] + [
-              tether_full_ps.update(
-                  ps=tether_ps.update(phaseshift_l=psl),
-                  anchor=tether_anchor_ps.update(
-                      spring_dim=(psl + 10, 0.22),
-                      pos_electrode_dim=(psl - 5, 4, 0.3),
-                      fin_dim=(psl, 0.15),
-                      shuttle_dim=(5, 1.5),
-                      shuttle_stripe_w=0
-                  ),
-                  clearout_dim=(psl + 5, 0.3)
-              ) for psl in (15, 30)
-          ] + [
-              tether_full_tdc.update(
-                  ps=tether_tdc.update(interaction_l=il, dc_gap_w=0.125,
-                                       bend_dim=(
-                                       test_tdc_radius, test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2), ),
-                  anchor=tether_anchor_tdc.update(
-                      spring_dim=(il, 0.22),
-                      pos_electrode_dim=(il - 5, 4, 0.4),
-                      fin_dim=(il, 0.3),
-                      shuttle_dim=(10, 1.5),
-                      shuttle_stripe_w=0
-                  ),
-                  clearout_dim=(il, 0.3)
-              ) for il in (15, 20, 25)
-          ]
+    pull_in_full_ps.update(
+        ps=ps_pull_in.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
+        anchor=pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
+        clearout_dim=(psl, 0.3)
+    )
+    for psl in (30, 40) for taper_l, taper_change in ((5, -0.1), (10, -0.1), (15, -0.1))
+] + [
+    pull_in_full_ps.update(
+        ps=ps_pull_in.update(phaseshift_l=psl, nanofin_w=nanofin_w),
+        anchor=pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
+        clearout_dim=(psl, 0.3)
+    )
+    for psl in (20, 30) for nanofin_w in (0.2, 0.25, 0.3)
+] + [
+    tether_full_ps.update(
+        ps=tether_ps.update(phaseshift_l=psl),
+        anchor=tether_anchor_ps.update(
+            spring_dim=(psl + 10, 0.22),
+            pos_electrode_dim=(psl - 5, 4, 0.3),
+            fin_dim=(psl, 0.15),
+            shuttle_dim=(5, 1.5),
+            shuttle_stripe_w=0
+        ),
+        clearout_dim=(psl + 5, 0.3)
+    ) for psl in (15, 30)
+] + [
+    tether_full_tdc.update(
+        ps=tether_tdc.update(interaction_l=il, dc_gap_w=0.125,
+                             bend_dim=(
+                                 test_tdc_radius, test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2), ),
+        anchor=tether_anchor_tdc.update(
+            spring_dim=(il, 0.22),
+            pos_electrode_dim=(il - 5, 4, 0.4),
+            fin_dim=(il, 0.3),
+            shuttle_dim=(10, 1.5),
+            shuttle_stripe_w=0
+        ),
+        clearout_dim=(il, 0.3)
+    ) for il in (15, 20, 25)
+]
 extreme_column = [chip.mzi_arms([dev], [1], name=f'extreme_{i}') if i < 14
                   else dev.nazca_cell(f'extreme_{i}') for i, dev in enumerate(aggressive)]
 
@@ -617,7 +617,7 @@ middle_mesh_tdc = [pull_apart_full_tdc.nazca_cell('middle_mesh_pull_apart_tdc'),
                    pull_in_full_tdc.nazca_cell('middle_mesh_pull_in_tdc'),
                    pull_apart_full_tdc.update(
                        tdc=tdc_pull_apart.update(**tdc_taper(-0.2, 40))
-                   ).nazca_cell('middle_mesh_pull_apart_taper_tdc')]
+).nazca_cell('middle_mesh_pull_apart_taper_tdc')]
 
 with nd.Cell('miller_node_full') as miller_node_full:
     miller_node_cell = miller_node.nazca_cell('miller_node').put()
@@ -656,7 +656,6 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
     eu_array_nems = eu_array.put(-180, 200)
     bp_array_thermal = bp_array.put(-180, 1778, flip=True)
     eu_array_thermal = eu_array.put(-180, 1538, flip=True)
-
 
     # all ranges are [inclusive, exclusive) as is convention in python range() method
     # TODO(someone not Nate): double check the remapped mesh connections
@@ -868,7 +867,6 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             chip.v1_via_4.put(d2.pin['n'])
             mesh_ts_idx += 1
 
-
         def extra_bend_p2p(p1, p2, radius, angle, strt, use_m1=False):
             if use_m1:
                 chip.v1_via_4.put(p1)
@@ -878,7 +876,6 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             ic.bend_strt_bend_p2p(p2, radius=radius).put()
             if use_m1:
                 chip.v1_via_4.put()
-
 
         if layer == 2:
             # nems and thermal test node
@@ -1076,4 +1073,4 @@ with nd.Cell('aim_layout') as aim_layout:
 
 nd.export_gds(filename=f'aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
 # Please leave this so Nate can run this quickly
-# nd.export_gds(filename=f'../../../20200819_sjby_aim_run/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])
+# nd.export_gds(filename=f'../../../20200819_sjby_aim_run/drc finalization/aim-layout-{str(date.today())}-submission', topcells=[aim_layout])

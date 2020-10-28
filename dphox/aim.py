@@ -73,7 +73,7 @@ class AIMNemsFull(LateralNemsFull):
                  trace_w=3):
         super(AIMNemsFull, self).__init__(device=device, anchor=anchor, gnd_via=gnd_via,
                                           pos_via=pos_via, trace_w=trace_w, pos_box_w=pos_box_w,
-                                          gnd_box_h=gnd_box_h, clearout_dim=clearout_dim,  clearout_etch_stop_grow=0.5,
+                                          gnd_box_h=gnd_box_h, clearout_dim=clearout_dim, clearout_etch_stop_grow=0.5,
                                           dope_expand=0.3, dope_grow=0.1, ridge='seam', rib='ream', shuttle_dope='pdam',
                                           spring_dope='pdam', pad_dope='pppam', pos_metal='m2am',
                                           gnd_metal='m1am', clearout_layer='clearout', clearout_etch_stop_layer='snam')
@@ -111,10 +111,10 @@ tether_anchor_ps_comb = tether_anchor_ps.update(tooth_param=(0.3, 2, 0.15),
                                                 shuttle_dim=(30, 3))
 
 pull_in_full_ps = AIMNemsFull(device=ps_pull_in, anchor=pull_in_anchor,
-                              clearout_dim=(phaseshift_l_pull_in, 0.3))
+                              clearout_dim=(phaseshift_l_pull_in, 0.3)).update(shuttle_dope=None)
 pull_in_full_tdc = AIMNemsFull(device=tdc_pull_in, anchor=pull_in_anchor,
                                clearout_dim=(interaction_l_pull_in, 0.3),
-                               gnd_box_h=10, pos_box_w=12)
+                               gnd_box_h=10, pos_box_w=12).update(shuttle_dope=None)
 pull_apart_full_ps = AIMNemsFull(device=ps_pull_apart, anchor=pull_apart_anchor,
                                  clearout_dim=(phaseshift_l_pull_apart, 0.3),
                                  gnd_box_h=10, pos_box_w=18)
