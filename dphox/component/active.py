@@ -129,10 +129,14 @@ class LateralNemsPS(Pattern):
                          copy(rib_brim).flip(horiz=True).translate(wg.size[0])]
 
             gnd_connections = [
-                Box(gnd_connector[1:]).align(rib_brims[0]).valign(rib_brim, bottom=True, opposite=True),
-                Box(gnd_connector[1:]).align(rib_brims[0]).valign(rib_brim, bottom=False, opposite=True),
-                Box(gnd_connector[1:]).align(rib_brims[1]).valign(rib_brim, bottom=True, opposite=True),
-                Box(gnd_connector[1:]).align(rib_brims[1]).valign(rib_brim, bottom=False, opposite=True)
+                Box(gnd_connector[1:]).align(rib_brims[0]).valign(
+                    rib_brim, bottom=True, opposite=True).translate(0, -rib_etch_grow / 3),
+                Box(gnd_connector[1:]).align(rib_brims[0]).valign(
+                    rib_brim, bottom=False, opposite=True).translate(0, rib_etch_grow / 3),
+                Box(gnd_connector[1:]).align(rib_brims[1]).valign(
+                    rib_brim, bottom=True, opposite=True).translate(0, -rib_etch_grow / 3),
+                Box(gnd_connector[1:]).align(rib_brims[1]).valign(
+                    rib_brim, bottom=False, opposite=True).translate(0, rib_etch_grow / 3)
             ]
 
             if gnd_pad_dim is not None:
@@ -151,7 +155,8 @@ class LateralNemsPS(Pattern):
             patterns.extend(rib_brim + gnd_connections + gnd_pads)
 
         super(LateralNemsPS, self).__init__(*patterns, call_union=False)
-        self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads, self.pads = wg, nanofins, rib_etch, gnd_pads, gnd_pads + gnd_connections
+        self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads, self.pads = wg, nanofins, rib_etch, gnd_pads,\
+                                                                                 gnd_pads + gnd_connections
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)
         self.port['a0'] = Port(0, 0, -np.pi)
@@ -163,7 +168,7 @@ class LateralNemsPS(Pattern):
             self.port['fin1'] = Port(*(center - dy), np.pi)
 
     def effective_index(self, waveguide_h: float = 0.22, grid_spacing: float = 0.01,
-                        wavelength: float = 1.55, wg_z: float = 1, sim_size: Dim2 = (2.5, 2)):
+                        wg_z: float = 1, sim_size: Dim2 = (2.5, 2)):
         if not SIMPHOX_IMPORTED:
             raise ImportError("This method requires simphox to be imported")
         waveguide_w_change = np.sum([np.sum(et) for et in self.end_taper])
@@ -172,7 +177,6 @@ class LateralNemsPS(Pattern):
             wg=MaterialBlock((waveguide_w, waveguide_h), SILICON),
             sub=MaterialBlock(sim_size, AIR),
             size=sim_size,
-            wavelength=wavelength,
             wg_height=wg_z,
             spacing=grid_spacing
         )
@@ -746,7 +750,7 @@ class LateralNemsFull(Multilayer):
         if device_name == 'tdc':
             gnd_pads = device.gnd_wg_pads
             gnd = Pattern(*gnd_pads)
-            gnd_box = Box((gnd.size[0], gnd.size[1])).hollow(trace_w).align(gnd)
+            gnd_box = Box((gnd.size[0], gnd.size[1] + gnd_box_h / 2)).hollow(trace_w).align(gnd)
             metals.append((gnd_box, gnd_metal))
             vias.extend(sum([gnd_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
             if anchor.gnd_electrode_dim is None:

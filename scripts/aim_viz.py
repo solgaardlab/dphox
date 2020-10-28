@@ -51,11 +51,11 @@ miller_node.show(
 # )
 
 # make the stl files
-# miller_node.to_stls(
-#     prefix='miller_node',
-#     layer_to_zrange=AIM_STACK['zranges'],
-#     process_extrusion=AIM_STACK['process_extrusion'],
-#     layer_to_color=AIM_STACK['layer_to_color'],
-#     layers=['oxide', 'clearout', 'seam', 'ream'],
-#     engine='blender'
-# )
+miller_node.to_stls(
+    prefix='miller_node',
+    layer_to_zrange=AIM_STACK['zranges'],
+    process_extrusion=AIM_STACK['process_extrusion'],
+    layer_to_color=AIM_STACK['layer_to_color'],
+    layers=['oxide', 'clearout', 'seam', 'ream'],
+    engine='blender'
+)

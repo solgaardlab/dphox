@@ -148,7 +148,9 @@ tether_full_ps = pull_apart_full_ps.update(
 tether_full_tdc = pull_apart_full_tdc.update(
     anchor=tether_anchor_tdc,
     tdc=tether_tdc,
-    clearout_dim=(tether_interaction_l + 5, 0.5))
+    clearout_dim=(tether_interaction_l + 5, 0.5),
+    pos_box_w=11
+)
 
 tether_full_comb_ps = pull_apart_full_ps.update(
     anchor=tether_anchor_ps_comb,
