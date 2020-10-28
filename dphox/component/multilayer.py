@@ -292,6 +292,14 @@ class Multilayer:
         layer_to_pattern_processed = self.layer_to_pattern.copy()
 
         # TODO(Nate):Add Conformal deposition logic
+        # build topographic map
+        minx, miny, maxx, maxy = self.bounds
+        starting_slate = Pattern(gy.Polygon(
+            [(minx, miny), (minx, maxy),
+             (maxx, maxy), (maxx, miny)]))
+        topo_map_dict = {str(0): starting_slate}  # zero is the starting height
+
+        # TODO: sort out the Pattern instance creations, so they aren't necessary
 
         for step, operations in process_extrusion.items():
             for layer_relation in operations:
@@ -316,6 +324,44 @@ class Multilayer:
                         pattern_shapely = MultiPolygon([pattern_shapely]) if isinstance(pattern_shapely, Polygon) else pattern_shapely
                         layer_to_pattern_processed[layer] = pattern
                         layer_to_extrusion[layer] = (pattern_shapely, new_zrange)
+                # section on just building the topo map
+                zmin, zmax = new_zrange
+                heights = list(topo_map_dict.keys())
+                if operation == 'conformal':
+                    raising_pattern = starting_slate.boolean_operation(
+                        Pattern(pattern), 'difference'
+                    ).shapely
+                else:
+                    raising_pattern = pattern
+                for elevation in heights:
+                    # two operations
+                    # material added
+                    raised = Pattern(raising_pattern).boolean_operation(
+                        Pattern(topo_map_dict[elevation]), 'intersection'
+                    ).shapely
+                    # nothing changed
+                    not_raised = Pattern(topo_map_dict[elevation]).boolean_operation(
+                        (Pattern(raised)), 'difference'
+                    ).shapely
+
+                    # topo_map.layer_to_pattern[str(elevation)] = not_raised
+                    # topo_map.layer_to_pattern[str(float(elevation) + (zmax - zmin))] = raised
+
+                    # topo_map.pattern_to_layer.append((not_raised, str(elevation)))
+                    # topo_map.pattern_to_layer.append((raised, str(float(elevation) + (zmax - zmin))))
+                    # topo_map.layer_to_pattern[str(float(elevation) + (zmax - zmin))] = raised
+
+                    topo_map_dict[str(elevation)] = Pattern(not_raised)
+                    topo_map_dict[str(float(elevation) + (zmax - zmin))] = Pattern(raised)
+        topo_list = []
+        for layer, pattern in topo_map_dict.items():
+            topo_list.append((pattern, layer))
+
+        # WORKS, now I need to add dialation and fit this into the extrusion flow
+        # I think the strategy is dialate everything, then difference by height when tallest is unobstructed and then apply raisig pattern
+        # with the new topo, compare/intersect with the old topo and make the zranges for all height combinations
+        self.topo = Multilayer(topo_list)
+
         return layer_to_extrusion
 
     def fill_material(self, layer_name: str, growth: float, centered_layer: str = None):
