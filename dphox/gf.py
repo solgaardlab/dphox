@@ -30,7 +30,7 @@ class GFDC(DC):
 
 class GFNemsPS(LateralNemsPS):
     def __init__(self, waveguide_w=waveguide_w, nanofin_w=0.2, phaseshift_l=phaseshift_l_pull_apart,
-                 gap_w=0.10, num_taper_evaluations=100, gnd_connector=(2, 0.2, 5),
+                 gap_w=0.10, num_taper_evaluations=200, gnd_connector=(2, 0.2, 5),
                  gnd_pad_dim=None, taper_l=0, end_ls=(end_l,), gap_taper=None, wg_taper=None, boundary_taper=None,
                  fin_end_bend_dim=(2, 1), end_taper=((0, -0.08),), gnd_connector_idx=-1, rib_etch_grow=0.2):
         super(GFNemsPS, self).__init__(waveguide_w=waveguide_w, nanofin_w=nanofin_w, phaseshift_l=phaseshift_l,
@@ -111,10 +111,10 @@ pull_in_anchor = GFNemsAnchor(
 
 
 pull_in_full_ps = GFNemsFull(device=ps_pull_in, anchor=pull_in_anchor,
-                             clearout_dim=(phaseshift_l_pull_in, 0.3))
+                             clearout_dim=(phaseshift_l_pull_in, 0.3)).update(shuttle_dope=None)
 pull_in_full_tdc = GFNemsFull(device=tdc_pull_in, anchor=pull_in_anchor,
                               clearout_dim=(interaction_l_pull_in, 0.3),
-                              gnd_box_h=10, pos_box_w=12)
+                              gnd_box_h=10, pos_box_w=12).update(shuttle_dope=None)
 pull_apart_full_ps = GFNemsFull(device=ps_pull_apart, anchor=pull_apart_anchor,
                                 clearout_dim=(phaseshift_l_pull_apart, 0.3),
                                 gnd_box_h=10, pos_box_w=18)

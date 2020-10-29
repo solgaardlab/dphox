@@ -16,7 +16,7 @@ from .typing import Optional
 class NazcaLayout:
     def __init__(self, passive_filepath: str = AIM_PDK_PASSIVE_PATH, waveguides_filepath: str = AIM_PDK_WAVEGUIDE_PATH,
                  active_filepath: str = AIM_PDK_ACTIVE_PATH, stack: Dict = AIM_STACK, pdk_dict: Dict = AIM_PDK,
-                 accuracy: float = 0.001, waveguide_w: float = 0.48):
+                 accuracy: float = 0.001, waveguide_w: float = 0.48, pcb_style=False):
         self.passive = nd.load_gds(passive_filepath, asdict=True, topcellsonly=False)
         self.waveguides = nd.load_gds(waveguides_filepath, asdict=True, topcellsonly=False)
         self.active = nd.load_gds(active_filepath, asdict=True, topcellsonly=False)
@@ -42,12 +42,12 @@ class NazcaLayout:
                     overwrite=True,
                     **layer_dict)
 
-        self.waveguide_ic = nd.interconnects.Interconnect(width=waveguide_w, xs='waveguide_xs')
-        self.pad_ic = nd.interconnects.Interconnect(width=60, xs='pad_xs')
-        self.dicing_ic = nd.interconnects.Interconnect(width=100, xs='dicing_xs')
-        self.m1_ic = nd.interconnects.Interconnect(width=4, xs='m1_xs')
-        self.m2_ic = nd.interconnects.Interconnect(width=4, xs='m2_xs')
-        self.ml_ic = nd.interconnects.Interconnect(width=100, xs='ml_xs')
+        self.waveguide_ic = nd.interconnects.Interconnect(width=waveguide_w, xs='waveguide_xs', PCB=pcb_style)
+        self.pad_ic = nd.interconnects.Interconnect(width=60, xs='pad_xs', PCB=pcb_style)
+        self.dicing_ic = nd.interconnects.Interconnect(width=100, xs='dicing_xs', PCB=pcb_style)
+        self.m1_ic = nd.interconnects.Interconnect(width=4, xs='m1_xs', PCB=pcb_style)
+        self.m2_ic = nd.interconnects.Interconnect(width=4, xs='m2_xs', PCB=pcb_style)
+        self.ml_ic = nd.interconnects.Interconnect(width=100, xs='ml_xs', PCB=pcb_style)
         self.v1_via = Via((0.4, 0.4), 0.1, metal=['m1am', 'm2am'], via='v1am').nazca_cell('v1_via')
         self.va_via = Via((3.6, 3.6), 1.5, metal=['mlam', 'm2am'], via='vaam').nazca_cell('va_via')
         self.v1_via_4 = Via((0.4, 0.4), 0.15, shape=(1, 4), pitch=1,

@@ -8,7 +8,7 @@ from dphox.constants import GF_PSUEDO_STACK, GF_PSUEDO_PDK
 
 chip = NazcaLayout(passive_filepath='../../../20201016_sjby_gf_test/empty.gds', waveguides_filepath='../../../20201016_sjby_gf_test/empty.gds',
                    active_filepath='../../../20201016_sjby_gf_test/empty.gds', stack=GF_PSUEDO_STACK, pdk_dict=GF_PSUEDO_PDK,
-                   accuracy=0.001, waveguide_w=0.5)
+                   accuracy=0.005, waveguide_w=0.5, pcb_style=True)
 
 
 # Basic components

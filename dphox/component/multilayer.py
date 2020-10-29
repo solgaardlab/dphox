@@ -158,7 +158,7 @@ class Multilayer:
                 cell.add(gy.Polygon(np.asarray(poly.exterior.coords.xy).T, layer=layer))
         return cell
 
-    def nazca_cell(self, cell_name: str, callback: Optional[Callable] = None) -> nd.Cell:
+    def nazca_cell(self, cell_name: str, staircase: bool = True, callback: Optional[Callable] = None) -> nd.Cell:
         """Turn this multilayer into a Nazca cell
 
         Args:
@@ -168,10 +168,53 @@ class Multilayer:
         Returns:
             A Nazca cell
         """
+        def stepped(xy_array):
+            # numpy array sizes are hard to change, so lets make an array twice the size and add in between pts by continuing x
+            n_pts, dim = xy_array.shape
+            new_xy_array = np.ones((2 * n_pts - 1, dim))
+            x0, y0 = xy_array[0, 0], xy_array[0, 1]
+            for n in range(n_pts):
+                if n == 0:
+                    new_xy_array[0, 0] = x0
+                    new_xy_array[0, 1] = y0
+                    continue
+                m0 = 2 * n
+                m1 = 2 * n - 1
+                x, y = xy_array[n, 0], xy_array[n, 1]
+                new_xy_array[m0, 0] = x
+                new_xy_array[m0, 1] = y
+                # if n == (n_pts - 1):
+                #     continue
+                if y != y0 and x != x0:
+                    if (x - x0) > (y - y0):
+                        x1 = x0
+                        y1 = y
+                    else:
+                        x1 = x
+                        y1 = y0
+                    pass  # new pt advacne x only
+
+                elif y != y0 and x == x0:
+                    x1 = x
+                    y1 = (y0 + y) / 2
+                    pass  # y midpt
+                elif y == y0 and x != x0:
+                    x1 = (x0 + x) / 2
+                    y1 = y
+                    pass  # x midpt
+                else:
+                    x1 = x
+                    y1 = y
+                new_xy_array[m1, 0] = x1
+                new_xy_array[m1, 1] = y1
+                x0, y0 = x, y
+
+            return new_xy_array
         with nd.Cell(cell_name) as cell:
             for pattern, layer in self._pattern_to_layer.items():
                 for poly in pattern.polys:
-                    nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
+                    pts = stepped(np.asarray(poly.exterior.coords.xy).T) if staircase else np.asarray(poly.exterior.coords.xy).T
+                    nd.Polygon(points=pts, layer=layer).put()
             for name, port in self.port.items():
                 nd.Pin(name).put(*port.xya_deg)
             if callback is not None:
@@ -202,7 +245,7 @@ class Multilayer:
         ax.set_ylim((b[1], b[3]))
         ax.set_aspect('equal')
 
-    @property
+    @ property
     def size(self) -> Dim2:
         """Size of the pattern
 
@@ -319,7 +362,6 @@ class Multilayer:
                                   for comp, layer in self.pattern_to_layer}
         self.layer_to_pattern, self.port = self._init_multilayer()
         return [(fill, layer_name)]
-
 
 
 class Via(Multilayer):

@@ -21,7 +21,7 @@ except ImportError:
 class LateralNemsPS(Pattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, gap_w: float,
                  taper_l: float, fin_end_bend_dim: Dim2, rib_etch_grow: float, gnd_connector: Optional[Dim3] = None,
-                 gnd_pad_dim: Optional[Dim2] = None, end_ls: Tuple[float] = (0,), num_taper_evaluations: int = 100,
+                 gnd_pad_dim: Optional[Dim2] = None, end_ls: Tuple[float] = (0,), num_taper_evaluations: int = 200,
                  gap_taper: Optional[Tuple[float, ...]] = None, wg_taper: Optional[Tuple[float, ...]] = None,
                  boundary_taper: Optional[Tuple[float, ...]] = None,
                  end_taper: Optional[Tuple[Tuple[float, ...]]] = None, gnd_connector_idx: int = -1):
@@ -151,7 +151,7 @@ class LateralNemsPS(Pattern):
             patterns.extend(rib_brim + gnd_connections + gnd_pads)
 
         super(LateralNemsPS, self).__init__(*patterns, call_union=False)
-        self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads, self.pads = wg, nanofins, rib_etch, gnd_pads, None
+        self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads, self.pads = wg, nanofins, rib_etch, gnd_pads, gnd_pads + gnd_connections
         # self.pads = None so that LateralNemsFull works on all devices
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)

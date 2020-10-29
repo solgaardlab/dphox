@@ -21,7 +21,7 @@ from ..typing import *
 
 class Path(gy.Path):
     def polynomial_taper(self, length: float, taper_params: Tuple[float, ...],
-                         num_taper_evaluations: int = 100, layer: int = 0, inverted: bool = False):
+                         num_taper_evaluations: int = 200, layer: int = 0, inverted: bool = False):
         curr_width = self.w * 2
         taper_params = np.asarray(taper_params)
         self.parametric(lambda u: (length * u, 0),
@@ -33,22 +33,22 @@ class Path(gy.Path):
                         layer=layer)
         return self
 
-    def sbend(self, bend_dim: Dim2, layer: int = 0, inverted: bool = False, use_radius: bool = False):
+    def sbend(self, bend_dim: Dim2, layer: int = 0, inverted: bool = False, use_radius: bool = False, num_points = 500):
         if use_radius is False:
             pole_1 = np.asarray((bend_dim[0] / 2, 0))
             pole_2 = np.asarray((bend_dim[0] / 2, (-1) ** inverted * bend_dim[1]))
             pole_3 = np.asarray((bend_dim[0], (-1) ** inverted * bend_dim[1]))
-            self.bezier([pole_1, pole_2, pole_3], layer=layer)
+            self.bezier([pole_1, pole_2, pole_3], layer=layer, number_of_evaluations=num_points)
         else:
             if bend_dim[1] > 2 * bend_dim[0]:
                 angle = np.pi / 2 * (-1) ** inverted
-                self.turn(bend_dim[0], angle, number_of_points=199)
+                self.turn(bend_dim[0], angle, number_of_points=num_points)
                 self.segment(bend_dim[1] - 2 * bend_dim[0])
-                self.turn(bend_dim[0], -angle, number_of_points=199)
+                self.turn(bend_dim[0], -angle, number_of_points=num_points)
             else:
                 angle = np.arccos(1 - bend_dim[1] / 2 / bend_dim[0]) * (-1) ** inverted
-                self.turn(bend_dim[0], angle, number_of_points=199)
-                self.turn(bend_dim[0], -angle, number_of_points=199)
+                self.turn(bend_dim[0], angle, number_of_points=num_points)
+                self.turn(bend_dim[0], -angle, number_of_points=num_points)
         return self
 
     def dc(self, bend_dim: Dim2, interaction_l: float, end_l: float = 0, layer: int = 0,
@@ -394,10 +394,53 @@ class Pattern:
         pattern = self.shapely.buffer(grow_d)
         return Pattern(pattern if isinstance(pattern, MultiPolygon) else pattern)
 
-    def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> nd.Cell:
+    def nazca_cell(self, cell_name: str, layer: Union[int, str], staircase: bool = True) -> nd.Cell:
+        def stepped(xy_array):
+            # numpy array sizes are hard to change, so lets make an array twice the size and add in between pts by continuing x
+            n_pts, dim = xy_array.shape
+            new_xy_array = np.ones((2 * n_pts - 1, dim))
+            x0, y0 = xy_array[0, 0], xy_array[0, 1]
+            for n in range(n_pts):
+                if n == 0:
+                    new_xy_array[0, 0] = x0
+                    new_xy_array[0, 1] = y0
+                    continue
+                m0 = 2 * n
+                m1 = 2 * n - 1
+                x, y = xy_array[n, 0], xy_array[n, 1]
+                new_xy_array[m0, 0] = x
+                new_xy_array[m0, 1] = y
+                # if n == (n_pts - 1):
+                #     continue
+                if y != y0 and x != x0:
+                    if (x - x0) > (y - y0):
+                        x1 = x0
+                        y1 = y
+                    else:
+                        x1 = x
+                        y1 = y0
+                    pass  # new pt advacne x only
+
+                elif y != y0 and x == x0:
+                    x1 = x
+                    y1 = (y0 + y) / 2
+                    pass  # y midpt
+                elif y == y0 and x != x0:
+                    x1 = (x0 + x) / 2
+                    y1 = y
+                    pass  # x midpt
+                else:
+                    x1 = x
+                    y1 = y
+                new_xy_array[m1, 0] = x1
+                new_xy_array[m1, 1] = y1
+                x0, y0 = x, y
+
+            return new_xy_array
         with nd.Cell(cell_name) as cell:
             for poly in self.polys:
-                nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
+                pts = stepped(np.asarray(poly.exterior.coords.xy).T) if staircase else np.asarray(poly.exterior.coords.xy).T
+                nd.Polygon(points=pts, layer=layer).put()
             for name, port in self.port.items():
                 nd.Pin(name).put(*port.xya_deg)
             nd.put_stub()

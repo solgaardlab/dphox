@@ -17,6 +17,7 @@ class Box(Pattern):
     Args:
         box_dim: Box dimension (box width, box height)
     """
+
     def __init__(self, box_dim: Dim2):
         self.box_dim = box_dim
         super(Box, self).__init__(Path(box_dim[1]).segment(box_dim[0]).translate(dx=0, dy=box_dim[1] / 2))
@@ -262,7 +263,7 @@ class Waveguide(Pattern):
                  taper_params: Tuple[Tuple[float, ...], ...] = None,
                  slot_dim: Optional[Dim2] = None, slot_taper_ls: Tuple[float, ...] = 0,
                  slot_taper_params: Tuple[Tuple[float, ...]] = None,
-                 num_taper_evaluations: int = 100, symmetric: bool = True, rotate_angle: float = None):
+                 num_taper_evaluations: int = 500, symmetric: bool = True, rotate_angle: float = None):
         """Waveguide class
         Args:
             waveguide_w: waveguide width at the input of the waveguide path
@@ -341,7 +342,7 @@ class AlignmentCross(Pattern):
 
 class DelayLine(Pattern):
     def __init__(self, waveguide_width: float, delay_length: float, bend_radius: float, straight_length: float,
-                 number_bend_pairs: int = 1, flip: bool = False):
+                 number_bend_pairs: int = 1, num_taper_evaluations: float = 500, flip: bool = False):
         """
         Delay Line
         Args:
@@ -363,7 +364,7 @@ class DelayLine(Pattern):
                 f"Bends alone exceed the delay length {delay_length}"
                 f"reduce the bend radius or the number of bend pairs")
         segment_length = (delay_length - ((2 * np.pi + 4) * number_bend_pairs + np.pi - 4) * bend_radius) / (
-                2 * number_bend_pairs)
+            2 * number_bend_pairs)
         extra_length = straight_length - 4 * bend_radius - segment_length
         if extra_length <= 0:
             raise ValueError(
@@ -377,14 +378,14 @@ class DelayLine(Pattern):
         bend_dir = -1 if flip else 1
 
         for count in range(number_bend_pairs):
-            p.turn(radius=bend_radius, angle=np.pi * bend_dir)
+            p.turn(radius=bend_radius, angle=np.pi * bend_dir, number_of_points=num_taper_evaluations)
             p.segment(length=segment_length)
-            p.turn(radius=bend_radius, angle=-np.pi * bend_dir)
+            p.turn(radius=bend_radius, angle=-np.pi * bend_dir, number_of_points=num_taper_evaluations)
             p.segment(length=segment_length)
         p.segment(length=bend_radius)
-        p.turn(radius=bend_radius, angle=-np.pi / 2 * bend_dir)
+        p.turn(radius=bend_radius, angle=-np.pi / 2 * bend_dir, number_of_points=num_taper_evaluations)
         p.segment(length=height)
-        p.turn(radius=bend_radius, angle=np.pi / 2 * bend_dir)
+        p.turn(radius=bend_radius, angle=np.pi / 2 * bend_dir, number_of_points=num_taper_evaluations)
         p.segment(length=extra_length)
 
         super(DelayLine, self).__init__(p)
