@@ -33,7 +33,7 @@ class Path(gy.Path):
                         layer=layer)
         return self
 
-    def sbend(self, bend_dim: Dim2, layer: int = 0, inverted: bool = False, use_radius: bool = False, num_points = 500):
+    def sbend(self, bend_dim: Dim2, layer: int = 0, inverted: bool = False, use_radius: bool = False, num_points: float = 500):
         if use_radius is False:
             pole_1 = np.asarray((bend_dim[0] / 2, 0))
             pole_2 = np.asarray((bend_dim[0] / 2, (-1) ** inverted * bend_dim[1]))
