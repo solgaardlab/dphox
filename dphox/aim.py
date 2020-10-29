@@ -61,7 +61,8 @@ class AIMNemsAnchor(NemsAnchor):
         super(AIMNemsAnchor, self).__init__(fin_dim=fin_dim, shuttle_dim=shuttle_dim, spring_dim=spring_dim,
                                             straight_connector=straight_connector, tether_connector=tether_connector,
                                             pos_electrode_dim=pos_electrode_dim, gnd_electrode_dim=gnd_electrode_dim,
-                                            include_support_spring=include_support_spring, shuttle_stripe_w=shuttle_stripe_w,
+                                            include_support_spring=include_support_spring,
+                                            shuttle_stripe_w=shuttle_stripe_w,
                                             tooth_param=tooth_param)
 
 
