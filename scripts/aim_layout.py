@@ -49,13 +49,9 @@ test_interport_w = 50
 test_gap_w = 0.3
 test_gap_w_aggressive = 0.15
 test_gap_w_short = 0.25
-test_gap_w_invdes = 0.4
-test_gap_w_invdes_bb = 0.98
 test_bend_dim = test_interport_w / 2 - test_gap_w / 2 - waveguide_w / 2
 test_bend_dim_short = test_interport_w / 2 - test_gap_w_short / 2 - waveguide_w / 2
 test_bend_dim_aggressive = test_interport_w / 2 - test_gap_w_aggressive / 2 - waveguide_w / 2
-test_bend_dim_invdes = test_interport_w / 2 - test_gap_w_invdes / 2 - waveguide_w / 2
-test_bend_dim_invdes_bb = test_interport_w / 2 - test_gap_w_invdes_bb / 2 - waveguide_w / 2
 test_tdc_interport_w = 50
 test_tdc_interaction_l = 100
 test_tdc_interaction_short_l = 50
@@ -97,19 +93,6 @@ dc_short = AIMDC(bend_dim=(aggressive_dc_radius, test_bend_dim_short), gap_w=tes
                  interaction_l=22).nazca_cell('dc_short', layer='seam')
 dc_aggressive = AIMDC(bend_dim=(aggressive_dc_radius, test_bend_dim_aggressive), gap_w=test_gap_w_aggressive,
                       interaction_l=9).nazca_cell('dc_aggressive', layer='seam')
-dc_invdes = AIMDC(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes), gap_w=test_gap_w_invdes,
-                  interaction_l=5, coupler_boundary_taper_ls=(1,),
-                  coupler_boundary_taper=(cubic_taper(-0.16),)).replace(
-    Pattern.from_gds('alex_directional.gds')
-).nazca_cell('dc_invdes', layer='seam')
-dc_invdes_bb1 = AIMDC(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes_bb), gap_w=test_gap_w_invdes_bb,
-                      interaction_l=6.08).replace(
-    Pattern.from_gds('coupler_480nm_BW100nm.gds')
-).nazca_cell('dc_invdes_bb100nm', layer='seam')
-dc_invdes_bb2 = AIMDC(bend_dim=(aggressive_dc_radius, test_bend_dim_invdes_bb), gap_w=test_gap_w_invdes_bb,
-                      interaction_l=6.08).replace(
-    Pattern.from_gds('coupler_480nm_BW200nm.gds')
-).nazca_cell('dc_invdes_bb200nm', layer='seam')
 dc_millernode = AIMDC(bend_dim=(aggressive_dc_radius, miller_node_bend_dim)).nazca_cell('dc_millernode', layer='seam')
 mesh_dc = chip.pdk_dc(radius=pdk_dc_radius, interport_w=mesh_interport_w)
 tap_detector = chip.bidirectional_tap(10, mesh_bend=True)
@@ -325,24 +308,23 @@ Motivation: Test structures necessary for reference measurements
 '''
 print('Defining VIP structures...')
 
-delay_arms = chip.mzi_arms([delay_line_50, gnd_wg, 60, gnd_wg],
-                           [delay_line_200],
+delay_arms = chip.mzi_arms([1, delay_line_50], [1, delay_line_200],
                            interport_w=test_interport_w,
                            name='bare_mzi_arms')
-delay_arms_gnded = chip.mzi_arms([delay_line_50, gnd_wg, 60, gnd_wg],
-                                 [delay_line_200],
+delay_arms_gnded = chip.mzi_arms([1, delay_line_50, gnd_wg, 60, gnd_wg],
+                                 [1, delay_line_200],
                                  interport_w=test_interport_w,
                                  name='bare_mzi_arms_gnded')
 
 vip_column = []
-for dev, cell_name in zip((dc, dc_short, dc_invdes, dc_aggressive), ('ref_dc', 'ref_dc_short',
-                                                                     'ref_dc_invdes', 'ref_dc_aggressive')):
+for dev, cell_name in zip((dc, dc_short, dc_aggressive), ('ref_dc', 'ref_dc_short', 'ref_dc_aggressive')):
     with nd.Cell(name=cell_name) as cell:
         dc_r = dev.put()
         dc_r.raise_pins(['a0', 'a1', 'b0', 'b1'])
     vip_column.append(cell)
 
 vip_column += [
+    delay_arms_gnded,
     chip.mzi_node(delay_arms_gnded, dc, include_input_ps=False, name='bare_mzi_gnded'),
     chip.mzi_node(delay_arms, dc, include_input_ps=False, name='bare_mzi')
 ]
@@ -426,7 +408,7 @@ tether_dcs = [dc if i < 6 else None for i in range(n_test)]
 Aggressive test structures (two columns)
 
 Motivation: Change the couplers to be shorter in this stack and test the resulting MZIs (for use in future runs)
-This includes inv design and aggressive, broadband directional couplers
+Also attempt a comb drive PS (only one on this run since simulation was not successful).
 
 '''
 
@@ -450,19 +432,18 @@ aggressive = [
                                                            wg_taper=cubic_taper(-0.4),
                                                            gap_taper=cubic_taper(-0.4),
                                                            ))  # slot
-             ] + [tether_full_comb_ps] + [tether_ps_safe] * 2 + [pull_in_full_ps] * 2 + [tether_ps_safe] * 2 + [
+             ] + [tether_full_comb_ps] + [tether_ps_safe] * 2 + [pull_in_full_ps] + [
                  tether_full_ps.update(
                      ps=tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
                      anchor=tether_anchor_tdc.update(
                          spring_dim=(psl + 10, 0.22),
                          pos_electrode_dim=(psl - 5, 4, 0.4),
                          fin_dim=(psl, 0.3),
-                         shuttle_dim=(10, 1.5),
-                         shuttle_stripe_w=0
+                         shuttle_dim=(10, 1.5)
                      ),
                      clearout_dim=(psl + 5, 0.3)
                  )
-                 for psl in (50, 70) for taper_l, taper_change in ((10, -0.05), (15, -0.1), (20, -0.1))
+                 for psl in (40, 50, 70) for taper_l, taper_change in ((10, -0.05), (15, -0.1), (20, -0.1))
              ] + [
                  tether_full_tdc.update(tdc=tether_tdc.update(**tdc_taper(taper_l, taper_change)))
                  for taper_l, taper_change in ((20, -0.32), (20, -0.42), (20, -0.52))
@@ -470,9 +451,7 @@ aggressive = [
 aggressive_column = [chip.mzi_arms([dev], [1], name=f'aggressive_{i}') if i < 14
                      else dev.nazca_cell(f'aggressive_{i}') for i, dev in enumerate(aggressive)]
 
-aggressive_column_dcs = [dc_short] * 2 \
-                        + [dc_aggressive, dc_invdes, dc_aggressive, dc_invdes, dc_invdes_bb1, dc_invdes_bb2] \
-                        + [dc_short] * 6 + [None] * 3
+aggressive_column_dcs = [dc_short] * 2 + [dc_aggressive, dc_short, dc_aggressive] + [dc_short] * 9 + [None] * 3
 
 '''
 Extreme phase shifters
@@ -490,17 +469,17 @@ extreme = [
                   anchor=pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
                   clearout_dim=(psl, 0.3)
               )
-              for psl in (30, 40) for taper_l, taper_change in ((5, -0.1), (10, -0.1), (15, -0.1))
+              for psl in (30, 40) for taper_l, taper_change in ((5, -0.1), (10, -0.1), (14, -0.1))
           ] + [
               pull_in_full_ps.update(
-                  ps=ps_pull_in.update(phaseshift_l=psl, nanofin_w=nanofin_w),
+                  ps=ps_pull_in.update(phaseshift_l=psl, nanofin_w=nanofin_w, **ps_taper(5, -0.15)),
                   anchor=pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
                   clearout_dim=(psl, 0.3)
               )
-              for psl in (20, 30) for nanofin_w in (0.2, 0.25, 0.3)
+              for psl in (10, 20, 30) for nanofin_w in (0.2, 0.3)
           ] + [
               tether_full_ps.update(
-                  ps=tether_ps.update(phaseshift_l=psl),
+                  ps=tether_ps.update(phaseshift_l=psl, **ps_taper(5, -0.1)),
                   anchor=tether_anchor_ps.update(
                       spring_dim=(psl + 10, 0.22),
                       pos_electrode_dim=(psl - 5, 4, 0.3),
@@ -509,26 +488,29 @@ extreme = [
                       shuttle_stripe_w=0
                   ),
                   clearout_dim=(psl + 5, 0.3)
-              ) for psl in (15, 30)
+              ) for psl in (30, 40)
           ] + [
               tether_full_tdc.update(
                   ps=tether_tdc.update(interaction_l=il, dc_gap_w=0.125,
-                                       bend_dim=(
-                                           test_tdc_radius, test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2), ),
+                                       bend_dim=(test_tdc_radius,
+                                                 test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2),
+                                       **tdc_taper(10, -0.32)
+                                       ),
                   anchor=tether_anchor_tdc.update(
-                      spring_dim=(il, 0.22),
-                      pos_electrode_dim=(il - 5, 4, 0.4),
+                      spring_dim=(il + 10, 0.22),
+                      pos_electrode_dim=(il, 4, 0.4),
                       fin_dim=(il, 0.3),
                       shuttle_dim=(10, 1.5),
                       shuttle_stripe_w=0
                   ),
-                  clearout_dim=(il, 0.3)
-              ) for il in (15, 20, 25)
+                  clearout_dim=(il + 5, 0.3),
+                  pos_box_w=18
+              ) for il in (25, 35, 45)
           ]
 extreme_column = [chip.mzi_arms([dev], [1], name=f'extreme_{i}') if i < 14
-                  else dev.nazca_cell(f'extreme_{i}') for i, dev in enumerate(aggressive)]
+                  else dev.nazca_cell(f'extreme_{i}') for i, dev in enumerate(extreme)]
 
-extreme_column_dcs = [dc_aggressive] * 10 + [dc_short] * 4 + [None] * 3
+extreme_column_dcs = [dc_aggressive] * 12 + [dc_short] * 2 + [None] * 3
 
 # testing tap lines
 testing_tap_line = chip.tap_line(n_test, name='tapline')
@@ -821,7 +803,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
         if layer in middle_mesh_ts_layers:
             # mid-mesh test structures
             test_structure = middle_mesh_test_structures[mesh_ts_idx]
-            shift_x = 140 * (mesh_ts_idx >= num_ps_middle_mesh) - (layer == 13) * 90
+            shift_x = 25 + 115 * (mesh_ts_idx >= num_ps_middle_mesh) - (layer == 13) * 90
             len_x = 0 * (mesh_ts_idx >= num_ps_middle_mesh)
             # Nate: added a quick 0, -20 hack to fix drc
             ts = test_structure.put(1250 + shift_x + mesh_layer_x * (layer - 3),
@@ -1052,16 +1034,10 @@ with nd.Cell('test_chiplet') as test_chiplet:
 
 # Final chip layout
 
-print('Assembling final layout including other GDS designs...')
-bb_goos_1 = nd.netlist.load_gds('broadband_goos_gratings_1.gds', newcellname='broadband_grating_1')
-bb_goos_2 = nd.netlist.load_gds('broadband_goos_gratings_2.gds', newcellname='broadband_grating_2')
-
 with nd.Cell('aim_layout') as aim_layout:
     mesh_chiplet.put(mesh_chiplet_x)
     test_chiplet.put(test_chiplet_x)
     chiplet_divider.put(chiplet_divider_x, -standard_grating_interport + 20)
-    bb_goos_1.put(chiplet_divider_x + 350, standard_grating_interport - 3)
-    bb_goos_2.put(input_interposer.bbox[0] + chip_w - 535, standard_grating_interport - 3)
     chip_horiz_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],
                         -standard_grating_interport + edge_shift_dim[1] - perimeter_w)
     chip_horiz_dice.put(input_interposer.bbox[0] + edge_shift_dim[0],

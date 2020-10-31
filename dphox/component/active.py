@@ -380,7 +380,7 @@ class NemsAnchor(Pattern):
             pos_electrode_dim: positive electrode dimension
             gnd_electrode_dim: negative electrode dimension
             include_support_spring: include extra spring at top for for mechanical support
-            tooth_param: (length, width, inter-tooth gap) (suggested: (0.3, 3, 0.15))
+            tooth_param: (length, width, inter-tooth gap, overlap) (suggested: (0.3, 3, 0.15, 0.5))
             shuttle_stripe_w: design an etch hole shuttle consisting of stripes of width ``shuttle_stripe_w``
                 (if 0, do not add a striped shuttle).
             pull_in_sep: horizontal pull in separation for the anchor, ignored if not pull in
@@ -457,8 +457,8 @@ class NemsAnchor(Pattern):
                 pads.append(shuttle.copy)
                 pos_pads.append(pads[-1])
             if tooth_param is not None:
-                comb = SimpleComb(tooth_param, shuttle_pad_dim=shuttle.size).align(shuttle).valign(shuttle,
-                                                                                                   opposite=True)
+                comb = SimpleComb(tooth_param[:-1], overlap=tooth_param[-1],
+                                  shuttle_pad_dim=shuttle.size).align(shuttle).valign(shuttle, opposite=True)
                 patterns.append(comb)
 
             patterns.append(shuttle if shuttle_stripe_w == 0 else shuttle.striped(shuttle_stripe_w))
@@ -777,7 +777,8 @@ class NemsMillerNode(Multilayer):
                  ps_comb: SimpleComb, tdc_comb: SimpleComb, comb_wg: ContactWaveguide, gnd_wg: ContactWaveguide,
                  pos_via: Via, gnd_via: Via, tdc_pad_dim: Dim4, ps_clearout_dim: Dim2,
                  ps_spring_dim: Dim2, tdc_spring_dim: Dim2, ps_shuttle_w: float, tdc_shuttle_w: float, end_l: float,
-                 trace_w: float, connector_dim: Dim2, ridge: str, rib: str, dope: str, pos_metal: str, gnd_metal: str,
+                 trace_w: float, connector_dim: Dim2, ridge: str, rib: str, dope: str, comb_dope: str,
+                 pos_metal: str, gnd_metal: str,
                  clearout_buffer_w: float, clearout_layer: str, clearout_etch_stop_layer: str,
                  clearout_etch_stop_grow: float, dope_grow: float, dope_expand: float):
         self.waveguide_w = waveguide_w
@@ -795,6 +796,7 @@ class NemsMillerNode(Multilayer):
         self.ridge = ridge
         self.rib = rib
         self.dope = dope
+        self.comb_dope = comb_dope
         self.pos_metal = pos_metal
         self.gnd_metal = gnd_metal
         self.clearout_layer = clearout_layer
@@ -851,8 +853,9 @@ class NemsMillerNode(Multilayer):
         tdc_comb.align(tdc_comb_connector, tdc_comb.shuttle_pad).valign(tdc_comb_connector, opposite=True)
 
         # clamped flexures
+        # TODO(sunil): fix this hardcoding :(
         ps_connector_dim = (1, upper_interaction_l + 2 * bend_radius - waveguide_w)
-        tdc_connector_dim = (1, tdc_shuttle_w + bend_radius / 2)  # TODO(sunil): fix dis
+        tdc_connector_dim = (1, tdc_shuttle_w + bend_radius / 2)
 
         # comb drive definitions
 
@@ -861,7 +864,7 @@ class NemsMillerNode(Multilayer):
                                    [(ps_comb.pos_pad.copy, pos_metal),
                                     (ps_comb.clearout(), clearout_layer),
                                     (ps_comb.clearout().offset(clearout_etch_stop_grow), clearout_etch_stop_layer),
-                                    Box.bbox(ps_comb).expand(dope_expand).dope(dope, dope_grow)
+                                    Box.bbox(ps_comb).expand(dope_expand).dope(comb_dope, dope_grow)
                                     ])
         ps_connect_port = Port(bend_radius + (lower_interaction_l - upper_interaction_l) / 2,
                                interport_w - bend_radius - upper_bend_extension / 2 - ps_comb.shuttle_pad.size[0] / 2,
@@ -876,7 +879,7 @@ class NemsMillerNode(Multilayer):
                                     [(tdc_comb.pos_pad.copy, pos_metal),
                                      (tdc_comb.clearout(), clearout_layer),
                                      (tdc_comb.clearout().offset(clearout_etch_stop_grow), clearout_etch_stop_layer),
-                                     Box.bbox(tdc_comb).expand(dope_expand).dope(dope, dope_grow)])
+                                     Box.bbox(tdc_comb).expand(dope_expand).dope(comb_dope, dope_grow)])
         tdc_connect_port = Port(2 * bend_radius + tdc_spring_dim[0], lower_bend_height, 0)
         tdc_comb_drives = [tdc_comb_drive.copy.to(tdc_connect_port),
                            tdc_comb_drive.copy.flip(horiz=True).to(tdc_connect_port).translate(
@@ -888,7 +891,7 @@ class NemsMillerNode(Multilayer):
         ).rotate(90).align(ps_comb_drives[0]).halign(
             bend_radius + (lower_interaction_l - upper_interaction_l) / 2 + waveguide_w / 2,
             opposite=True)
-        tdc_flexure = Box((lower_interaction_l - 2 * tdc_spring_dim[0] - gnd_wg.length, tdc_shuttle_w)).flexure(
+        tdc_flexure = Box((lower_interaction_l - 2 * tdc_spring_dim[0] - gnd_wg.length + 1, tdc_shuttle_w)).flexure(
             (lower_interaction_l + bend_radius, ps_spring_dim[1]), tdc_connector_dim, False).align(
             dc).valign(lower_bend_height - waveguide_w / 2, opposite=True, bottom=False)
         ridge_patterns += [ps_flexure, tdc_flexure]
@@ -904,6 +907,7 @@ class NemsMillerNode(Multilayer):
 
         gnd_trace = Box(gnd_wg_pattern.size).align(gnd_wg_pattern).hollow(trace_w)
         gnd_vias = sum([gnd_via.copy.align(gwg.pads[0]).pattern_to_layer for gwg in gnd_wgs], [])
+        gnd_dopes = [gwg.pads[0].expand(dope_expand).dope(dope, dope_grow) for gwg in gnd_wgs]
 
         ps_flexure_clearout = Box((upper_interaction_l + 2 * bend_radius +
                                    2 * comb_wg.gnd_connector_dim[
@@ -927,7 +931,7 @@ class NemsMillerNode(Multilayer):
         clearout = Pattern(ps_flexure_clearout, ps_clearout, tdc_clearout, wg_clearout_1, wg_clearout_2)
         super(NemsMillerNode, self).__init__([(Pattern(*ridge_patterns, call_union=False), ridge),
                                               (gnd_trace, gnd_metal)]
-                                             + gnd_wg_rib_etch + gnd_vias + comb_drive_p2l +
+                                             + gnd_wg_rib_etch + gnd_vias + gnd_dopes + comb_drive_p2l +
                                              [(clearout, clearout_layer),
                                               (clearout.offset(clearout_etch_stop_grow), clearout_etch_stop_layer),
                                               (pos_trace, pos_metal)]

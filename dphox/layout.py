@@ -346,7 +346,7 @@ class NazcaLayout:
                 nd.Pin(f'b{idx}').put(curr_x, interport_w * idx, 0)
         return triangular_mesh
 
-    def mzi_node(self, diff_ps: nd.Cell, dc: nd.Cell, tap_internal: Optional[nd.Cell] = None,
+    def mzi_node(self, diff_ps: nd.Cell, dc: Optional[nd.Cell] = None, tap_internal: Optional[nd.Cell] = None,
                  tap_external: Optional[nd.Cell] = None, name: Optional[str] = 'mzi',
                  include_input_ps: bool = True, grating: Optional[nd.Cell] = None, detector: Optional[nd.Cell] = None,
                  detector_loopback_params: Dim2 = None, sep: float = 0, extend_detector: float = 10):

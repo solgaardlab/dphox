@@ -107,8 +107,8 @@ tether_anchor_ps = AIMNemsAnchor(
     straight_connector=None,
     include_support_spring=False
 )
-tether_anchor_ps_comb = tether_anchor_ps.update(tooth_param=(0.3, 2, 0.15),
-                                                pos_electrode_dim=(tether_phaseshift_l, 4, 3.7),
+tether_anchor_ps_comb = tether_anchor_ps.update(tooth_param=(0.3, 2, 0.15, 0.5),
+                                                pos_electrode_dim=(tether_phaseshift_l, 4, 3.2),
                                                 shuttle_dim=(30, 3))
 
 pull_in_full_ps = AIMNemsFull(device=ps_pull_in, anchor=pull_in_anchor,
@@ -168,13 +168,15 @@ miller_node = NemsMillerNode(
         tooth_param=(0.3, 3, 0.15),
         shuttle_pad_dim=(20, 3),
         pos_pad_dim=(20, 6),
-        edge_tooth_factor=5
+        edge_tooth_factor=5,
+        overlap=0.5
     ),
     tdc_comb=SimpleComb(
         tooth_param=(0.3, 3, 0.15),
         shuttle_pad_dim=(15, 3),
         pos_pad_dim=(15, 6),
-        edge_tooth_factor=5
+        edge_tooth_factor=5,
+        overlap=0.5
     ),
     comb_wg=ContactWaveguide(
         waveguide_w=0.48, length=5, gnd_contact_dim=(1, 2),
@@ -188,7 +190,7 @@ miller_node = NemsMillerNode(
     ),
     ps_spring_dim=(50, 0.25), tdc_spring_dim=(20, 0.25),
     ps_shuttle_w=30, tdc_shuttle_w=15, clearout_etch_stop_grow=0.5, clearout_buffer_w=2,
-    ridge='seam', rib='ream', dope='pppam', pos_metal='m2am',
+    ridge='seam', rib='ream', dope='pppam', comb_dope='pdam', pos_metal='m2am',
     gnd_metal='m1am', clearout_layer='clearout', clearout_etch_stop_layer='snam',
     gnd_via=Via((0.4, 0.4), 0.1, metal='m1am', via='cbam', shape=(2, 2), pitch=1),
     pos_via=Via((0.4, 0.4), 0.1, metal=['m1am', 'm2am'], via=['cbam', 'v1am'], shape=(15, 2), pitch=1),
