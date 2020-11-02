@@ -494,7 +494,7 @@ extreme = [
                   ps=tether_tdc.update(interaction_l=il, dc_gap_w=0.125,
                                        bend_dim=(test_tdc_radius,
                                                  test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2),
-                                       **tdc_taper(10, -0.42)
+                                       **tdc_taper(10, -0.32)
                                        ),
                   anchor=tether_anchor_tdc.update(
                       spring_dim=(il + 10, 0.22),
