@@ -1,5 +1,3 @@
-from collections import defaultdict, namedtuple
-
 import gdspy as gy
 import nazca as nd
 from copy import deepcopy as copy
@@ -399,8 +397,7 @@ class Pattern:
     def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> nd.Cell:
         with nd.Cell(cell_name) as cell:
             for poly in self.polys:
-                nd.Polygon(points=np.around(np.asarray(poly.exterior.coords.xy).T,
-                                            decimals=self.decimal_places), layer=layer).put()
+                nd.Polygon(points=np.around(np.asarray(poly.exterior.coords.xy).T, decimals=3), layer=layer).put()
             for name, port in self.port.items():
                 nd.Pin(name).put(*port.xya_deg)
             nd.put_stub()

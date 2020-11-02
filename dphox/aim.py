@@ -70,7 +70,7 @@ class AIMNemsFull(LateralNemsFull):
     def __init__(self, device, anchor, clearout_dim,
                  pos_box_w=8, gnd_box_h=0,
                  gnd_via=Via((0.4, 0.4), 0.1, metal='m1am', via='cbam', shape=(2, 2), pitch=1),
-                 pos_via=Via((0.4, 0.4), 0.1, metal=['m1am', 'm2am'], via=['cbam', 'v1am'], shape=(20, 2), pitch=1),
+                 pos_via=Via((0.4, 0.4), 0.1, metal=['m1am', 'm2am'], via=['cbam', 'v1am'], shape=(10, 2), pitch=1),
                  trace_w=3):
         super(AIMNemsFull, self).__init__(device=device, anchor=anchor, gnd_via=gnd_via,
                                           pos_via=pos_via, trace_w=trace_w, pos_box_w=pos_box_w,
@@ -188,8 +188,8 @@ miller_node = NemsMillerNode(
         rib_taper_param=cubic_taper(1.52), gnd_connector_dim=(0.5, 2),
         flipped=False, rib_etch_grow=0.25
     ),
-    ps_spring_dim=(50, 0.25), tdc_spring_dim=(20, 0.25),
-    ps_shuttle_w=30, tdc_shuttle_w=15, clearout_etch_stop_grow=0.5, clearout_buffer_w=2,
+    ps_spring_dim=(40, 0.25), tdc_spring_dim=(20, 0.25),
+    ps_shuttle_w=25, tdc_shuttle_w=15, clearout_etch_stop_grow=0.5, clearout_buffer_w=2,
     ridge='seam', rib='ream', dope='pppam', comb_dope='pdam', pos_metal='m2am',
     gnd_metal='m1am', clearout_layer='clearout', clearout_etch_stop_layer='snam',
     gnd_via=Via((0.4, 0.4), 0.1, metal='m1am', via='cbam', shape=(2, 2), pitch=1),
