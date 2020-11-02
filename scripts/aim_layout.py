@@ -472,11 +472,11 @@ extreme = [
               for psl in (30, 40) for taper_l, taper_change in ((5, -0.1), (10, -0.1), (14, -0.1))
           ] + [
               pull_in_full_ps.update(
-                  ps=ps_pull_in.update(phaseshift_l=psl, nanofin_w=nanofin_w, **ps_taper(5, -0.15)),
+                  ps=ps_pull_in.update(phaseshift_l=psl, nanofin_w=nanofin_w),
                   anchor=pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
                   clearout_dim=(psl, 0.3)
               )
-              for psl in (10, 20, 30) for nanofin_w in (0.2, 0.3)
+              for psl in (10, 15) for nanofin_w in (0.25,)
           ] + [
               tether_full_ps.update(
                   ps=tether_ps.update(phaseshift_l=psl, **ps_taper(5, -0.1)),
@@ -488,13 +488,13 @@ extreme = [
                       shuttle_stripe_w=0
                   ),
                   clearout_dim=(psl + 5, 0.3)
-              ) for psl in (30, 40)
+              ) for psl in (30, 35, 40, 45)
           ] + [
               tether_full_tdc.update(
                   ps=tether_tdc.update(interaction_l=il, dc_gap_w=0.125,
                                        bend_dim=(test_tdc_radius,
                                                  test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2),
-                                       **tdc_taper(10, -0.32)
+                                       **tdc_taper(10, -0.42)
                                        ),
                   anchor=tether_anchor_tdc.update(
                       spring_dim=(il + 10, 0.22),
@@ -505,12 +505,12 @@ extreme = [
                   ),
                   clearout_dim=(il + 5, 0.3),
                   pos_box_w=18
-              ) for il in (25, 35, 45)
+              ) for il in (25, 35, 45, 55, 65)
           ]
 extreme_column = [chip.mzi_arms([dev], [1], name=f'extreme_{i}') if i < 14
                   else dev.nazca_cell(f'extreme_{i}') for i, dev in enumerate(extreme)]
 
-extreme_column_dcs = [dc_aggressive] * 12 + [dc_short] * 2 + [None] * 3
+extreme_column_dcs = [dc_aggressive] * 10 + [dc_short] * 2 + [None] * 5
 
 # testing tap lines
 testing_tap_line = chip.tap_line(n_test, name='tapline')
@@ -865,12 +865,14 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             chip.m2_ic.bend_strt_bend_p2p(mzi_node_nems.pin['n2'], autoroute_nems_anode.pin['a6'], radius=8).put()
             chip.m1_ic.bend_strt_bend_p2p(mzi_node_nems.pin['p1'], autoroute_nems_cathode.pin['a5'], radius=8).put()
             chip.m2_ic.bend_strt_bend_p2p(mzi_node_nems.pin['p2'], autoroute_nems_cathode.pin['a6'], radius=8).put()
-            chip.v1_via_4.put(autoroute_nems_cathode.pin['p1'], flop=True)
+            chip.v1_via_4.put(autoroute_nems_cathode.pin['a5'], flop=True)
+            chip.v1_via_4.put(mzi_node_nems.pin['p1'])
             chip.m2_ic.bend_strt_bend_p2p(mzi_node_thermal.pin['n1'], autoroute_therm_anode.pin['a5'], radius=8).put()
             chip.m2_ic.bend_strt_bend_p2p(mzi_node_thermal.pin['n2'], autoroute_therm_anode.pin['a6'], radius=8).put()
             chip.m1_ic.bend_strt_bend_p2p(mzi_node_thermal.pin['p1'], autoroute_therm_cathode.pin['a5'], radius=8).put()
             chip.m2_ic.bend_strt_bend_p2p(mzi_node_thermal.pin['p2'], autoroute_therm_cathode.pin['a6'], radius=8).put()
-            chip.v1_via_4.put(autoroute_therm_cathode.pin['p1'], flop=True)
+            chip.v1_via_4.put(autoroute_therm_cathode.pin['a5'], flop=True)
+            chip.v1_via_4.put(mzi_node_thermal.pin['p1'])
 
         if layer == 13:
             # mesh DC test
