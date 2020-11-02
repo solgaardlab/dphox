@@ -255,6 +255,9 @@ class Multilayer:
                         print('WARNING: bad polygon, skipping')
                         print(poly)
                 mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
+                layer = layer.split('_')[0]
+                if layer in meshes.keys():
+                    mesh = trimesh.Trimesh().union([mesh, meshes[layer]], engine=engine)
                 mesh.visual.face_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
                 meshes[layer] = mesh
 
