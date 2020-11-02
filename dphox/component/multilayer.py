@@ -171,8 +171,7 @@ class Multilayer:
         with nd.Cell(cell_name) as cell:
             for pattern, layer in self._pattern_to_layer.items():
                 for poly in pattern.polys:
-                    nd.Polygon(points=np.around(np.asarray(poly.exterior.coords.xy).T,
-                                                decimals=pattern.decimal_places),
+                    nd.Polygon(points=np.around(np.asarray(poly.exterior.coords.xy).T, decimals=3),
                                layer=layer).put()
             for name, port in self.port.items():
                 nd.Pin(name).put(*port.xya_deg)
