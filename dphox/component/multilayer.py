@@ -330,6 +330,7 @@ class Multilayer:
         for step, operations in process_extrusion.items():
             for layer_relation in operations:
                 layer, other_layer, operation = layer_relation
+                print(layer)
                 if 'dope' in step and operation == 'intersection':
                     # make a new layer for each doping intersection
                     zmin, zmax = layer_to_zrange[other_layer]
@@ -397,6 +398,7 @@ class Multilayer:
                             if float(old_elevation) == float(new_elevation):
                                 continue
                             new_zrange = (float(old_elevation), float(new_elevation))
+                            # there may be coincedent edges whcih cause intersection problems
                             pattern = Pattern(topo_map_dict[new_elevation]).boolean_operation(Pattern(old_topo_map_dict[old_elevation]), 'intersection').shapely
 
                             new_layer = layer + '_' + f'{np.around(float(old_elevation),3)*1000:.0f}' + '_' + f'{np.around(float(new_elevation),3)*1000:.0f}'
