@@ -19,6 +19,10 @@ try:
     import plotly.graph_objects as go
 except ImportError:
     pass
+try:
+    import meep as mp
+except ImportError:
+    print("Unable to import pymeep")
 
 
 class Multilayer:
@@ -180,6 +184,57 @@ class Multilayer:
             nd.put_stub()
         return cell
 
+    def meep_geometry(self, layer_to_zrange: Dict[str, Tuple[float, float]], process_extrusion: Dict[str, List[Tuple[str, str, str]]] = None, layer_to_material: Dict = None):
+        """Turn this multilayer into a  dictionary of meep geometry objects
+        Args:
+
+        Returns:
+            A dictionary mapping layers to lists of meep geomtery objects
+        """
+        # probably a simple way to do this
+        # def _xy_to_vector3(pt, dim=[1, 2, 0]):
+        #     i = 0
+        #     coord = [0, 0, 0]
+        #     while min(dim) < 100 and i < len(pt):
+        #         ind = dim.index(min(dim))
+        #         if dim[ind] == 0:
+        #             coord[ind] = 0
+        #         else:
+        #             coord[ind] = pt[dim[ind] - 1]
+        #             i += 1
+        #         dim[ind] = 100
+        #         # print(coord)
+        #         # i+=1
+        #     return(mp.Vector3(*coord))
+
+        def _pattern_to_prisms(pattern, material, zrange):
+            zmin, zmax = zrange
+            meep_geom_list = []
+            for poly in pattern:
+                prism_pts = [mp.Vector3(x, y, 0) for x, y in np.asarray(poly.exterior.coords.xy).T[1:, :]]  # normally is returned as a row of xs and ten a row of ys
+                meep_geom_list.append(mp.Prism(prism_pts, height=0, axis=mp.Vector3(0, 0, 1), material=material).shift(mp.Vector3(0, 0, zmin)))
+                # skip the first pt, meep doesn't like repeated pts like shapely
+
+            # Convert into a list of vector3 objects and have a specified axis for the prism
+            return meep_geom_list
+
+        layer_to_extrusion = self.build_layers(layer_to_zrange=layer_to_zrange,
+                                               process_extrusion=process_extrusion)
+        meep_geometries = {}
+        for layer, pattern_zrange in layer_to_extrusion.items():
+            layer = layer.split('_')[0]
+            if layer not in layer_to_material.keys():
+                continue
+            pattern, zrange = pattern_zrange
+            material = layer_to_material[layer]
+
+            if layer in meep_geometries.keys():
+                meep_geometries[layer].append(_pattern_to_prisms(pattern, material, zrange))
+            else:
+                meep_geometries[layer] = _pattern_to_prisms(pattern, material, zrange)
+
+        return meep_geometries
+
     def _init_multilayer(self) -> Tuple[Dict[Union[int, str], MultiPolygon], Dict[str, Port]]:
         self._pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
                                   for comp, layer in self.pattern_to_layer}
@@ -203,7 +258,7 @@ class Multilayer:
         ax.set_ylim((b[1], b[3]))
         ax.set_aspect('equal')
 
-    @property
+    @ property
     def size(self) -> Dim2:
         """Size of the pattern
 
