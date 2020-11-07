@@ -617,6 +617,127 @@ class SimpleComb(Pattern):
         return Box(size).align(bounding_pattern)
 
 
+class VerticalPS(Pattern):
+    def __init__(self, waveguide_w, gap, ps_w, total_length, width, interaction_l, oxide_opening_w=None):
+        self.waveguide_w = waveguide_w
+        self.gap = gap
+        self.ps_w = ps_w
+        self.total_length = total_length
+
+        # wg = Waveguide(waveguide_w=waveguide_w, length=total_length).translate()
+        wg = Waveguide(waveguide_w=waveguide_w, length=total_length)
+        # wg = Waveguide(waveguide_w=waveguide_w, length=total_length).align(cladding_open)
+        if oxide_opening_w != None:
+            cladding_open = Waveguide(waveguide_w=(oxide_opening_w), length=interaction_l).align(wg)
+        else:
+            cladding_open = Waveguide(waveguide_w=(2 * gap + ps_w), length=interaction_l).align(wg)
+        sacrifical_area = Box((total_length, width)).align(wg)
+        mechanical_block = sacrifical_area.copy.align(wg)
+
+        super(VerticalPS, self).__init__(*[wg, cladding_open, sacrifical_area, mechanical_block], call_union=False)
+        self.wg = [wg]
+        self.cladding = [cladding_open]
+        self.sacrifical = [sacrifical_area]
+        self.mechanical = [mechanical_block]
+        self.metal = []
+
+        self.reference_patterns = self.wg + self.cladding + self.sacrifical + self.mechanical + self.metal
+        self.port['a0'] = Port(0, 0, -np.pi)
+        self.port['b0'] = Port(total_length, 0)
+        dx, dy = mechanical_block.center
+
+        self.port['top_act'] = Port(dx, dy + mechanical_block.size[1] / 2, 0)
+        self.port['bot_act'] = Port(dx, dy - mechanical_block.size[1] / 2, -np.pi)
+
+
+class Microbridge(Pattern):
+    def __init__(self, width, length, underetch_dim, anchor_dim):
+
+        sacrifical_box = Box((length, width)).translate()
+        beam = Box((length, width)).striped(stripe_w=underetch_dim[2], pitch=underetch_dim[:2]).translate()
+        # beam = beam.translate(dx=-beam.center[0], dy=-beam.bounds[1])
+        # ps_anchor_overlay = Box(((anchor_dim[0] + mb_w - anchor_size[1]), mb_w)).align(ps_microbridge)
+        anchor = Box(anchor_dim)
+        # ps_anchor_overlays = [ps_anchor_overlay.copy.halign(ps_microbridge, left=True, opposite=True), ps_anchor_overlay.copy.halign(ps_microbridge, left=False, opposite=True)]
+
+        # ps_anchors = [ps_anchor.copy.align(overlay).shapely for overlay in ps_anchor_overlays]
+        anchors = [anchor.copy.align(beam).halign(beam, left=True, opposite=True), anchor.copy.align(beam).halign(beam, left=False, opposite=True)]
+
+        # nit2 = [pattern.shapely for pattern in ps_anchor_overlays + [ps_lip, ps_microbridge]]
+        # nit22 = [pattern.shapely for pattern in ps_anchor_overlays2 + [ps_lip, ps_microbridge, ps_microbridge2]]
+
+        wg = []
+        sacrificial = [sacrifical_box]
+        mechancial = [beam] + anchors
+        metal = [metal_shape.copy for metal_shape in mechancial]
+        # metal = []
+        super(Microbridge, self).__init__(*(wg + sacrificial + mechancial + metal), call_union=False)
+        self.wg = wg
+        self.cladding = []
+        self.sacrifical = sacrificial
+        self.mechanical = mechancial
+        self.metal = metal
+        self.reference_patterns = self.wg + self.cladding + self.sacrifical + self.mechanical + self.metal
+        # self.port['a0'] = Port(0, 0, -np.pi)
+        self.translate(dx=-self.center[0], dy=self.bounds[1])
+
+
+class SurfaceMEMs(Multilayer):
+    def __init__(self, device: Union[VerticalPS], actuator: Microbridge,
+                 #  gnd_via: Via, pos_via: Via, trace_w: float,
+                 #  pos_box_w: float, gnd_box_h: float, clearout_dim: Dim2, dope_grow: float, dope_expand: float,
+                 bottom_cladding_layer: str, wg_layer: str, cladding_layer: str,
+                 sacrificial_layer: str, mechanical_layer: str, top_metal: str,
+                 #  spring_dope: str, pad_dope: str, pos_metal: str, gnd_metal: str,
+                 #  clearout_layer: str, clearout_etch_stop_layer: str, clearout_etch_stop_grow: float,
+                 symmetric: bool = True, dual_drive: bool = False):
+        """ A Photonic MEMs Stack where all layers are deposited and etched. Surface Micromachining"""
+        # simplest way to combine the elements
+        # gather elements of each layer from device and anchor
+        # e.g. device.wg and actuator.wg, then cobine and create (wg_pattern,wg_layer)
+        wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern = [], [], [], [], []
+        top_actuator = actuator.copy.to(device.port['top_act'])
+
+        def _get_patterns(pattern, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern):
+            if pattern.wg:
+                wg_pattern += [(shape.copy, wg_layer) for shape in pattern.wg]
+            if pattern.cladding:
+                cladding_pattern += [(shape.copy, cladding_layer) for shape in pattern.cladding]
+            if pattern.sacrifical:
+                sacrificial_pattern += [(shape.copy, sacrificial_layer) for shape in pattern.sacrifical]
+            if pattern.mechanical:
+                print('adding mechanicla layer', pattern.mechanical)
+                mechanical_pattern += [(shape.copy, mechanical_layer) for shape in pattern.mechanical]
+            if pattern.metal:
+                metal_pattern += [(shape.copy, top_metal) for shape in pattern.metal]
+
+        _get_patterns(device, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
+        _get_patterns(top_actuator, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
+        if symmetric:
+            actuator2 = top_actuator.copy.flip(device.center)
+            _get_patterns(actuator2, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
+            # pattern = actuator2
+            # if pattern.wg:
+            #     wg_pattern += [(shape.copy, wg_layer) for shape in pattern.wg]
+            # if pattern.cladding:
+            #     cladding_pattern += [(shape.copy, cladding_layer) for shape in pattern.cladding]
+            # if pattern.sacrifical:
+            #     sacrificial_pattern += [(shape.copy, sacrificial_layer) for shape in pattern.sacrifical]
+            # if pattern.mechanical:
+            #     print('adding mechanicla layer', pattern.mechanical)
+            #     mechanical_pattern += [(shape.copy, mechanical_layer) for shape in pattern.mechanical]
+            # if pattern.metal:
+            #     metal_pattern += [(shape.copy, top_metal) for shape in pattern.metal]
+
+        minx, miny, maxx, maxy = Pattern(*[device, top_actuator]).bounds
+        box = Box(((maxx - minx), (maxy - miny))).align(Pattern(*[device, top_actuator]))
+        bottom_oxide = [(box, bottom_cladding_layer)]
+
+        super(SurfaceMEMs, self).__init__(bottom_oxide + wg_pattern + cladding_pattern + sacrificial_pattern + mechanical_pattern + metal_pattern)
+        self.port = {}
+        self.port.update(device.port)
+
+
 class LateralNemsFull(Multilayer):
     def __init__(self, device: Union[LateralNemsPS, LateralNemsTDC], anchor: NemsAnchor,
                  mid_via: Via, top_via: Via, trace_w: float,
@@ -739,7 +860,7 @@ class LateralNemsFull(Multilayer):
         self.port = port
         self.port.update(device.port)
 
-    @classmethod
+    @ classmethod
     def from_config(cls, config):
         """Initialize via configuration dictionary (useful for importing from a JSON file)
 
