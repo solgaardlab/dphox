@@ -191,31 +191,19 @@ class Multilayer:
         Returns:
             A dictionary mapping layers to lists of meep geomtery objects
         """
-        # probably a simple way to do this
-        # def _xy_to_vector3(pt, dim=[1, 2, 0]):
-        #     i = 0
-        #     coord = [0, 0, 0]
-        #     while min(dim) < 100 and i < len(pt):
-        #         ind = dim.index(min(dim))
-        #         if dim[ind] == 0:
-        #             coord[ind] = 0
-        #         else:
-        #             coord[ind] = pt[dim[ind] - 1]
-        #             i += 1
-        #         dim[ind] = 100
-        #         # print(coord)
-        #         # i+=1
-        #     return(mp.Vector3(*coord))
 
         def _pattern_to_prisms(pattern, material, zrange):
             zmin, zmax = zrange
             meep_geom_list = []
             for poly in pattern:
                 prism_pts = [mp.Vector3(x, y, 0) for x, y in np.asarray(poly.exterior.coords.xy).T[1:, :]]  # normally is returned as a row of xs and ten a row of ys
-                meep_geom_list.append(mp.Prism(prism_pts, height=0, axis=mp.Vector3(0, 0, 1), material=material).shift(mp.Vector3(0, 0, zmin)))
+                # meep_geom_list.append(mp.Prism(prism_pts, height=(zmax - zmin), axis=mp.Vector3(0, 0, 1), material=material).shift(mp.Vector3(0, 0, zmin)))
+                meep_geom_list.append(mp.Prism(prism_pts, height=(zmax - zmin), axis=mp.Vector3(0, 0, 1), material=material).shift(mp.Vector3(0, 0, zmin)))
+                if list(poly.interiors):
+                    for inter in list(poly.interiors):
+                        prism_interior_pts = [mp.Vector3(x, y, 0) for x, y in np.asarray(inter.coords.xy).T[1:, :]]
+                        meep_geom_list.append(mp.Prism(prism_interior_pts, height=(zmax - zmin), axis=mp.Vector3(0, 0, 1), material=mp.air).shift(mp.Vector3(0, 0, zmin)))
                 # skip the first pt, meep doesn't like repeated pts like shapely
-
-            # Convert into a list of vector3 objects and have a specified axis for the prism
             return meep_geom_list
 
         layer_to_extrusion = self.build_layers(layer_to_zrange=layer_to_zrange,
@@ -229,7 +217,7 @@ class Multilayer:
             material = layer_to_material[layer]
 
             if layer in meep_geometries.keys():
-                meep_geometries[layer].append(_pattern_to_prisms(pattern, material, zrange))
+                meep_geometries[layer] += _pattern_to_prisms(pattern, material, zrange)
             else:
                 meep_geometries[layer] = _pattern_to_prisms(pattern, material, zrange)
 
@@ -337,15 +325,11 @@ class Multilayer:
                 layers: Optional[List[str]] = None,
                 include_oxide: bool = True,
                 all_layers: bool = False):  # addded this boolean to handle conformal maaping where we don't know the layer names immediately
-        print('Building extrusion')
         meshes = self.to_trimesh_dict(layer_to_zrange, process_extrusion, layer_to_color, engine, include_oxide)
-        print('Have meshes', meshes.keys())
         for layer, mesh in meshes.items():
             if all_layers:
-                print('trying to export stl')
                 mesh.export(f'{prefix}_{layer}.stl')
             elif layers and layer in layers:
-                print('trying to export stl')
                 mesh.export(f'{prefix}_{layer}.stl')
 
     def to_trimesh_scene(self, layer_to_zrange: Dict[str, Tuple[float, float]],
@@ -373,19 +357,20 @@ class Multilayer:
         layer_to_pattern_processed = self.layer_to_pattern.copy()
 
         # TODO(Nate):Add Conformal deposition logic
+        def _um_str(microns: float):
+            return (f'{np.around(float(microns),3):.3f}')
         # build topographic map
         minx, miny, maxx, maxy = self.bounds
         starting_slate = Pattern(gy.Polygon(
             [(minx, miny), (minx, maxy),
              (maxx, maxy), (maxx, miny)]))
-        topo_map_dict = {str(0.0): starting_slate}  # zero is the starting height
+        topo_map_dict = {_um_str(0.0): starting_slate}  # zero is the starting height
 
         # TODO: sort out the Pattern instance creations, so they aren't necessary
 
         for step, operations in process_extrusion.items():
             for layer_relation in operations:
                 layer, other_layer, operation = layer_relation
-                print(layer)
                 if 'dope' in step and operation == 'intersection':
                     # make a new layer for each doping intersection
                     zmin, zmax = layer_to_zrange[other_layer]
@@ -420,21 +405,25 @@ class Multilayer:
                             for supr_h in sorted_heights:
                                 if count == 0:
                                     # dilation, should only occur in not etched regions, need to filter with raisd_pattern and union
-                                    dialated_pattern = topo_map_dict[str(supr_h)].offset(grow_d=thickness).boolean_operation(raising_pattern, 'intersection')
-                                    topo_map_dict[str(supr_h)] = dialated_pattern.boolean_operation(topo_map_dict[str(supr_h)], 'union')
+                                    dialated_pattern = topo_map_dict[_um_str(supr_h)].offset(grow_d=thickness).boolean_operation(raising_pattern, 'intersection')
+                                    topo_map_dict[_um_str(supr_h)] = dialated_pattern.boolean_operation(topo_map_dict[_um_str(supr_h)], 'union')
+                                    # topo_map_dict[_um_str(supr_h)] = dialated_pattern
                                 else:
                                     if supr_h > infr_h:
                                         #  and moving boudaries
-                                        topo_map_dict[str(infr_h)] = Pattern(topo_map_dict[str(infr_h)]).boolean_operation(
-                                            Pattern(topo_map_dict[str(supr_h)]), 'difference')
+                                        topo_map_dict[_um_str(infr_h)] = Pattern(topo_map_dict[_um_str(infr_h)]).boolean_operation(
+                                            Pattern(topo_map_dict[_um_str(supr_h)]), 'difference')
+                                        # topo_map_dict[_um_str(infr_h)] = Pattern(topo_map_dict[_um_str(supr_h)]).boolean_operation(
+                                        #     Pattern(topo_map_dict[_um_str(infr_h)]), 'difference')
                                     else:
                                         continue
-                            topo_map_dict[str(infr_h)] = starting_slate.boolean_operation(topo_map_dict[str(infr_h)], 'intersection')
+                            topo_map_dict[_um_str(infr_h)] = starting_slate.boolean_operation(topo_map_dict[_um_str(infr_h)], 'intersection')
                     else:
                         raising_pattern = pattern
                     # move these actions into the sorted list? actually no because dialation should be finished first
-                    for elevation in heights:
+                    for elevation in sorted_heights:
                         # material added
+                        elevation = _um_str(elevation)
                         raised = Pattern(raising_pattern).boolean_operation(
                             Pattern(topo_map_dict[elevation]), 'intersection'
                         ).shapely
@@ -443,8 +432,8 @@ class Multilayer:
                             (Pattern(raised)), 'difference'
                         ).shapely
 
-                        topo_map_dict[str(elevation)] = Pattern(not_raised)
-                        topo_map_dict[str(float(elevation) + (zmax - zmin))] = Pattern(raised)
+                        topo_map_dict[_um_str(elevation)] = Pattern(*not_raised)
+                        topo_map_dict[_um_str(float(elevation) + (zmax - zmin))] = Pattern(*raised)
 
                     # use the current topographic map and the previous topographic map to make extrusions
                     # needs to be adjusted to only deal with added materials
@@ -468,8 +457,8 @@ class Multilayer:
                     #     pattern_shapely = MultiPolygon([pattern_shapely]) if isinstance(pattern_shapely, Polygon) else pattern_shapely
                     #     layer_to_pattern_processed[layer] = pattern
                     #     layer_to_extrusion[layer] = (pattern_shapely, new_zrange)
-
         topo_list = []
+        # for layer, pattern in old_topo_map_dict.items():
         for layer, pattern in topo_map_dict.items():
             topo_list.append((pattern, layer))
 
@@ -478,7 +467,6 @@ class Multilayer:
         # use buffer for dialtion and use default rounding
         # with the new topo, compare/intersect with the old topo and make the zranges for all height combinations
         self.topo = Multilayer(topo_list)
-        print(layer_to_extrusion.keys())
         return layer_to_extrusion
 
     def fill_material(self, layer_name: str, growth: float, centered_layer: str = None):
