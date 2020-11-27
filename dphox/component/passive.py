@@ -47,6 +47,8 @@ class Box(Pattern):
         pitch = (stripe_w * 2, stripe_w * 2) if pitch is None else pitch
         patterns = [self.hollow(stripe_w)]
         if pitch[0] > 0 and not 3 * pitch[1] >= self.size[0]:
+            # edges of etch holes are really thick
+            # TODO: make the edges lean toward large holes over small holes. currently attepting to subtract the last pitch
             xs = np.mgrid[self.bounds[0] + pitch[0]:self.bounds[2]:pitch[0]]
             patterns.append(Pattern(*[Box((stripe_w, self.size[1])).halign(x) for x in xs]).align(patterns[0]))
         if pitch[1] > 0 and not 3 * pitch[1] >= self.size[1]:
@@ -390,7 +392,7 @@ class DelayLine(Pattern):
                 f"Bends alone exceed the delay length {delay_length}"
                 f"reduce the bend radius or the number of bend pairs")
         segment_length = (delay_length - ((2 * np.pi + 4) * number_bend_pairs + np.pi - 4) * bend_radius) / (
-                2 * number_bend_pairs)
+            2 * number_bend_pairs)
         extra_length = straight_length - 4 * bend_radius - segment_length
         if extra_length <= 0:
             raise ValueError(

@@ -17,6 +17,14 @@ except ImportError:
     SIMPHOX_IMPORTED = False
     pass
 
+try:
+    import meep as mp
+    from meep import mpb
+    MEEP_IMPORTED = True
+except ImportError:
+    MEEP_IMPORTED = False
+    pass
+
 
 class LateralNemsPS(Pattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, gap_w: float,
@@ -618,7 +626,7 @@ class SimpleComb(Pattern):
 
 
 class VerticalPS(Pattern):
-    def __init__(self, waveguide_w, gap, ps_w, total_length, width, interaction_l, oxide_opening_w=None):
+    def __init__(self, waveguide_w, gap, ps_w, total_length, width, interaction_l, oxide_opening_w=None, sacrifical_overlay=5):
         self.waveguide_w = waveguide_w
         self.gap = gap
         self.ps_w = ps_w
@@ -631,8 +639,9 @@ class VerticalPS(Pattern):
             cladding_open = Waveguide(waveguide_w=(oxide_opening_w), length=interaction_l).align(wg)
         else:
             cladding_open = Waveguide(waveguide_w=(2 * gap + ps_w), length=interaction_l).align(wg)
-        sacrifical_area = Box((total_length, width)).align(wg)
-        mechanical_block = sacrifical_area.copy.align(wg)
+        sacrifical_area = Box((total_length + sacrifical_overlay, width + sacrifical_overlay)).align(wg)
+        # mechanical_block = Box((total_length, width)).align(wg)
+        mechanical_block = Box((total_length, width)).striped(stripe_w=1.5 * waveguide_w).align(wg)
 
         super(VerticalPS, self).__init__(*[wg, cladding_open, sacrifical_area, mechanical_block], call_union=False)
         self.wg = [wg]
@@ -651,10 +660,11 @@ class VerticalPS(Pattern):
 
 
 class Microbridge(Pattern):
-    def __init__(self, width, length, underetch_dim, anchor_dim):
+    def __init__(self, width, length, underetch_dim, anchor_dim, sacrifical_overlay=5):
 
-        sacrifical_box = Box((length, width)).translate()
         beam = Box((length, width)).striped(stripe_w=underetch_dim[2], pitch=underetch_dim[:2]).translate()
+        # sacrifical_box = Box((length + sacrifical_overlay, width + sacrifical_overlay)).translate()
+        sacrifical_box = Box((length + sacrifical_overlay, width + sacrifical_overlay)).align(beam).valign(beam)
         # beam = beam.translate(dx=-beam.center[0], dy=-beam.bounds[1])
         # ps_anchor_overlay = Box(((anchor_dim[0] + mb_w - anchor_size[1]), mb_w)).align(ps_microbridge)
         anchor = Box(anchor_dim)
@@ -690,7 +700,7 @@ class SurfaceMEMs(Multilayer):
                  sacrificial_layer: str, mechanical_layer: str, top_metal: str,
                  #  spring_dope: str, pad_dope: str, pos_metal: str, gnd_metal: str,
                  #  clearout_layer: str, clearout_etch_stop_layer: str, clearout_etch_stop_grow: float,
-                 symmetric: bool = True, dual_drive: bool = False):
+                 symmetric: bool = True, dual_drive: bool = False, metal_trace_w=10):
         """ A Photonic MEMs Stack where all layers are deposited and etched. Surface Micromachining"""
         # simplest way to combine the elements
         # gather elements of each layer from device and anchor
@@ -706,7 +716,6 @@ class SurfaceMEMs(Multilayer):
             if pattern.sacrifical:
                 sacrificial_pattern += [(shape.copy, sacrificial_layer) for shape in pattern.sacrifical]
             if pattern.mechanical:
-                print('adding mechanicla layer', pattern.mechanical)
                 mechanical_pattern += [(shape.copy, mechanical_layer) for shape in pattern.mechanical]
             if pattern.metal:
                 metal_pattern += [(shape.copy, top_metal) for shape in pattern.metal]
@@ -714,23 +723,17 @@ class SurfaceMEMs(Multilayer):
         _get_patterns(device, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
         _get_patterns(top_actuator, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
         if symmetric:
-            actuator2 = top_actuator.copy.flip(device.center)
-            _get_patterns(actuator2, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
-            # pattern = actuator2
-            # if pattern.wg:
-            #     wg_pattern += [(shape.copy, wg_layer) for shape in pattern.wg]
-            # if pattern.cladding:
-            #     cladding_pattern += [(shape.copy, cladding_layer) for shape in pattern.cladding]
-            # if pattern.sacrifical:
-            #     sacrificial_pattern += [(shape.copy, sacrificial_layer) for shape in pattern.sacrifical]
-            # if pattern.mechanical:
-            #     print('adding mechanicla layer', pattern.mechanical)
-            #     mechanical_pattern += [(shape.copy, mechanical_layer) for shape in pattern.mechanical]
-            # if pattern.metal:
-            #     metal_pattern += [(shape.copy, top_metal) for shape in pattern.metal]
+            bot_actuator = top_actuator.copy.flip(device.center)
+            _get_patterns(bot_actuator, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
+            a2minx, a2miny, a2maxx, a2maxy = bot_actuator.bounds
+            a1minx, a1miny, a1maxx, a1maxy = top_actuator.bounds
+            metal_connection = Box((metal_trace_w, a1miny - a2maxy)).align(Pattern(*device.wg))
+            # metal_connections = [metal_connection.copy.translate(metal_trace_w * ind) for ind in [-3, -1, 1, 3]]
+            metal_connections = [metal_connection.copy.halign(top_actuator), metal_connection.copy.halign(top_actuator, left=False)]
+            metal_pattern += [(shape.copy, top_metal) for shape in metal_connections]
 
-        minx, miny, maxx, maxy = Pattern(*[device, top_actuator]).bounds
-        box = Box(((maxx - minx), (maxy - miny))).align(Pattern(*[device, top_actuator]))
+        minx, miny, maxx, maxy = Pattern(*[device, top_actuator, bot_actuator]).bounds
+        box = Box(((maxx - minx), (maxy - miny))).align(Pattern(*[device, top_actuator, bot_actuator]))
         bottom_oxide = [(box, bottom_cladding_layer)]
 
         super(SurfaceMEMs, self).__init__(bottom_oxide + wg_pattern + cladding_pattern + sacrificial_pattern + mechanical_pattern + metal_pattern)
