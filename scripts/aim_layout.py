@@ -141,23 +141,23 @@ interposer = chip.interposer(
 bp_array = chip.bond_pad_array(n_pads_bp, stagger_x_frac=0.4)
 bp_array_testing = chip.bond_pad_array((2, n_test))
 eu_array = chip.eutectic_array(n_pads_eu)
-autoroute_4 = chip.autoroute_turn(7, level=2, turn_radius=8,
+autoroute_4 = chip.autoroute_turn(7, turn_radius=8, flip_via=False,
                                   connector_x=0, connector_y=20,
                                   final_period=18.5, width=4)
-autoroute_4_extended = chip.autoroute_turn(7, level=2, turn_radius=8,
+autoroute_4_extended = chip.autoroute_turn(7, turn_radius=8, flip_via=False,
                                            connector_x=9, connector_y=28,
                                            final_period=18.5, width=4)
-autoroute_4_nems_gnd = chip.autoroute_turn(7, level=2, turn_radius=8,
-                                           connector_x=8, connector_y=16,
+autoroute_4_nems_gnd = chip.autoroute_turn(7, turn_radius=8, flip_via=False,
+                                           connector_x=9, connector_y=16,
                                            final_period=18.5, width=4)
-autoroute_4_nems_pos = chip.autoroute_turn(7, level=2, turn_radius=8,
+autoroute_4_nems_pos = chip.autoroute_turn(7, turn_radius=8, flip_via=False,
                                            connector_x=1, connector_y=28,
                                            final_period=18.5, width=4)
-autoroute_8 = chip.autoroute_turn(7, level=2, turn_radius=8,
+autoroute_8 = chip.autoroute_turn(7, turn_radius=8,
                                   connector_x=0, connector_y=0,
-                                  final_period=18.5, width=8)
-autoroute_8_extended = chip.autoroute_turn(7, level=2, turn_radius=8, connector_x=9, connector_y=10,
-                                           final_period=18.5, width=8)
+                                  final_period=18.5, width=7.75)
+autoroute_8_extended = chip.autoroute_turn(7, turn_radius=8, connector_x=9.25, connector_y=10,
+                                           final_period=18.5, width=7.75)
 
 
 # Test structures
@@ -427,11 +427,13 @@ tether_ps_safe = tether_full_ps.update(
 )
 
 aggressive = [
-                 tether_full_ps.update(ps=tether_ps.update(taper_l=10,
-                                                           boundary_taper=cubic_taper(-0.25),
-                                                           wg_taper=cubic_taper(-0.4),
-                                                           gap_taper=cubic_taper(-0.4),
-                                                           ))  # slot
+                pull_apart_full_ps.update(
+                    anchor=tether_anchor_ps_comb.update(spring_dim=(tether_phaseshift_l, 0.22),
+                         pos_electrode_dim=(tether_phaseshift_l - 15, 4, 3.2),
+                         fin_dim=(tether_phaseshift_l - 10, 0.3), shuttle_dim=(20, 3)),
+                    ps=tether_ps.update(phaseshift_l=tether_phaseshift_l - 10, **ps_taper(10, -0.05)),
+                    clearout_dim=(tether_phaseshift_l - 5, 0.5)
+                )
              ] + [tether_full_comb_ps] + [tether_ps_safe] * 2 + [pull_in_full_ps] + [
                  tether_full_ps.update(
                      ps=tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
@@ -530,13 +532,15 @@ def autoroute_node_detector(p1, n2, n1, p2,
     chip.v1_via_4.put(p1)
     chip.m1_ic.bend(r1, a1).put(p1)
     chip.m1_ic.strt(s1).put()
-    chip.v1_via_4.put(n2)
-    chip.m1_ic.bend(r2, a2).put(n2)
-    chip.m1_ic.strt(s2).put()
+    chip.v1_via_4.put()
+    chip.m2_ic.bend(r2, a2).put(n2)
+    chip.m2_ic.strt(s2).put()
     chip.m2_ic.bend(r3, a3).put(n1)
     chip.m2_ic.strt(s3).put()
-    chip.m2_ic.bend(r4, a4).put(p2)
-    chip.m2_ic.strt(s4).put()
+    chip.v1_via_4.put(p2)
+    chip.m1_ic.bend(r4, a4).put(p2)
+    chip.m1_ic.strt(s4).put()
+    chip.v1_via_4.put()
 
 
 # test structure grid
@@ -810,6 +814,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
                                     output_interposer.pin['a7'].y + 20 - 4 * (layer == 13), flip=True)
             chip.m1_ic.bend_strt_bend_p2p(ts.pin['gnd_l'], autoroute_nems_gnd.pin['b5'], radius=4).put()
             chip.v1_via_4.put()
+            chip.m2_ic.strt_p2p(autoroute_nems_gnd.pin['b5'], autoroute_nems_gnd.pin['a5']).put()
             if layer == 13:
                 chip.m2_ic.bend_strt_bend_p2p(ts.pin['pos_c'], autoroute_nems_pos.pin['a6'], radius=8).put()
                 chip.m2_ic.bend_strt_bend_p2p(ts.pin['pos_l'], autoroute_nems_pos.pin['a5'], radius=8).put()
@@ -835,14 +840,20 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             if layer == 13:
                 chip.m1_ic.bend_strt_bend_p2p(d2.pin['n'], autoroute_nems_anode.pin[f'b5'], radius=4).put()
                 chip.v1_via_4.put()
+                chip.m2_ic.strt_p2p(autoroute_nems_anode.pin['b5'], autoroute_nems_anode.pin['a5']).put()
+
                 chip.m2_ic.bend_strt_bend_p2p(d2.pin['p'], autoroute_nems_cathode.pin[f'a5'], radius=4).put()
             else:
                 chip.m2_ic.bend_strt_bend_p2p(d2.pin['n'], autoroute_nems_anode.pin[f'b5'], radius=4).put()
+                chip.m2_ic.strt_p2p(autoroute_nems_anode.pin['b5'], autoroute_nems_anode.pin['a5']).put()
                 chip.m1_ic.bend_strt_bend_p2p(d2.pin['p'], autoroute_nems_cathode.pin[f'b5'], radius=4).put()
                 chip.v1_via_4.put()
+                chip.m2_ic.strt_p2p(autoroute_nems_cathode.pin['b5'], autoroute_nems_cathode.pin['a5']).put()
             chip.m2_ic.bend_strt_bend_p2p(d1.pin['n'], autoroute_nems_anode.pin[f'b6'], radius=4).put()
+            chip.m2_ic.strt_p2p(autoroute_nems_anode.pin['b6'], autoroute_nems_anode.pin['a6']).put()
             chip.m1_ic.bend_strt_bend_p2p(d1.pin['p'], autoroute_nems_cathode.pin[f'b6'], radius=4).put()
             chip.v1_via_4.put()
+            chip.m2_ic.strt_p2p(autoroute_nems_cathode.pin['b6'], autoroute_nems_cathode.pin['a6']).put()
             chip.v1_via_4.put(d1.pin['p'])
             chip.v1_via_4.put(d2.pin['n' if layer == 13 else 'p'])
             mesh_ts_idx += 1
@@ -988,14 +999,12 @@ with nd.Cell('test_chiplet') as test_chiplet:
         # detector wire connections
         chip.m2_ic.bend(26, -90).put(bp_array_left.pin[f'u{0},{i}'])
         p = chip.m2_ic.strt(2994).put()
-        chip.m1_ic.bend(20, -90).put(bp_array_left.pin[f'u{1},{i}'])
-        chip.m1_ic.strt(2900).put()
-        chip.m1_ic.bend(28, -90).put(bp_array_right.pin[f'd{1},{i}'])
-        chip.m1_ic.strt(2994).put()
+        chip.m2_ic.bend(20, -90).put(bp_array_left.pin[f'u{1},{i}'])
+        chip.m2_ic.strt(2900).put()
+        chip.m2_ic.bend(28, -90).put(bp_array_right.pin[f'd{1},{i}'])
+        chip.m2_ic.strt(2994).put()
         chip.m2_ic.bend(22, -90).put(bp_array_right.pin[f'd{0},{i}'])
         chip.m2_ic.strt(2900).put()
-        chip.v1_via_4.put(bp_array_right.pin[f'd{1},{i}'])
-        chip.v1_via_4.put(bp_array_left.pin[f'u{1},{i}'])
 
         # loop ground wires around detectors
         cx = 10

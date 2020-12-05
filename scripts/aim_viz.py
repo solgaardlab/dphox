@@ -26,13 +26,13 @@ from dphox.constants import AIM_STACK
 #     engine='blender'
 # )
 
-# tether_full_comb_ps.show(
-#     layer_to_zrange=AIM_STACK['zranges'],
-#     process_extrusion=AIM_STACK['process_extrusion'],
-#     layer_to_color=AIM_STACK['layer_to_color'],
-#     # ignore_layers=['snam'],
-#     engine='blender'
-# )
+tether_full_comb_ps.show(
+    layer_to_zrange=AIM_STACK['zranges'],
+    process_extrusion=AIM_STACK['process_extrusion'],
+    layer_to_color=AIM_STACK['layer_to_color'],
+    # ignore_layers=['snam'],
+    engine='blender'
+)
 #
 # tether_full_tdc.show(
 #     layer_to_zrange=AIM_STACK['zranges'],
@@ -60,11 +60,11 @@ from dphox.constants import AIM_STACK
 #     engine='blender'
 # )
 
-tether_full_comb_ps.to_stls(
-    prefix='tether_full_comb_ps',
-    layer_to_zrange=AIM_STACK['zranges'],
-    process_extrusion=AIM_STACK['process_extrusion'],
-    layer_to_color=AIM_STACK['layer_to_color'],
-    layers=['oxide', 'clearout', 'seam', 'ream', 'pdam', 'ppam', 'pppam'],
-    engine='blender'
-)
+# tether_full_comb_ps.to_stls(
+#     prefix='tether_full_comb_ps',
+#     layer_to_zrange=AIM_STACK['zranges'],
+#     process_extrusion=AIM_STACK['process_extrusion'],
+#     layer_to_color=AIM_STACK['layer_to_color'],
+#     layers=['oxide', 'clearout', 'seam', 'ream', 'pdam', 'ppam', 'pppam'],
+#     engine='blender'
+# )
