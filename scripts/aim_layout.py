@@ -493,7 +493,7 @@ extreme = [
               ) for psl in (30, 35, 40, 45)
           ] + [
               tether_full_tdc.update(
-                  ps=tether_tdc.update(interaction_l=il, dc_gap_w=0.125,
+                  tdc=tether_tdc.update(interaction_l=il, dc_gap_w=0.125,
                                        bend_dim=(test_tdc_radius,
                                                  test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2),
                                        **tdc_taper(10, -0.32)
@@ -793,9 +793,9 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
 
     for layer in range(15):
         # autoroute
-        autoroute_nems_gnd = autoroute_4_nems_gnd.put(layer * mesh_layer_x + 8.05, 536.77, flop=True)
+        autoroute_nems_gnd = autoroute_4_nems_gnd.put(layer * mesh_layer_x + 8.05, 536, flop=True)
         autoroute_nems_pos = autoroute_4_nems_pos.put(layer * mesh_layer_x - 10, 550, flop=True)
-        autoroute_nems_cathode = autoroute_4.put(layer * mesh_layer_x + 178, 542)
+        autoroute_nems_cathode = autoroute_4.put(layer * mesh_layer_x + 178, 541.5)
         autoroute_nems_anode = autoroute_4_extended.put(layer * mesh_layer_x + 178, 550)
         for i in range(7):
             chip.v1_via_4.put(autoroute_nems_gnd.pin[f'a{i}'], flop=True)
@@ -811,7 +811,7 @@ with nd.Cell('mesh_chiplet') as mesh_chiplet:
             len_x = 0 * (mesh_ts_idx >= num_ps_middle_mesh)
             # Nate: added a quick 0, -20 hack to fix drc
             ts = test_structure.put(1250 + shift_x + mesh_layer_x * (layer - 3),
-                                    output_interposer.pin['a7'].y + 20 - 4 * (layer == 13), flip=True)
+                                    output_interposer.pin['a7'].y + 20.5 - 4 * (layer == 13), flip=True)
             chip.m1_ic.bend_strt_bend_p2p(ts.pin['gnd_l'], autoroute_nems_gnd.pin['b5'], radius=4).put()
             chip.v1_via_4.put()
             chip.m2_ic.strt_p2p(autoroute_nems_gnd.pin['b5'], autoroute_nems_gnd.pin['a5']).put()
@@ -1023,25 +1023,21 @@ with nd.Cell('test_chiplet') as test_chiplet:
             # gnd connection
             if f'gnd{i}' in gs_list[j].pin:
                 chip.m2_ic.bend_strt_bend_p2p(gs_list[j].pin[f'gnd{i}'], radius=4).put()
-                chip.v1_via_4.put(flop=True)
             # pos electrode connection
             if f'pos{i}' in gs_list[j].pin:
                 pin = gs_list[j].pin[f'pos{i}']
                 # ensures that this route will not intersect any of the current routes
                 offset = ground_wire.pin['a0'].y + 6 - pin.y
                 offset = -offset if pin.a == 180 else offset
-                chip.m2_ic.sbend(radius=4, offset=offset).put(pin)
+                chip.ml_ic_trace.sbend(radius=4, offset=offset).put(pin)
                 idx = j if j < 4 else j - 1  # hack: ignore vip col
-                chip.m2_ic.strt(test_pads[idx].bbox[0] - nd.cp.x()).put(*nd.cp.get_xy(), 0)
-                # connect to the pad using via
-                chip.va_via.put()
+                chip.ml_ic_trace.strt(test_pads[idx].bbox[0] - nd.cp.x()).put(*nd.cp.get_xy(), 0)
             if (j == 2 or j == 3) and n_test - 5 <= i < n_test - 1:
                 pin = gs_list[j].pin[f'pos2_{i}']
-                chip.m2_ic.strt(20).put(pin)
+                chip.ml_ic_trace.strt(20).put(pin)
                 idx = (j - 1) // 2
-                chip.m2_ic.bend(radius=4, angle=-90).put()
-                chip.m2_ic.strt(dual_drive_tps[idx].bbox[0] - nd.cp.x()).put(*nd.cp.get_xy(), 0)
-                chip.va_via.put()
+                chip.ml_ic_trace.bend(radius=4, angle=-90).put()
+                chip.ml_ic_trace.strt(dual_drive_tps[idx].bbox[0] - nd.cp.x()).put(*nd.cp.get_xy(), 0)
 
 # Final chip layout
 
