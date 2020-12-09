@@ -333,7 +333,7 @@ class Multilayer:
 
 
 class Via(Multilayer):
-    def __init__(self, via_dim: Dim2, boundary_grow: float, metal: Union[str, List[str]],
+    def __init__(self, via_dim: Dim2, boundary_grow: Union[float, Tuple[float]], metal: Union[str, List[str]],
                  via: Union[str, List[str]], pitch: float = 0, shape: Optional[Shape2] = None):
         """Via / metal multilayer stack (currently all params should be specified to 2 decimal places)
 
@@ -346,6 +346,8 @@ class Via(Multilayer):
             shape: Shape of the array (rows, cols)
         """
         self.via_dim = via_dim
+        metal = (metal,) if isinstance(metal, str) else metal
+        boundary_grow = boundary_grow if isinstance(boundary_grow, tuple) else tuple([boundary_grow] * len(metal))
         self.boundary_grow = boundary_grow
         self.metal = metal
         self.via = via
@@ -353,6 +355,7 @@ class Via(Multilayer):
         self.shape = shape
         self.config = copy(self.__dict__)
 
+        max_boundary_grow = max(boundary_grow)
         via_pattern = Box(via_dim, decimal_places=2)
         if pitch > 0 and shape is not None:
             patterns = []
@@ -360,18 +363,17 @@ class Via(Multilayer):
             for x, y in zip(x.flatten(), y.flatten()):
                 patterns.append(via_pattern.copy.translate(x, y))
             via_pattern = Pattern(*patterns, decimal_places=2)
-        boundary = Box((via_pattern.size[0] + 2 * boundary_grow,
-                        via_pattern.size[1] + 2 * boundary_grow), decimal_places=2).align((0, 0)).halign(0)
+        boundary = Box((via_pattern.size[0] + 2 * max_boundary_grow,
+                        via_pattern.size[1] + 2 * max_boundary_grow), decimal_places=2).align((0, 0)).halign(0)
         via_pattern.align(boundary)
         layers = []
         if isinstance(via, list):
             layers += [(via_pattern.copy, layer) for layer in via]
         elif isinstance(via, str):
             layers += [(via_pattern, via)]
-        if isinstance(metal, list):
-            layers += [(boundary.copy, layer) for layer in metal]
-        elif isinstance(metal, str):
-            layers += [(boundary, metal)]
+        layers += [(Box((via_pattern.size[0] + 2 * bg,
+                    via_pattern.size[1] + 2 * bg), decimal_places=2).align(boundary), layer)
+                   for layer, bg in zip(metal, boundary_grow)]
         super(Via, self).__init__(layers)
         self.port['a0'] = Port(self.bounds[0], 0, np.pi)
         self.port['b0'] = Port(self.bounds[2], 0)

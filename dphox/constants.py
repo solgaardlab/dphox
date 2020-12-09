@@ -310,13 +310,13 @@ AIM_STACK = {
         'm1am': (1.135, 1.24),  # metal 1 contact to caam/cbam # guessing
         'v1am': (1.24, 1.74),  # via to m1am # guessing
         'm2am': (1.74, 1.83),  # metal 2 level # guessing
-        'vaam': (1.83, 2.03),  # aluminum via to m2am # guessing
+        'vaam': (1.83, 2.23),  # aluminum via to m2am # guessing
         'tzam': (0.64, 2.00),  # tzam # guessing
         'diam': (-2.00, 2.00),  # diam, dicing channel # guessing
-        'paam': (1.95, 2.00),  # metal passivation # guessing
-        'mlam': (1.73, 1.95),  # mteal pad layer # guessing
-        'oxide': (-2.00, 2.00),  # oxide fill
-        'clearout': (-2.00, 2.00),  # pseudo clearout for nems devices
+        'paam': (2.23, 2.33),  # metal passivation # guessing
+        'mlam': (2.23, 2.33),  # mteal pad layer # guessing
+        'oxide': (-2.00, 2.50),  # oxide fill
+        'clearout': (-2.00, 2.50),  # pseudo clearout for nems devices
     },
     'process_extrusion': {
         # ream, si ridge remaining

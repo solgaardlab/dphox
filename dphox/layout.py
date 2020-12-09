@@ -47,6 +47,7 @@ class NazcaLayout:
         self.dicing_ic = nd.interconnects.Interconnect(width=100, xs='dicing_xs')
         self.m1_ic = nd.interconnects.Interconnect(width=4, xs='m1_xs')
         self.m2_ic = nd.interconnects.Interconnect(width=4, xs='m2_xs')
+        self.ml_ic_trace = nd.interconnects.Interconnect(width=4, xs='ml_xs')
         self.ml_ic = nd.interconnects.Interconnect(width=100, xs='ml_xs')
         self.v1_via = Via((0.4, 0.4), 0.1, metal=['m1am', 'm2am'], via='v1am').nazca_cell('v1_via')
         self.va_via = Via((3.6, 3.6), 1.5, metal=['mlam', 'm2am'], via='vaam').nazca_cell('va_via')
@@ -67,11 +68,11 @@ class NazcaLayout:
         device = Multilayer([(c, 'seam')] + pad_to_layer + ridge_etch + dopes)
         return device.nazca_cell(name)
 
-    def autoroute_turn(self, n: Union[int, List, np.ndarray], level: int = 1,
+    def autoroute_turn(self, n: Union[int, List, np.ndarray], flip_via: bool = True, include_via: bool = True,
                        period: float = 50, final_period: float = 20, width: float = 8,
                        connector_x: float = 0, connector_y: float = 0, turn_radius: float = 0, overlap: float = 0,
                        name: str = 'autoroute_turn'):
-        mt_ic = self.m1_ic if level == 1 else self.m2_ic
+        mt_ic = self.ml_ic
         with nd.Cell(f'{name}_{period}_{final_period}_{connector_x}_{connector_y}') as autoroute_turn:
             route_arr = np.ones(n) if isinstance(n, int) else np.asarray(n)
             route_num = 0
@@ -86,6 +87,9 @@ class NazcaLayout:
                     nd.Pin(f'b{int(route_num)}').put(start.pin['b0'].x, start.pin['b0'].y, 180)
                     nd.Pin(f'p{int(route_num)}', pin=output.pin['b0']).put()
                     route_num += 1
+                if include_via:
+                    self.va_via.put(start.pin['a0'].x, start.pin['a0'].y, 180 if flip_via else 0)
+                    self.va_via.put(output.pin['b0'].x, output.pin['b0'].y, 90)
             nd.put_stub()
         return autoroute_turn
 

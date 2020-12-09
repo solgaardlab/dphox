@@ -619,7 +619,7 @@ class SimpleComb(Pattern):
 
 class LateralNemsFull(Multilayer):
     def __init__(self, device: Union[LateralNemsPS, LateralNemsTDC], anchor: NemsAnchor,
-                 gnd_via: Via, pos_via: Via, trace_w: float,
+                 mid_via: Via, top_via: Via, trace_w: float,
                  pos_box_w: float, gnd_box_h: float, clearout_dim: Dim2, dope_grow: float, dope_expand: float,
                  ridge: str, rib: str, shuttle_dope: str,
                  spring_dope: str, pad_dope: str, pos_metal: str, gnd_metal: str,
@@ -630,8 +630,8 @@ class LateralNemsFull(Multilayer):
         Args:
             device: phase shifter or tunable directional coupler
             anchor: top anchor (None in pull-in case)
-            gnd_via: gnd ``Via`` connection
-            pos_via: pos ``Via`` connection
+            mid_via: gnd ``Via`` connection
+            top_via: pos ``Via`` connection
             trace_w: trace width
             pos_box_w: Extension for the positive box
             gnd_box_h: Extension for the negative box
@@ -671,8 +671,8 @@ class LateralNemsFull(Multilayer):
         self.config.update({
             device_name: device.config,
             'anchor': anchor.config,
-            'pos_via': pos_via.config,
-            'gnd_via': gnd_via.config,
+            'top_via': top_via.config,
+            'mid_via': mid_via.config,
         })
 
         top = anchor.copy.to(device.port['fin0'])
@@ -700,7 +700,7 @@ class LateralNemsFull(Multilayer):
             gnd = Pattern(*gnd_pads)
             gnd_box = Box((gnd.size[0], gnd.size[1] + 2 * gnd_box_h)).hollow(trace_w).align(gnd)
             metals.append((gnd_box, gnd_metal))
-            vias.extend(sum([gnd_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
+            vias.extend(sum([mid_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
             port['gnd_l'] = Port(gnd_box.bounds[0] + trace_w / 2, gnd_box.bounds[3], np.pi / 2)
             port['gnd_r'] = Port(gnd_box.bounds[2] - trace_w / 2, gnd_box.bounds[3], np.pi / 2)
         if top.pos_pads and pos_metal is not None:
@@ -711,7 +711,10 @@ class LateralNemsFull(Multilayer):
             else:
                 pos_box = Box((pos.size[0] + 2 * pos_box_w, pos.size[1])).hollow(trace_w).align(pos)
             metals.append((pos_box, pos_metal))
-            vias.extend(sum([pos_via.copy.align(pad).pattern_to_layer for pad in pos_pads], []))
+            vias.extend(sum([mid_via.copy.align(pad).pattern_to_layer for pad in pos_pads], []))
+            vias.extend(sum([top_via.copy.align(pad).translate(
+                dy=(-2 * i + 1) * (top_via.size[1] / 2 - trace_w / 2)).pattern_to_layer
+                             for i, pad in enumerate(pos_pads)], []))
             port['pos_l'] = Port(pos_box.bounds[0], pos_box.center[1], -np.pi)
             port['pos_b'] = Port(pos_box.center[0], pos_box.bounds[1], -np.pi / 2)
             port['pos_r'] = Port(pos_box.bounds[2], pos_box.center[1], 0)
@@ -724,9 +727,9 @@ class LateralNemsFull(Multilayer):
         if device_name == 'tdc':
             gnd_pads = device.gnd_wg_pads
             gnd = Pattern(*gnd_pads)
-            gnd_box = Box((gnd.size[0], gnd.size[1] + gnd_box_h / 2)).hollow(trace_w).align(gnd)
+            gnd_box = Box((gnd.size[0], gnd.size[1] + gnd_box_h * 0.8)).hollow(trace_w).align(gnd)
             metals.append((gnd_box, gnd_metal))
-            vias.extend(sum([gnd_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
+            vias.extend(sum([mid_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
             if anchor.gnd_electrode_dim is None:
                 port['gnd_l'] = Port(gnd_box.bounds[0] + trace_w / 2, gnd_box.bounds[3], np.pi / 2)
                 port['gnd_r'] = Port(gnd_box.bounds[2] - trace_w / 2, gnd_box.bounds[3], np.pi / 2)
@@ -980,9 +983,9 @@ class NemsMillerNode(Multilayer):
 
 def _handle_nems_config(config):
     anchor = NemsAnchor(**config['anchor']) if isinstance(config['anchor'], dict) else config['anchor']
-    pos_via = Via(**config['pos_via']) if isinstance(config['pos_via'], dict) else config['pos_via']
-    gnd_via = Via(**config['gnd_via']) if isinstance(config['gnd_via'], dict) else config['gnd_via']
-    for key in ('anchor', 'pos_via', 'gnd_via'):
+    top_via = Via(**config['top_via']) if isinstance(config['top_via'], dict) else config['top_via']
+    mid_via = Via(**config['mid_via']) if isinstance(config['mid_via'], dict) else config['mid_via']
+    for key in ('anchor', 'top_via', 'mid_via'):
         del config[key]
     if 'tdc' in config:
         device = LateralNemsTDC(**config['tdc']) if isinstance(config['tdc'], dict) else config['tdc']
@@ -998,7 +1001,7 @@ def _handle_nems_config(config):
     return {
         'device': device,
         'anchor': anchor,
-        'pos_via': pos_via,
-        'gnd_via': gnd_via,
+        'top_via': top_via,
+        'mid_via': mid_via,
         **config
     }
