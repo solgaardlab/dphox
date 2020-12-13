@@ -5,7 +5,6 @@ Created on Thu Apr 23 17:19:16 2020
 @author: Sunil Pai, Nate Abebe, Rebecca Hwang, Yu Miao
 """
 
-
 import nazca as nd
 
 from .component import *
@@ -112,6 +111,7 @@ class NazcaLayout:
                 return device
             else:
                 return dev.put()
+
         with nd.Cell(name) as cell:
             devices = [_put_device(dev) for dev in device_list]
             nd.Pin('a0').put(devices[0].pin['a0'])
@@ -211,7 +211,8 @@ class NazcaLayout:
 
     def bond_pad_array(self, n_pads: Shape2, pitch: Union[float, Dim2] = 100,
                        pad_dim: Dim2 = (40, 40), labels: Optional[np.ndarray] = None,
-                       use_labels: bool = True, stagger_x_frac: float = 0, use_ml_only: bool = False):
+                       use_labels: bool = True, stagger_x_frac: float = 0, use_ml_only: bool = False,
+                       flipped_text: bool = False):
         # TODO(): move this out of layout.py
         pad_w, pad_l = pad_dim
         pitch = pitch if isinstance(pitch, tuple) else (pitch, pitch)
@@ -228,12 +229,12 @@ class NazcaLayout:
                     nd.Pin(f'u{i},{j}').put(pad.pin['a0'])
                     nd.Pin(f'd{i},{j}').put(pad.pin['b0'])
                     if use_labels:
-                        x = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='rc',
+                        x = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='lc',
                                     layer='seam', height=pad_dim[0] / 2)
-                        y = nd.text(text=f'{j + 1 if labels is None else labels[i]}', align='rc',
+                        y = nd.text(text=f'{j + 1 if labels is None else labels[i]}', align='lc',
                                     layer='seam', height=pad_dim[0] / 2)
-                        y.put(x_loc, -pad_l / 2 + j * pitch[1])
-                        x.put(x_loc, 0.27 * pad_l + j * pitch[1])
+                        y.put(x_loc + pad_w * (0.6 + 0.5 * flipped_text), -pad_l * 0.8 + j * pitch[1], flop=flipped_text)
+                        x.put(x_loc + pad_w * (0.6 + 0.5 * flipped_text), j * pitch[1], flop=flipped_text)
             nd.put_stub()
         return bond_pad_array
 
@@ -435,7 +436,7 @@ class NazcaLayout:
         return gratings
 
     def tap_line(self, n_taps: int, radius: float = 5, inter_tap_gap: float = 60,
-                 inter_wg_dist: float = 350, name: str = 'tap_line'):
+                 inter_wg_dist: float = 352, name: str = 'tap_line'):
         with nd.Cell(name=f'{name}_{n_taps}') as tap_line:
             inp = self.waveguide_ic.strt(0).put(0, 0, 90)
             nd.Pin('in').put(inp.pin['a0'])

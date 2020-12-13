@@ -160,7 +160,7 @@ tether_full_comb_ps = pull_apart_full_ps.update(
     anchor=tether_anchor_ps_comb,
     ps=tether_ps,
     clearout_dim=(tether_phaseshift_l + 5, 0.5),
-    gnd_box_h=15
+    gnd_box_h=25
 )
 
 miller_node = NemsMillerNode(

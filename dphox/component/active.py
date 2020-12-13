@@ -698,7 +698,7 @@ class LateralNemsFull(Multilayer):
                 gnd_pads = device.gnd_pads
         if gnd_pads:
             gnd = Pattern(*gnd_pads)
-            gnd_box = Box((gnd.size[0], gnd.size[1] + 2 * gnd_box_h)).hollow(trace_w).align(gnd)
+            gnd_box = Box((gnd.size[0], gnd.size[1] + gnd_box_h)).u(trace_w).align(gnd).valign(gnd)
             metals.append((gnd_box, gnd_metal))
             vias.extend(sum([mid_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
             port['gnd_l'] = Port(gnd_box.bounds[0] + trace_w / 2, gnd_box.bounds[3], np.pi / 2)
