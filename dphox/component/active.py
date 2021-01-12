@@ -706,7 +706,6 @@ class SurfaceMEMs(Multilayer):
         # gather elements of each layer from device and anchor
         # e.g. device.wg and actuator.wg, then cobine and create (wg_pattern,wg_layer)
         wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern = [], [], [], [], []
-        top_actuator = actuator.copy.to(device.port['top_act'])
 
         def _get_patterns(pattern, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern):
             if pattern.wg:
@@ -721,16 +720,21 @@ class SurfaceMEMs(Multilayer):
                 metal_pattern += [(shape.copy, top_metal) for shape in pattern.metal]
 
         _get_patterns(device, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
-        _get_patterns(top_actuator, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
-        if symmetric:
-            bot_actuator = top_actuator.copy.flip(device.center)
-            _get_patterns(bot_actuator, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
-            a2minx, a2miny, a2maxx, a2maxy = bot_actuator.bounds
-            a1minx, a1miny, a1maxx, a1maxy = top_actuator.bounds
-            metal_connection = Box((metal_trace_w, a1miny - a2maxy)).align(Pattern(*device.wg))
-            # metal_connections = [metal_connection.copy.translate(metal_trace_w * ind) for ind in [-3, -1, 1, 3]]
-            metal_connections = [metal_connection.copy.halign(top_actuator), metal_connection.copy.halign(top_actuator, left=False)]
-            metal_pattern += [(shape.copy, top_metal) for shape in metal_connections]
+        if actuator is None:
+            top_actuator = device.copy
+            bot_actuator = device.copy
+        else:
+            top_actuator = actuator.copy.to(device.port['top_act'])
+            _get_patterns(top_actuator, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
+            if symmetric:
+                bot_actuator = top_actuator.copy.flip(device.center)
+                _get_patterns(bot_actuator, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
+                a2minx, a2miny, a2maxx, a2maxy = bot_actuator.bounds
+                a1minx, a1miny, a1maxx, a1maxy = top_actuator.bounds
+                metal_connection = Box((metal_trace_w, a1miny - a2maxy)).align(Pattern(*device.wg))
+                # metal_connections = [metal_connection.copy.translate(metal_trace_w * ind) for ind in [-3, -1, 1, 3]]
+                metal_connections = [metal_connection.copy.halign(top_actuator), metal_connection.copy.halign(top_actuator, left=False)]
+                metal_pattern += [(shape.copy, top_metal) for shape in metal_connections]
 
         minx, miny, maxx, maxy = Pattern(*[device, top_actuator, bot_actuator]).bounds
         box = Box(((maxx - minx), (maxy - miny))).align(Pattern(*[device, top_actuator, bot_actuator]))

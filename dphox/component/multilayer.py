@@ -184,7 +184,7 @@ class Multilayer:
             nd.put_stub()
         return cell
 
-    def meep_geometry(self, layer_to_zrange: Dict[str, Tuple[float, float]], process_extrusion: Dict[str, List[Tuple[str, str, str]]] = None, layer_to_material: Dict = None):
+    def meep_geometry(self, layer_to_zrange: Dict[str, Tuple[float, float]], process_extrusion: Dict[str, List[Tuple[str, str, str]]] = None, layer_to_material: Dict = None, dimensions=3):
         """Turn this multilayer into a  dictionary of meep geometry objects
         Args:
 
@@ -192,17 +192,31 @@ class Multilayer:
             A dictionary mapping layers to lists of meep geomtery objects
         """
 
+        # Need a way to rotate the coordinates for meep dimensionality, 1D -> Z, 2D -> XY, 3D, XYZ
+        if dimensions == 1:
+            # TODO: Make sense of this case and for a PIC and then implement
+            raise ValueError('Not implemented. Run a simpler simulation for now')
+        elif dimensions == 2:
+            axis_extrusion = mp.Vector3(0, 1, 0)
+
+            def meep_coord(x, y):
+                return mp.Vector3(x, 0, y)
+        else:
+            axis_extrusion = mp.Vector3(0, 0, 1)
+
+            def meep_coord(x, y):
+                return mp.Vector3(x, y, 0)
+
         def _pattern_to_prisms(pattern, material, zrange):
             zmin, zmax = zrange
             meep_geom_list = []
             for poly in pattern:
-                prism_pts = [mp.Vector3(x, y, 0) for x, y in np.asarray(poly.exterior.coords.xy).T[1:, :]]  # normally is returned as a row of xs and ten a row of ys
-                # meep_geom_list.append(mp.Prism(prism_pts, height=(zmax - zmin), axis=mp.Vector3(0, 0, 1), material=material).shift(mp.Vector3(0, 0, zmin)))
-                meep_geom_list.append(mp.Prism(prism_pts, height=(zmax - zmin), axis=mp.Vector3(0, 0, 1), material=material).shift(mp.Vector3(0, 0, zmin)))
+                prism_pts = [meep_coord(x, y) for x, y in np.asarray(poly.exterior.coords.xy).T[1:, :]]  # normally is returned as a row of xs and ten a row of ys
+                meep_geom_list.append(mp.Prism(prism_pts, height=(zmax - zmin), axis=axis_extrusion, material=material).shift(zmin * axis_extrusion))
                 if list(poly.interiors):
                     for inter in list(poly.interiors):
-                        prism_interior_pts = [mp.Vector3(x, y, 0) for x, y in np.asarray(inter.coords.xy).T[1:, :]]
-                        meep_geom_list.append(mp.Prism(prism_interior_pts, height=(zmax - zmin), axis=mp.Vector3(0, 0, 1), material=mp.air).shift(mp.Vector3(0, 0, zmin)))
+                        prism_interior_pts = [meep_coord(x, y) for x, y in np.asarray(inter.coords.xy).T[1:, :]]
+                        meep_geom_list.append(mp.Prism(prism_interior_pts, height=(zmax - zmin), axis=axis_extrusion, material=mp.air).shift(zmin * axis_extrusion))
                 # skip the first pt, meep doesn't like repeated pts like shapely
             return meep_geom_list
 
