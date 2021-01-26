@@ -625,6 +625,89 @@ class SimpleComb(Pattern):
         return Box(size).align(bounding_pattern)
 
 
+class VerticalPS3(Pattern):
+    def __init__(self, waveguide_w, gap, ps_w, total_length, width, taper_l, oxide_opening_w=None, sacrifical_overlay=5):
+        self.waveguide_w = waveguide_w
+        self.gap = gap
+        self.ps_w = ps_w
+        self.total_length = total_length
+
+        # wg = Waveguide(waveguide_w=waveguide_w, length=total_length).translate()
+        wg = Waveguide(waveguide_w=waveguide_w, length=total_length)
+        # wg = Waveguide(waveguide_w=waveguide_w, length=total_length).align(cladding_open)
+
+        if oxide_opening_w == None:
+            oxide_opening_w = (2 * gap + ps_w)
+        cut_width = 0.1
+        cladding_open = Waveguide(waveguide_w=cut_width, length=total_length, taper_ls=(taper_l,), taper_params=((0, oxide_opening_w - cut_width),)).align(wg)
+
+        sacrifical_area = Box((total_length + sacrifical_overlay, width + sacrifical_overlay)).align(wg)
+        mechanical_block = Box((total_length, width)).align(wg)
+        # mechanical_block = Box((total_length, width)).striped(stripe_w=1.5 * waveguide_w).align(wg)
+
+        super(VerticalPS3, self).__init__(*[wg, cladding_open, sacrifical_area, mechanical_block], call_union=False)
+        self.wg = [wg]
+        self.cladding = [cladding_open]
+        self.sacrifical = [sacrifical_area]
+        self.mechanical = [mechanical_block]
+        self.metal = []
+
+        self.reference_patterns = self.wg + self.cladding + self.sacrifical + self.mechanical + self.metal
+        self.port['a0'] = Port(0, 0, -np.pi)
+        self.port['b0'] = Port(total_length, 0)
+        dx, dy = mechanical_block.center
+
+        self.port['top_act'] = Port(dx, dy + mechanical_block.size[1] / 2, 0)
+        self.port['bot_act'] = Port(dx, dy - mechanical_block.size[1] / 2, -np.pi)
+
+
+class VerticalPS2(Pattern):
+    def __init__(self, waveguide_w, gap, ps_w, total_length, width, taper_l, oxide_opening_w=None, sacrifical_overlay=5):
+        self.waveguide_w = waveguide_w
+        self.gap = gap
+        self.ps_w = ps_w
+        self.total_length = total_length
+
+        # wg = Waveguide(waveguide_w=waveguide_w, length=total_length).translate()
+        wg = Waveguide(waveguide_w=waveguide_w, length=total_length)
+        # wg = Waveguide(waveguide_w=waveguide_w, length=total_length).align(cladding_open)
+
+        if oxide_opening_w == None:
+            oxide_opening_w = (2 * gap + ps_w)
+        cut_width = 4 * waveguide_w
+        # some trig reveals that keeping the cut opening fixed and setting the taper length only allows for a 30/60/90 triangle
+        # Otherwise the cut openingtransition width will vary with taper_l
+        inner_width = cut_width - 2 * (oxide_opening_w / np.sin(np.arctan(2 * taper_l / (cut_width - oxide_opening_w))))
+        inner_length = (2 * taper_l / (cut_width - oxide_opening_w)) * (inner_width / 2)
+        print(inner_length)
+        # inner_length = taper_l
+        # outer_cut = Waveguide(waveguide_w=cut_width, length=total_length).align(wg)
+        outer_cut = Waveguide(waveguide_w=cut_width, length=total_length, taper_ls=(taper_l,), taper_params=((0, oxide_opening_w - cut_width),)).align(wg)
+        inner_cut = Waveguide(waveguide_w=(inner_width), length=total_length + .001, taper_ls=(inner_length,), taper_params=((0, -inner_width),)).align(wg)
+        # inner_cut = Waveguide(waveguide_w=(cut_width - oxide_opening_w * 2), length=total_length, taper_ls=(taper_l,), taper_params=((0, 2 * oxide_opening_w - cut_width),)).align(wg)
+        cladding_open = outer_cut.difference(inner_cut)
+        # cladding_open = outer_cut
+
+        sacrifical_area = Box((total_length + sacrifical_overlay, width + sacrifical_overlay)).align(wg)
+        mechanical_block = Box((total_length, width)).align(wg)
+        # mechanical_block = Box((total_length, width)).striped(stripe_w=1.5 * waveguide_w).align(wg)
+
+        super(VerticalPS2, self).__init__(*[wg, cladding_open, sacrifical_area, mechanical_block], call_union=False)
+        self.wg = [wg]
+        self.cladding = [cladding_open]
+        self.sacrifical = [sacrifical_area]
+        self.mechanical = [mechanical_block]
+        self.metal = []
+
+        self.reference_patterns = self.wg + self.cladding + self.sacrifical + self.mechanical + self.metal
+        self.port['a0'] = Port(0, 0, -np.pi)
+        self.port['b0'] = Port(total_length, 0)
+        dx, dy = mechanical_block.center
+
+        self.port['top_act'] = Port(dx, dy + mechanical_block.size[1] / 2, 0)
+        self.port['bot_act'] = Port(dx, dy - mechanical_block.size[1] / 2, -np.pi)
+
+
 class VerticalPS(Pattern):
     def __init__(self, waveguide_w, gap, ps_w, total_length, width, interaction_l, oxide_opening_w=None, sacrifical_overlay=5):
         self.waveguide_w = waveguide_w
@@ -640,8 +723,8 @@ class VerticalPS(Pattern):
         else:
             cladding_open = Waveguide(waveguide_w=(2 * gap + ps_w), length=interaction_l).align(wg)
         sacrifical_area = Box((total_length + sacrifical_overlay, width + sacrifical_overlay)).align(wg)
-        # mechanical_block = Box((total_length, width)).align(wg)
-        mechanical_block = Box((total_length, width)).striped(stripe_w=1.5 * waveguide_w).align(wg)
+        mechanical_block = Box((total_length, width)).align(wg)
+        # mechanical_block = Box((total_length, width)).striped(stripe_w=1.5 * waveguide_w).align(wg)
 
         super(VerticalPS, self).__init__(*[wg, cladding_open, sacrifical_area, mechanical_block], call_union=False)
         self.wg = [wg]
@@ -662,7 +745,8 @@ class VerticalPS(Pattern):
 class Microbridge(Pattern):
     def __init__(self, width, length, underetch_dim, anchor_dim, sacrifical_overlay=5):
 
-        beam = Box((length, width)).striped(stripe_w=underetch_dim[2], pitch=underetch_dim[:2]).translate()
+        # beam = Box((length, width)).striped(stripe_w=underetch_dim[2], pitch=underetch_dim[:2]).translate()
+        beam = Box((length, width))
         # sacrifical_box = Box((length + sacrifical_overlay, width + sacrifical_overlay)).translate()
         sacrifical_box = Box((length + sacrifical_overlay, width + sacrifical_overlay)).align(beam).valign(beam)
         # beam = beam.translate(dx=-beam.center[0], dy=-beam.bounds[1])
@@ -810,10 +894,10 @@ class LateralNemsFull(Multilayer):
         device_pads = device.pads if device.pads is not None else []
         dopes = [s.expand(dope_expand).dope(shuttle_dope, dope_grow)
                  for s in [top.shuttle, bot.shuttle] if shuttle_dope is not None] + \
-                [s.expand(dope_expand).dope(spring_dope, dope_grow)
-                 for s in top.springs + bot.springs if spring_dope is not None] + \
-                [s.expand(dope_expand).dope(pad_dope, dope_grow)
-                 for s in top.pads + bot.pads + device_pads if pad_dope is not None]
+            [s.expand(dope_expand).dope(spring_dope, dope_grow)
+             for s in top.springs + bot.springs if spring_dope is not None] + \
+            [s.expand(dope_expand).dope(pad_dope, dope_grow)
+             for s in top.pads + bot.pads + device_pads if pad_dope is not None]
         metals = []
         port = {}
         gnd_pads = []
@@ -1002,7 +1086,7 @@ class NemsMillerNode(Multilayer):
                                np.pi / 2)
         ps_comb_drives = [ps_comb_drive.copy.to(ps_connect_port),
                           ps_comb_drive.copy.flip().to(
-                              ps_connect_port).translate(bend_radius * 2 + upper_interaction_l)]
+            ps_connect_port).translate(bend_radius * 2 + upper_interaction_l)]
 
         # TODO(sunil): bad decomposition here... these should be multilayers!
         tdc_comb_drive = Multilayer([(tdc_comb_connector, ridge), (tdc_comb_rib_etch, rib), (tdc_comb, ridge)] +
@@ -1014,7 +1098,7 @@ class NemsMillerNode(Multilayer):
         tdc_connect_port = Port(2 * bend_radius + tdc_spring_dim[0], lower_bend_height, 0)
         tdc_comb_drives = [tdc_comb_drive.copy.to(tdc_connect_port),
                            tdc_comb_drive.copy.flip(horiz=True).to(tdc_connect_port).translate(
-                               lower_interaction_l - tdc_spring_dim[0] * 2)]
+            lower_interaction_l - tdc_spring_dim[0] * 2)]
 
         comb_drive_p2l = sum([cd.pattern_to_layer for cd in ps_comb_drives + tdc_comb_drives], [])
         ps_flexure = Box((ps_comb.pos_pad.size[0] - gnd_wg.length + tdc_connector_dim[0], ps_shuttle_w)).flexure(
