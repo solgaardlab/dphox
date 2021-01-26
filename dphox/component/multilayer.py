@@ -315,6 +315,7 @@ class Multilayer:
                 layer = layer.split('_')[0]
                 if layer in meshes.keys():
                     mesh = trimesh.Trimesh().union([mesh, meshes[layer]], engine=engine)
+                    # mesh = trimesh.boolean.boolean_automatic([mesh, meshes[layer]], "union")
                 mesh.visual.face_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
                 meshes[layer] = mesh
 
@@ -322,8 +323,9 @@ class Multilayer:
             layer_to_extrusion = self.build_layers(layer_to_zrange, process_extrusion)
             for layer, pattern_zrange in layer_to_extrusion.items():
                 pattern, zrange = pattern_zrange
-                _add_trimesh_layer(pattern, zrange, layer)
                 print('adding trimesh layer', layer)
+                _add_trimesh_layer(pattern, zrange, layer)
+                # print('adding trimesh layer', layer)
             return meshes
         else:
             for layer, pattern in self.layer_to_pattern.items():
@@ -453,7 +455,8 @@ class Multilayer:
                     # needs to be adjusted to only deal with added materials
                     for old_elevation in heights:
                         for new_elevation in topo_map_dict.keys():
-                            if float(old_elevation) == float(new_elevation):
+                            if float(old_elevation) >= float(new_elevation):
+                                # print("skipping this height combo", old_elevation, new_elevation)
                                 continue
                             new_zrange = (float(old_elevation), float(new_elevation))
                             # there may be coincedent edges whcih cause intersection problems
@@ -464,7 +467,8 @@ class Multilayer:
                                 pattern_shapely = cascaded_union(pattern.geoms)
                                 pattern_shapely = MultiPolygon([pattern_shapely]) if isinstance(pattern_shapely, Polygon) else pattern_shapely
                                 layer_to_extrusion[new_layer] = (pattern_shapely, new_zrange)
-                            # pass
+                            # else:
+                            #     print(new_layer, "No pattern.geoms")
 
                     # if pattern.geoms:
                     #     pattern_shapely = cascaded_union(pattern.geoms)
