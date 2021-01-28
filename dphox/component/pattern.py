@@ -153,7 +153,7 @@ class Pattern:
 
     @classmethod
     def from_shapely(cls, shapely_pattern: Union[Polygon, GeometryCollection]) -> "Pattern":
-        # TODO: Handle te cases for linestrings or points more elegantly. Booleans may Linestrings
+        # TODO: Handle te cases for linestrings or points more elegantly. Booleans may return Linestrings
         if isinstance(shapely_pattern, LineString):
             return(cls(MultiPolygon([])))
         # print(shapely_pattern)
