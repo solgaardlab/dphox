@@ -164,7 +164,7 @@ class LateralNemsPS(Pattern):
 
         super(LateralNemsPS, self).__init__(*patterns, call_union=False)
         self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads, self.pads = wg, nanofins, rib_etch, gnd_pads, \
-                                                                                 gnd_pads + gnd_connections
+            gnd_pads + gnd_connections
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)
         self.port['a0'] = Port(0, 0, -np.pi)
@@ -593,8 +593,8 @@ class SimpleComb(Pattern):
         pos_comb = Pattern(*lower_teeth)
         edges = [fat_tooth.copy.align(shuttle_comb).halign(shuttle_comb, left=False, opposite=True).translate(
             tooth_param[0]),
-                 fat_tooth.copy.align(shuttle_comb).halign(shuttle_comb, left=True, opposite=True).translate(
-                     -tooth_param[0])]
+            fat_tooth.copy.align(shuttle_comb).halign(shuttle_comb, left=True, opposite=True).translate(
+            -tooth_param[0])]
         shuttle_comb = Pattern(shuttle_comb, *edges)
         pos_comb.align(shuttle_comb).translate(0, -overlap + tooth_param[1])
         comb = Pattern(shuttle_comb, pos_comb)
@@ -727,19 +727,19 @@ class VerticalPS(Pattern):
         # mechanical_block = Box((total_length, width)).striped(stripe_w=1.5 * waveguide_w).align(wg)
 
         super(VerticalPS, self).__init__(*[wg, cladding_open, sacrifical_area, mechanical_block], call_union=False)
-        self.wg = [wg]
-        self.cladding = [cladding_open]
-        self.sacrifical = [sacrifical_area]
-        self.mechanical = [mechanical_block]
-        self.metal = []
+        self.wg = wg
+        self.cladding = cladding_open
+        self.sacrifical = sacrifical_area
+        self.mechanical = mechanical_block
+        self.metal = False
 
-        self.reference_patterns = self.wg + self.cladding + self.sacrifical + self.mechanical + self.metal
+        self.reference_patterns = [self.wg, self.cladding, self.sacrifical, self.mechanical, self.metal]
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['b0'] = Port(total_length, 0)
         dx, dy = mechanical_block.center
 
-        self.port['top_act'] = Port(dx, dy + mechanical_block.size[1] / 2, 0)
-        self.port['bot_act'] = Port(dx, dy - mechanical_block.size[1] / 2, -np.pi)
+        self.port['top_act'] = Port(dx, dy + mechanical_block.size[1] / 2, -np.pi)
+        self.port['bot_act'] = Port(dx, dy - mechanical_block.size[1] / 2, 0)
 
 
 class Microbridge(Pattern):
@@ -760,18 +760,18 @@ class Microbridge(Pattern):
         # nit2 = [pattern.shapely for pattern in ps_anchor_overlays + [ps_lip, ps_microbridge]]
         # nit22 = [pattern.shapely for pattern in ps_anchor_overlays2 + [ps_lip, ps_microbridge, ps_microbridge2]]
 
-        wg = []
-        sacrificial = [sacrifical_box]
-        mechancial = [beam] + anchors
-        metal = [metal_shape.copy for metal_shape in mechancial]
+        # wg = []
+        sacrificial = Pattern(*[sacrifical_box])
+        mechancial = Pattern(*[beam] + anchors)
+        metal = Pattern(*[metal_shape for metal_shape in mechancial.polys])
         # metal = []
-        super(Microbridge, self).__init__(*(wg + sacrificial + mechancial + metal), call_union=False)
-        self.wg = wg
-        self.cladding = []
+        super(Microbridge, self).__init__(*[sacrificial, mechancial, metal], call_union=False)
+        self.wg = False
+        self.cladding = False
         self.sacrifical = sacrificial
         self.mechanical = mechancial
         self.metal = metal
-        self.reference_patterns = self.wg + self.cladding + self.sacrifical + self.mechanical + self.metal
+        self.reference_patterns = [pattern for pattern in [self.wg, self.cladding, self.sacrifical, self.mechanical, self.metal] if pattern]
         # self.port['a0'] = Port(0, 0, -np.pi)
         self.translate(dx=-self.center[0], dy=self.bounds[1])
 
@@ -793,15 +793,15 @@ class SurfaceMEMs(Multilayer):
 
         def _get_patterns(pattern, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern):
             if pattern.wg:
-                wg_pattern += [(shape.copy, wg_layer) for shape in pattern.wg]
+                wg_pattern += [(Pattern(shape), wg_layer) for shape in pattern.wg.polys]
             if pattern.cladding:
-                cladding_pattern += [(shape.copy, cladding_layer) for shape in pattern.cladding]
+                cladding_pattern += [(Pattern(shape), cladding_layer) for shape in pattern.cladding.polys]
             if pattern.sacrifical:
-                sacrificial_pattern += [(shape.copy, sacrificial_layer) for shape in pattern.sacrifical]
+                sacrificial_pattern += [(Pattern(shape), sacrificial_layer) for shape in pattern.sacrifical.polys]
             if pattern.mechanical:
-                mechanical_pattern += [(shape.copy, mechanical_layer) for shape in pattern.mechanical]
+                mechanical_pattern += [(Pattern(shape), mechanical_layer) for shape in pattern.mechanical.polys]
             if pattern.metal:
-                metal_pattern += [(shape.copy, top_metal) for shape in pattern.metal]
+                metal_pattern += [(Pattern(shape), top_metal) for shape in pattern.metal.polys]
 
         _get_patterns(device, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
         if actuator is None:
@@ -809,16 +809,22 @@ class SurfaceMEMs(Multilayer):
             bot_actuator = device.copy
         else:
             top_actuator = actuator.copy.to(device.port['top_act'])
+            # top_actuator = actuator.copy.translate(0, 0)
             _get_patterns(top_actuator, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
+            # symmetric = False
             if symmetric:
                 bot_actuator = top_actuator.copy.flip(device.center)
                 _get_patterns(bot_actuator, wg_pattern, cladding_pattern, sacrificial_pattern, mechanical_pattern, metal_pattern)
-                a2minx, a2miny, a2maxx, a2maxy = bot_actuator.bounds
-                a1minx, a1miny, a1maxx, a1maxy = top_actuator.bounds
-                metal_connection = Box((metal_trace_w, a1miny - a2maxy)).align(Pattern(*device.wg))
+                a2minx, a2miny, a2maxx, a2maxy = bot_actuator.metal.bounds
+                a1minx, a1miny, a1maxx, a1maxy = top_actuator.metal.bounds
+                metal_connection = Box((metal_trace_w, a1miny - a2maxy)).align(device.wg)
                 # metal_connections = [metal_connection.copy.translate(metal_trace_w * ind) for ind in [-3, -1, 1, 3]]
                 metal_connections = [metal_connection.copy.halign(top_actuator), metal_connection.copy.halign(top_actuator, left=False)]
                 metal_pattern += [(shape.copy, top_metal) for shape in metal_connections]
+            else:
+                bot_actuator = top_actuator.copy
+            # print(bot_actuator.metal.bounds)
+            # print(top_actuator.metal.bounds)
 
         minx, miny, maxx, maxy = Pattern(*[device, top_actuator, bot_actuator]).bounds
         box = Box(((maxx - minx), (maxy - miny))).align(Pattern(*[device, top_actuator, bot_actuator]))
@@ -926,7 +932,7 @@ class LateralNemsFull(Multilayer):
             vias.extend(sum([mid_via.copy.align(pad).pattern_to_layer for pad in pos_pads], []))
             vias.extend(sum([top_via.copy.align(pad).translate(
                 dy=(-2 * i + 1) * (top_via.size[1] / 2 - trace_w / 2)).pattern_to_layer
-                             for i, pad in enumerate(pos_pads)], []))
+                for i, pad in enumerate(pos_pads)], []))
             port['pos_l'] = Port(pos_box.bounds[0], pos_box.center[1], -np.pi)
             port['pos_b'] = Port(pos_box.center[0], pos_box.bounds[1], -np.pi / 2)
             port['pos_r'] = Port(pos_box.bounds[2], pos_box.center[1], 0)

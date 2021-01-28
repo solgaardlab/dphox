@@ -279,45 +279,30 @@ class Multilayer:
             print('WARNING: oxide not included, so adding to multilayer')
             self.pattern_to_layer.append((Box(self.size).align(self.center), 'oxide'))
             self.layer_to_pattern, self.port = self._init_multilayer()
-        meshes = {}
+        meshes = {}  # The initialization for the dictionary of all trimesh meshes
 
         # TODO(sunil): start using logging rather than printing
         def _add_trimesh_layer(pattern, zrange, layer):
-            if layer_to_color is not None:  # TODO(Nate): remove repeated code
-                if layer in layer_to_color:
-                    zmin, zmax = zrange
-                    layer_meshes = []
-                    for poly in pattern:
-                        try:
-                            layer_meshes.append(
-                                trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
-                            )
-                        except IndexError:
-                            print('WARNING: bad polygon, skipping')
-                            print(poly)
-                    mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
-                    mesh.visual.face_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
-                    meshes[layer] = mesh
-                else:
-                    print(f'WARNING: layer {layer} does not have a color, skipping...')
-            else:
-                zmin, zmax = zrange
-                layer_meshes = []
-                for poly in pattern:
-                    try:
-                        layer_meshes.append(
-                            trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
-                        )
-                    except IndexError:
-                        print('WARNING: bad polygon, skipping')
-                        print(poly)
-                mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
-                layer = layer.split('_')[0]
-                if layer in meshes.keys():
-                    mesh = trimesh.Trimesh().union([mesh, meshes[layer]], engine=engine)
-                    # mesh = trimesh.boolean.boolean_automatic([mesh, meshes[layer]], "union")
-                mesh.visual.face_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
-                meshes[layer] = mesh
+            zmin, zmax = zrange
+            layer = layer.split('_')[0]
+            layer_meshes = []
+            for poly in pattern:
+                try:
+                    print(layer, poly)
+                    extruded = trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
+                    layer_meshes.append(extruded)
+                    # layer_meshes.append(
+                    #     trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
+                    # )
+                except IndexError:
+                    print('WARNING: bad polygon, skipping')
+                    print(poly)
+            layer_meshes = layer_meshes + [meshes[layer]] if layer in meshes.keys() else layer_meshes
+            # print(layer, layer_meshes)
+            mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
+            mesh.visual.face_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
+            meshes[layer] = mesh
+            print(layer, layer_meshes, mesh)
 
         if process_extrusion is not None:
             layer_to_extrusion = self.build_layers(layer_to_zrange, process_extrusion)
