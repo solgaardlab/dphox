@@ -288,21 +288,14 @@ class Multilayer:
             layer_meshes = []
             for poly in pattern:
                 try:
-                    print(layer, poly)
-                    extruded = trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
-                    layer_meshes.append(extruded)
-                    # layer_meshes.append(
-                    #     trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin))
-                    # )
+                    layer_meshes.append(trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin)))
                 except IndexError:
                     print('WARNING: bad polygon, skipping')
-                    print(poly)
             layer_meshes = layer_meshes + [meshes[layer]] if layer in meshes.keys() else layer_meshes
             # print(layer, layer_meshes)
             mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
             mesh.visual.face_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
             meshes[layer] = mesh
-            print(layer, layer_meshes, mesh)
 
         if process_extrusion is not None:
             layer_to_extrusion = self.build_layers(layer_to_zrange, process_extrusion)
@@ -325,7 +318,7 @@ class Multilayer:
                 layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad',
                 layers: Optional[List[str]] = None,
                 include_oxide: bool = True,
-                all_layers: bool = False):  # addded this boolean to handle conformal maaping where we don't know the layer names immediately
+                all_layers: bool = False):  # TODO: make a change here in the logic and simplify the parameters addded this boolean to handle conformal maaping where we don't know the layer names immediately
         meshes = self.to_trimesh_dict(layer_to_zrange, process_extrusion, layer_to_color, engine, include_oxide)
         for layer, mesh in meshes.items():
             if all_layers:
@@ -354,8 +347,8 @@ class Multilayer:
     def build_layers(self, layer_to_zrange: Dict[str, Tuple[float, float]],
                      process_extrusion: Dict[str, List[Tuple[str, str, str]]]):
         layer_to_extrusion = {}
-        layers = self.layer_to_pattern.keys()
         layer_to_pattern_processed = self.layer_to_pattern.copy()
+        layers = layer_to_pattern_processed.keys()
 
         # TODO(Nate):Add Conformal deposition logic
         def _um_str(microns: float):
@@ -365,23 +358,27 @@ class Multilayer:
         starting_slate = Pattern(gy.Polygon(
             [(minx, miny), (minx, maxy),
              (maxx, maxy), (maxx, miny)]))
-        topo_map_dict = {_um_str(0.0): starting_slate}  # zero is the starting height
+        topo_map_dict = {_um_str(0): starting_slate}  # zero is the starting height
 
         # TODO: sort out the Pattern instance creations, so they aren't necessary
 
         for step, operations in process_extrusion.items():
             for layer_relation in operations:
                 layer, other_layer, operation = layer_relation
+                try:
+                    new_zrange = layer_to_zrange[layer]
+                except KeyError:
+                    print(f"No zranges given for the layer {layer}")
+
                 if 'dope' in step and operation == 'intersection':
                     # make a new layer for each doping intersection
                     zmin, zmax = layer_to_zrange[other_layer]
-                    z0, z1 = layer_to_zrange[layer]
                     # TODO(): how to deal with different depth doping currently not addressed
-                    new_zrange = (max(zmax - (z1 - z0), zmin), zmax)
-                else:
-                    new_zrange = layer_to_zrange[layer]
+                    new_zrange = (max(zmax - (new_zrange[1] - new_zrange[0]), zmin), zmax)
                 if layer in layers:
                     if other_layer in layers:
+                        # TODO(Nate): Unnecessary instances. The string boolean operation forces this Pattern(Multipolygon).boolean_opertaion(Pattern(Multipolygon)).shapely
+                        # It is clear that the Pattern() is only providing a lookup dictionary  but the actual input/output/operation is with Multipolygons
                         pattern = Pattern(layer_to_pattern_processed[layer]).boolean_operation(
                             Pattern(layer_to_pattern_processed[other_layer]), operation
                         ).shapely
@@ -391,50 +388,46 @@ class Multilayer:
                     # insert conformal stuff here
 
                     # building the topographic map
-                    zmin, zmax = new_zrange
-                    thickness = zmax - zmin
+                    thickness = new_zrange[1] - new_zrange[0]
                     heights = list(topo_map_dict.keys())
                     old_topo_map_dict = topo_map_dict.copy()
                     sorted_heights = list(map(float, heights))
                     sorted_heights.sort(reverse=True)
+
+                    # WORKS, now I need to add dialation and fit this into the extrusion flow
+                    # I think the strategy is dialate everything, then difference by height when tallest is unobstructed and then apply raisig pattern
+                    # use buffer for dialtion and use default rounding
+                    # with the new topo, compare/intersect with the old topo and make the zranges for all height combinations
                     if 'conformal' in step:
                         if 'etch' in step:
-                            raising_pattern = starting_slate.boolean_operation(Pattern(pattern), 'difference')
+                            raising_pattern = starting_slate.difference(Pattern(pattern))
                         else:
                             raising_pattern = Pattern(pattern)
                         for count, infr_h in enumerate(sorted_heights):
                             for supr_h in sorted_heights:
                                 if count == 0:
                                     # dilation, should only occur in not etched regions, need to filter with raisd_pattern and union
-                                    dialated_pattern = topo_map_dict[_um_str(supr_h)].offset(grow_d=thickness).boolean_operation(raising_pattern, 'intersection')
-                                    topo_map_dict[_um_str(supr_h)] = dialated_pattern.boolean_operation(topo_map_dict[_um_str(supr_h)], 'union')
-                                    # topo_map_dict[_um_str(supr_h)] = dialated_pattern
-                                else:
-                                    if supr_h > infr_h:
-                                        #  and moving boudaries
-                                        topo_map_dict[_um_str(infr_h)] = Pattern(topo_map_dict[_um_str(infr_h)]).boolean_operation(
-                                            Pattern(topo_map_dict[_um_str(supr_h)]), 'difference')
-                                        # topo_map_dict[_um_str(infr_h)] = Pattern(topo_map_dict[_um_str(supr_h)]).boolean_operation(
-                                        #     Pattern(topo_map_dict[_um_str(infr_h)]), 'difference')
-                                    else:
-                                        continue
-                            topo_map_dict[_um_str(infr_h)] = starting_slate.boolean_operation(topo_map_dict[_um_str(infr_h)], 'intersection')
+                                    dialated_pattern = topo_map_dict[_um_str(supr_h)].offset(grow_d=thickness).intersection(raising_pattern)
+                                    topo_map_dict[_um_str(supr_h)] = dialated_pattern.union(topo_map_dict[_um_str(supr_h)])
+                                elif supr_h > infr_h:  # only looking at the necessary upper triangle of the matrix of layers
+                                    #  moving boudaries based for shape dialation and hole shrinkage
+                                    topo_map_dict[_um_str(infr_h)] = Pattern(topo_map_dict[_um_str(infr_h)]).difference(
+                                        Pattern(topo_map_dict[_um_str(supr_h)]))
+                            topo_map_dict[_um_str(infr_h)] = starting_slate.intersection(topo_map_dict[_um_str(infr_h)])
                     else:
                         raising_pattern = pattern
-                    # move these actions into the sorted list? actually no because dialation should be finished first
+                    # Updating the topographic map with dialated structures. Move these actions into the sorted list? actually no because dialation should be finished first
                     for elevation in sorted_heights:
                         # material added
                         elevation = _um_str(elevation)
-                        raised = Pattern(raising_pattern).boolean_operation(
-                            Pattern(topo_map_dict[elevation]), 'intersection'
-                        ).shapely
+                        raised = Pattern(raising_pattern).intersection(
+                            Pattern(topo_map_dict[elevation])).shapely
                         # new matrial fully etched
-                        not_raised = Pattern(topo_map_dict[elevation]).boolean_operation(
-                            (Pattern(raised)), 'difference'
-                        ).shapely
+                        not_raised = Pattern(topo_map_dict[elevation]).difference(
+                            (Pattern(raised))).shapely
 
                         topo_map_dict[_um_str(elevation)] = Pattern(*not_raised)
-                        topo_map_dict[_um_str(float(elevation) + (zmax - zmin))] = Pattern(*raised)
+                        topo_map_dict[_um_str(float(elevation) + (thickness))] = Pattern(*raised)
 
                     # use the current topographic map and the previous topographic map to make extrusions
                     # needs to be adjusted to only deal with added materials
@@ -443,33 +436,20 @@ class Multilayer:
                             if float(old_elevation) >= float(new_elevation):
                                 # print("skipping this height combo", old_elevation, new_elevation)
                                 continue
-                            new_zrange = (float(old_elevation), float(new_elevation))
-                            # there may be coincedent edges whcih cause intersection problems
-                            pattern = Pattern(topo_map_dict[new_elevation]).boolean_operation(Pattern(old_topo_map_dict[old_elevation]), 'intersection').shapely
-
+                            extrusion_zrange = (float(old_elevation), float(new_elevation))
+                            # TODO: there may be coincedent edges which have caused intersection problems in the past
+                            extrusion_pattern = Pattern(topo_map_dict[new_elevation]).intersection(Pattern(old_topo_map_dict[old_elevation])).shapely
                             new_layer = layer + '_' + f'{np.around(float(old_elevation),3)*1000:.0f}' + '_' + f'{np.around(float(new_elevation),3)*1000:.0f}'
-                            if pattern.geoms:
+                            if extrusion_pattern.geoms:
                                 pattern_shapely = cascaded_union(pattern.geoms)
                                 pattern_shapely = MultiPolygon([pattern_shapely]) if isinstance(pattern_shapely, Polygon) else pattern_shapely
-                                layer_to_extrusion[new_layer] = (pattern_shapely, new_zrange)
-                            # else:
-                            #     print(new_layer, "No pattern.geoms")
-
-                    # if pattern.geoms:
-                    #     pattern_shapely = cascaded_union(pattern.geoms)
-                    #     pattern_shapely = MultiPolygon([pattern_shapely]) if isinstance(pattern_shapely, Polygon) else pattern_shapely
-                    #     layer_to_pattern_processed[layer] = pattern
-                    #     layer_to_extrusion[layer] = (pattern_shapely, new_zrange)
+                                layer_to_extrusion[new_layer] = (pattern_shapely, extrusion_zrange)
+        # saving the topographic map for debugging between this logic and the real extrusions, can be removed later
         topo_list = []
-        # for layer, pattern in old_topo_map_dict.items():
         for layer, pattern in topo_map_dict.items():
             topo_list.append((pattern, layer))
-
-        # WORKS, now I need to add dialation and fit this into the extrusion flow
-        # I think the strategy is dialate everything, then difference by height when tallest is unobstructed and then apply raisig pattern
-        # use buffer for dialtion and use default rounding
-        # with the new topo, compare/intersect with the old topo and make the zranges for all height combinations
         self.topo = Multilayer(topo_list)
+
         return layer_to_extrusion
 
     def fill_material(self, layer_name: str, growth: float, centered_layer: str = None):
