@@ -23,7 +23,6 @@ try:
     MEEP_IMPORTED = True
 except ImportError:
     MEEP_IMPORTED = False
-    pass
 
 
 class LateralNemsPS(Pattern):
@@ -626,6 +625,7 @@ class SimpleComb(Pattern):
 
 
 class VerticalPS(Pattern):
+    # TODO(Nate): General feedabck from sunil. include type hints and documentation for this class (and all the others you introduced). Use the same format (Google documentation).
     def __init__(self, waveguide_w, gap, ps_w, total_length, width, interaction_l, oxide_opening_w=None, sacrifical_overlay=5):
         self.waveguide_w = waveguide_w
         self.gap = gap
@@ -643,7 +643,7 @@ class VerticalPS(Pattern):
         mechanical_block = Box((total_length, width)).align(wg)
         # mechanical_block = Box((total_length, width)).striped(stripe_w=1.5 * waveguide_w).align(wg)
 
-        # TODO(Nate): Crate toggle for these different approaches until it's finally ready
+        # TODO(Nate): Create toggle for these different approaches until it's finally ready
 
         # V2, fork enntrance
 
@@ -721,6 +721,7 @@ class Microbridge(Pattern):
 
 
 class SurfaceMEMs(Multilayer):
+    # TODO(Nate): General feedabck from sunil. include type hints and documentation for this class (and all the others you introduced). Use the same format (Google documentation).
     def __init__(self, device: Union[VerticalPS], actuator: Microbridge,
                  #  gnd_via: Via, pos_via: Via, trace_w: float,
                  #  pos_box_w: float, gnd_box_h: float, clearout_dim: Dim2, dope_grow: float, dope_expand: float,
