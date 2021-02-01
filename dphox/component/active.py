@@ -625,89 +625,6 @@ class SimpleComb(Pattern):
         return Box(size).align(bounding_pattern)
 
 
-class VerticalPS3(Pattern):
-    def __init__(self, waveguide_w, gap, ps_w, total_length, width, taper_l, oxide_opening_w=None, sacrifical_overlay=5):
-        self.waveguide_w = waveguide_w
-        self.gap = gap
-        self.ps_w = ps_w
-        self.total_length = total_length
-
-        # wg = Waveguide(waveguide_w=waveguide_w, length=total_length).translate()
-        wg = Waveguide(waveguide_w=waveguide_w, length=total_length)
-        # wg = Waveguide(waveguide_w=waveguide_w, length=total_length).align(cladding_open)
-
-        if oxide_opening_w == None:
-            oxide_opening_w = (2 * gap + ps_w)
-        cut_width = 0.1
-        cladding_open = Waveguide(waveguide_w=cut_width, length=total_length, taper_ls=(taper_l,), taper_params=((0, oxide_opening_w - cut_width),)).align(wg)
-
-        sacrifical_area = Box((total_length + sacrifical_overlay, width + sacrifical_overlay)).align(wg)
-        mechanical_block = Box((total_length, width)).align(wg)
-        # mechanical_block = Box((total_length, width)).striped(stripe_w=1.5 * waveguide_w).align(wg)
-
-        super(VerticalPS3, self).__init__(*[wg, cladding_open, sacrifical_area, mechanical_block], call_union=False)
-        self.wg = [wg]
-        self.cladding = [cladding_open]
-        self.sacrifical = [sacrifical_area]
-        self.mechanical = [mechanical_block]
-        self.metal = []
-
-        self.reference_patterns = self.wg + self.cladding + self.sacrifical + self.mechanical + self.metal
-        self.port['a0'] = Port(0, 0, -np.pi)
-        self.port['b0'] = Port(total_length, 0)
-        dx, dy = mechanical_block.center
-
-        self.port['top_act'] = Port(dx, dy + mechanical_block.size[1] / 2, 0)
-        self.port['bot_act'] = Port(dx, dy - mechanical_block.size[1] / 2, -np.pi)
-
-
-class VerticalPS2(Pattern):
-    def __init__(self, waveguide_w, gap, ps_w, total_length, width, taper_l, oxide_opening_w=None, sacrifical_overlay=5):
-        self.waveguide_w = waveguide_w
-        self.gap = gap
-        self.ps_w = ps_w
-        self.total_length = total_length
-
-        # wg = Waveguide(waveguide_w=waveguide_w, length=total_length).translate()
-        wg = Waveguide(waveguide_w=waveguide_w, length=total_length)
-        # wg = Waveguide(waveguide_w=waveguide_w, length=total_length).align(cladding_open)
-
-        if oxide_opening_w == None:
-            oxide_opening_w = (2 * gap + ps_w)
-        cut_width = 4 * waveguide_w
-        # some trig reveals that keeping the cut opening fixed and setting the taper length only allows for a 30/60/90 triangle
-        # Otherwise the cut openingtransition width will vary with taper_l
-        inner_width = cut_width - 2 * (oxide_opening_w / np.sin(np.arctan(2 * taper_l / (cut_width - oxide_opening_w))))
-        inner_length = (2 * taper_l / (cut_width - oxide_opening_w)) * (inner_width / 2)
-        print(inner_length)
-        # inner_length = taper_l
-        # outer_cut = Waveguide(waveguide_w=cut_width, length=total_length).align(wg)
-        outer_cut = Waveguide(waveguide_w=cut_width, length=total_length, taper_ls=(taper_l,), taper_params=((0, oxide_opening_w - cut_width),)).align(wg)
-        inner_cut = Waveguide(waveguide_w=(inner_width), length=total_length + .001, taper_ls=(inner_length,), taper_params=((0, -inner_width),)).align(wg)
-        # inner_cut = Waveguide(waveguide_w=(cut_width - oxide_opening_w * 2), length=total_length, taper_ls=(taper_l,), taper_params=((0, 2 * oxide_opening_w - cut_width),)).align(wg)
-        cladding_open = outer_cut.difference(inner_cut)
-        # cladding_open = outer_cut
-
-        sacrifical_area = Box((total_length + sacrifical_overlay, width + sacrifical_overlay)).align(wg)
-        mechanical_block = Box((total_length, width)).align(wg)
-        # mechanical_block = Box((total_length, width)).striped(stripe_w=1.5 * waveguide_w).align(wg)
-
-        super(VerticalPS2, self).__init__(*[wg, cladding_open, sacrifical_area, mechanical_block], call_union=False)
-        self.wg = [wg]
-        self.cladding = [cladding_open]
-        self.sacrifical = [sacrifical_area]
-        self.mechanical = [mechanical_block]
-        self.metal = []
-
-        self.reference_patterns = self.wg + self.cladding + self.sacrifical + self.mechanical + self.metal
-        self.port['a0'] = Port(0, 0, -np.pi)
-        self.port['b0'] = Port(total_length, 0)
-        dx, dy = mechanical_block.center
-
-        self.port['top_act'] = Port(dx, dy + mechanical_block.size[1] / 2, 0)
-        self.port['bot_act'] = Port(dx, dy - mechanical_block.size[1] / 2, -np.pi)
-
-
 class VerticalPS(Pattern):
     def __init__(self, waveguide_w, gap, ps_w, total_length, width, interaction_l, oxide_opening_w=None, sacrifical_overlay=5):
         self.waveguide_w = waveguide_w
@@ -725,6 +642,33 @@ class VerticalPS(Pattern):
         sacrifical_area = Box((total_length + sacrifical_overlay, width + sacrifical_overlay)).align(wg)
         mechanical_block = Box((total_length, width)).align(wg)
         # mechanical_block = Box((total_length, width)).striped(stripe_w=1.5 * waveguide_w).align(wg)
+
+        # TODO(Nate): Crate toggle for these different approaches until it's finally ready
+
+        # V2, fork enntrance
+
+        # if oxide_opening_w == None:
+        #     oxide_opening_w = (2 * gap + ps_w)
+        # cut_width = 4 * waveguide_w
+        # # some trig reveals that keeping the cut opening fixed and setting the taper length only allows for a 30/60/90 triangle
+        # # Otherwise the cut openingtransition width will vary with taper_l
+        # inner_width = cut_width - 2 * (oxide_opening_w / np.sin(np.arctan(2 * taper_l / (cut_width - oxide_opening_w))))
+        # inner_length = (2 * taper_l / (cut_width - oxide_opening_w)) * (inner_width / 2)
+        # print(inner_length)
+        # # inner_length = taper_l
+        # # outer_cut = Waveguide(waveguide_w=cut_width, length=total_length).align(wg)
+        # outer_cut = Waveguide(waveguide_w=cut_width, length=total_length, taper_ls=(taper_l,), taper_params=((0, oxide_opening_w - cut_width),)).align(wg)
+        # inner_cut = Waveguide(waveguide_w=(inner_width), length=total_length + .001, taper_ls=(inner_length,), taper_params=((0, -inner_width),)).align(wg)
+        # # inner_cut = Waveguide(waveguide_w=(cut_width - oxide_opening_w * 2), length=total_length, taper_ls=(taper_l,), taper_params=((0, 2 * oxide_opening_w - cut_width),)).align(wg)
+        # cladding_open = outer_cut.difference(inner_cut)
+        # # cladding_open = outer_cut
+
+        # V3, taper from nothing
+
+        # if oxide_opening_w == None:
+        #     oxide_opening_w = (2 * gap + ps_w)
+        # cut_width = 0.1
+        # cladding_open = Waveguide(waveguide_w=cut_width, length=total_length, taper_ls=(taper_l,), taper_params=((0, oxide_opening_w - cut_width),)).align(wg)
 
         super(VerticalPS, self).__init__(*[wg, cladding_open, sacrifical_area, mechanical_block], call_union=False)
         self.wg = wg
