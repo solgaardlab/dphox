@@ -292,7 +292,6 @@ class Multilayer:
                 except IndexError:
                     print('WARNING: bad polygon, skipping')
             layer_meshes = layer_meshes + [meshes[layer]] if layer in meshes.keys() else layer_meshes
-            # print(layer, layer_meshes)
             mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
             mesh.visual.face_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
             meshes[layer] = mesh
@@ -301,9 +300,7 @@ class Multilayer:
             layer_to_extrusion = self.build_layers(layer_to_zrange, process_extrusion)
             for layer, pattern_zrange in layer_to_extrusion.items():
                 pattern, zrange = pattern_zrange
-                print('adding trimesh layer', layer)
                 _add_trimesh_layer(pattern, zrange, layer)
-                # print('adding trimesh layer', layer)
             return meshes
         else:
             for layer, pattern in self.layer_to_pattern.items():
@@ -386,7 +383,6 @@ class Multilayer:
                     else:
                         pattern = layer_to_pattern_processed[layer]
                     # insert conformal stuff here
-
                     # building the topographic map
                     thickness = new_zrange[1] - new_zrange[0]
                     heights = list(topo_map_dict.keys())
@@ -395,9 +391,7 @@ class Multilayer:
                     sorted_heights.sort(reverse=True)
 
                     # WORKS, now I need to add dialation and fit this into the extrusion flow
-                    # I think the strategy is dialate everything, then difference by height when tallest is unobstructed and then apply raisig pattern
-                    # use buffer for dialtion and use default rounding
-                    # with the new topo, compare/intersect with the old topo and make the zranges for all height combinations
+                    # The strategy i to dialate everything, then pairwise difference by height so the tallest is unobstructed. Finally, apply raisig pattern
                     if 'conformal' in step:
                         if 'etch' in step:
                             raising_pattern = starting_slate.difference(Pattern(pattern))
@@ -425,7 +419,6 @@ class Multilayer:
                         # new matrial fully etched
                         not_raised = Pattern(topo_map_dict[elevation]).difference(
                             (Pattern(raised))).shapely
-
                         topo_map_dict[_um_str(elevation)] = Pattern(*not_raised)
                         topo_map_dict[_um_str(float(elevation) + (thickness))] = Pattern(*raised)
 
@@ -434,14 +427,14 @@ class Multilayer:
                     for old_elevation in heights:
                         for new_elevation in topo_map_dict.keys():
                             if float(old_elevation) >= float(new_elevation):
-                                # print("skipping this height combo", old_elevation, new_elevation)
                                 continue
                             extrusion_zrange = (float(old_elevation), float(new_elevation))
                             # TODO: there may be coincedent edges which have caused intersection problems in the past
                             extrusion_pattern = Pattern(topo_map_dict[new_elevation]).intersection(Pattern(old_topo_map_dict[old_elevation])).shapely
-                            new_layer = layer + '_' + f'{np.around(float(old_elevation),3)*1000:.0f}' + '_' + f'{np.around(float(new_elevation),3)*1000:.0f}'
+                            # new_layer = layer + '_' + f'{np.around(float(old_elevation),3)*1000:.0f}' + '_' + f'{np.around(float(new_elevation),3)*1000:.0f}'
+                            new_layer = layer + '_' + _um_str(old_elevation) + '_' + _um_str(new_elevation)
                             if extrusion_pattern.geoms:
-                                pattern_shapely = cascaded_union(pattern.geoms)
+                                pattern_shapely = cascaded_union(extrusion_pattern.geoms)
                                 pattern_shapely = MultiPolygon([pattern_shapely]) if isinstance(pattern_shapely, Polygon) else pattern_shapely
                                 layer_to_extrusion[new_layer] = (pattern_shapely, extrusion_zrange)
         # saving the topographic map for debugging between this logic and the real extrusions, can be removed later
