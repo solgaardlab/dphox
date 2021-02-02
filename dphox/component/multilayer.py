@@ -293,7 +293,10 @@ class Multilayer:
                 except IndexError:
                     print('WARNING: bad polygon, skipping')
             layer_meshes = layer_meshes + [meshes[layer]] if layer in meshes.keys() else layer_meshes
-            mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
+            # mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
+            # trying concatenate instead
+            mesh = trimesh.util.concatenate(layer_meshes)
+            print(layer, mesh)
             mesh.visual.face_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
             meshes[layer] = mesh
 
@@ -362,6 +365,8 @@ class Multilayer:
         topo_map_dict = {_um_str(0): starting_slate}  # zero is the starting height
 
         # TODO: sort out the Pattern instance creations, so they aren't necessary
+        # TODO: remove topo_evolution
+        self.topo_evolution = []  # use this to see the map evolutions, inset above and test
 
         for step, operations in process_extrusion.items():
             for layer_relation in operations:
@@ -418,14 +423,19 @@ class Multilayer:
                     # Updating the topographic map with dilated structures. Move these actions into the sorted list? actually no because dilation should be finished first
                     for elevation in sorted_heights:
                         # material added
-                        elevation = _um_str(elevation)
+                        elevation_str = _um_str(elevation)
                         raised = Pattern(raising_pattern).intersection(
-                            Pattern(topo_map_dict[elevation])).shapely
+                            Pattern(topo_map_dict[elevation_str])).shapely
                         # new matrial fully etched
-                        not_raised = Pattern(topo_map_dict[elevation]).difference(
+                        not_raised = Pattern(topo_map_dict[elevation_str]).difference(
                             (Pattern(raised))).shapely
-                        topo_map_dict[_um_str(elevation)] = Pattern(*not_raised)
-                        topo_map_dict[_um_str(elevation + thickness))]=Pattern(*raised)
+                        # what happens if these overlap with existing elevations when raising a pattern. right now it seems to delete the previous elevations
+                        # let's try this
+                        topo_map_dict[elevation_str] = Pattern(*not_raised)
+                        if _um_str(elevation + thickness) in topo_map_dict.keys():
+                            topo_map_dict[_um_str(elevation + thickness)] = topo_map_dict[_um_str(elevation + thickness)].union(Pattern(*raised))
+                        else:
+                            topo_map_dict[_um_str(elevation + thickness)] = Pattern(*raised)
 
                     # use the current topographic map and the previous topographic map to make extrusions
                     # needs to be adjusted to only deal with added materials
@@ -433,34 +443,39 @@ class Multilayer:
                         for new_elevation in topo_map_dict.keys():
                             if float(old_elevation) >= float(new_elevation):
                                 continue
-                            extrusion_zrange=(float(old_elevation), float(new_elevation))
+                            extrusion_zrange = (float(old_elevation), float(new_elevation))
                             # TODO: there may be coincedent edges which have caused intersection problems in the past
-                            extrusion_pattern=Pattern(topo_map_dict[new_elevation]).intersection(Pattern(old_topo_map_dict[old_elevation])).shapely
+                            # Fails when a layer is raised to an existing layer b/c the intersection operation undoes the union
+                            extrusion_pattern = Pattern(topo_map_dict[new_elevation]).intersection(Pattern(old_topo_map_dict[old_elevation])).shapely
                             # new_layer = layer + '_' + f'{np.around(float(old_elevation),3)*1000:.0f}' + '_' + f'{np.around(float(new_elevation),3)*1000:.0f}'
-                            new_layer=layer + '_' + _um_str(old_elevation) + '_' + _um_str(new_elevation)
+                            new_layer = layer + '_' + _um_str(old_elevation) + '_' + _um_str(new_elevation)
+                            # print(new_layer, extrusion_pattern)
                             if extrusion_pattern.geoms:
-                                pattern_shapely=cascaded_union(extrusion_pattern.geoms)
-                                pattern_shapely=MultiPolygon([pattern_shapely]) if isinstance(pattern_shapely, Polygon) else pattern_shapely
-                                layer_to_extrusion[new_layer]=(pattern_shapely, extrusion_zrange)
+                                print(new_layer, "should be extruded")
+                                pattern_shapely = cascaded_union(extrusion_pattern.geoms)
+                                pattern_shapely = MultiPolygon([pattern_shapely]) if isinstance(pattern_shapely, Polygon) else pattern_shapely
+                                layer_to_extrusion[new_layer] = (pattern_shapely, extrusion_zrange)
+                    topo_list = []
+                    for layer, pattern in topo_map_dict.items():
+                        topo_list.append((pattern, layer))
+                    self.topo_evolution.append(Multilayer(topo_list))
         # saving the topographic map for debugging between this logic and the real extrusions, can be removed later
-        topo_list=[]
-        for layer, pattern in topo_map_dict.items():
-            topo_list.append((pattern, layer))
-        self.topo=Multilayer(topo_list)
+        self.topo = Multilayer(topo_list)
+        # self.topo_evolution = []  # use this to see the map evolutions, inset above and test
 
         return layer_to_extrusion
 
     def fill_material(self, layer_name: str, growth: float, centered_layer: str = None):
-        all_patterns=[Pattern(poly) for layer, poly in self.layer_to_pattern.items()]
-        all_patterns=Pattern(*all_patterns)
-        minx, miny, maxx, maxy=all_patterns.bounds
-        centered_pattern=all_patterns if centered_layer is None else Pattern(self.layer_to_pattern[centered_layer])
-        fill=Pattern(gy.Polygon(
+        all_patterns = [Pattern(poly) for layer, poly in self.layer_to_pattern.items()]
+        all_patterns = Pattern(*all_patterns)
+        minx, miny, maxx, maxy = all_patterns.bounds
+        centered_pattern = all_patterns if centered_layer is None else Pattern(self.layer_to_pattern[centered_layer])
+        fill = Pattern(gy.Polygon(
             [(minx - growth / 2, miny - growth / 2), (minx - growth / 2, maxy + growth / 2),
              (maxx + growth / 2, maxy + growth / 2), (maxx + growth / 2, miny - growth / 2)]
         )).align(centered_pattern)
         self.pattern_to_layer.append((fill, layer_name))
-        self._pattern_to_layer={comp: layer if isinstance(comp, Pattern) else Pattern(comp)
+        self._pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
                                   for comp, layer in self.pattern_to_layer}
         self.layer_to_pattern, self.port = self._init_multilayer()
         return [(fill, layer_name)]
