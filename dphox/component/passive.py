@@ -419,33 +419,3 @@ class DelayLine(Pattern):
         super(DelayLine, self).__init__(p)
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['b0'] = Port(self.bounds[2], 0)
-
-
-class Gratings(Pattern):
-    def __init__(self, lam_effective: float, waveguide_w: float, pitch: float, duty_cycle: float, num_periods: int, back_length: float, width: float, flip: bool = False):
-        """
-        Gratings.
-        Currently only a flat 1D grating
-        Args:
-        """
-        self.lam_effective = lam_effective
-        self.waveguide_w = waveguide_w
-        self.pitch = pitch
-        self.duty_cycle = duty_cycle
-        self.num_periods = num_periods
-        self.back_length = back_length
-        self.width = width
-        length_trench = pitch * (1 - duty_cycle)
-        taper_length = (width**2 - waveguide_w**2) / (2 * lam_effective)
-        ridge = Box((pitch * duty_cycle, width))
-        mode_converter = Waveguide(waveguide_w=width, length=taper_length, taper_ls=(taper_length,),
-                                   taper_params=((0, 0, waveguide_w - width),), symmetric=False).translate(dx=-taper_length)
-        ridges = [ridge.copy.align(mode_converter).halign(mode_converter, left=False, opposite=True).translate(dx=-length_trench - ind * pitch)
-                  for ind in range(num_periods)]
-        back_end = Waveguide(waveguide_w=width, length=back_length).align(mode_converter).halign(
-            mode_converter, left=False, opposite=True).translate(dx=-length_trench - num_periods * pitch)
-        grating_coupler = [mode_converter] + ridges + [back_end]
-
-        super(Gratings, self).__init__(*grating_coupler)
-        # self.port['a0'] = Port(0, 0, -np.pi)
-        self.port['b0'] = Port(0, 0)
