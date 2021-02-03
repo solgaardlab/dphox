@@ -230,7 +230,7 @@ class Multilayer:
             return meep_geom_list
 
         meep_geometries = {}
-        # TODO: This structure is repeated a lot, there must be a more concise way to handle this. There is basically two different iteration that are just slightly different
+        # TODO: This structure is repeated a lot, there must be a more concise way to handle this. There is basically two iterators that are just slightly different
 
         if process_extrusion is not None:
             layer_to_extrusion = self._build_layers(layer_to_zrange=layer_to_zrange,
@@ -318,8 +318,6 @@ class Multilayer:
                 except IndexError:
                     print('WARNING: bad polygon, skipping')
             layer_meshes = layer_meshes + [meshes[layer]] if layer in meshes.keys() else layer_meshes
-            # mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
-            # trying concatenate instead
             mesh = trimesh.util.concatenate(layer_meshes)
             mesh.visual.face_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
             meshes[layer] = mesh
@@ -343,6 +341,16 @@ class Multilayer:
                 layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad',
                 layers: Optional[List[str]] = None,
                 include_oxide: bool = True,):  # TODO:simplify how filled oxide/material should be handled with/without process extrsusions
+        """Exports layer by layer stls representing a psuedo fabrication of the multilayer"
+            Args:
+                prefix: A string prepending the output stl layers. "{prefix}_{layer}.stl"
+                layer_to_zrange: a dictionary of z-positions that describe thicknesses or depths for named process layers
+                process_extrusion: a dictionary of steps that define the processing steps for the masks described in the multilayer
+                layer_to_color: An optinal dictionary for  specifying the colors of each layer
+                engine: A str identifying which backend trimesh should use for generating the stls 
+                layers: An optional list for specifying the layers to export to stls. By default all layers are exported
+                include_oxide: a boolean to add an addtional block of oxide that fill the 3D space of the psuedo fabrication
+        """
         meshes = self.to_trimesh_dict(layer_to_zrange, process_extrusion, layer_to_color, engine, include_oxide)
         for layer, mesh in meshes.items():
             if layers is None:
