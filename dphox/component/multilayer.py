@@ -1,6 +1,7 @@
 from .pattern import Path, Pattern, Port
 from .passive import Box
 from ..typing import *
+from ..utils import _um_str
 
 from collections import defaultdict
 
@@ -184,13 +185,20 @@ class Multilayer:
             nd.put_stub()
         return cell
 
-    def meep_geometry(self, layer_to_zrange: Dict[str, Tuple[float, float]], process_extrusion: Dict[str, List[Tuple[str, str, str]]] = None, layer_to_material: Dict = None, dimensions=3):
-        # TODO(Nate): fillin the args in docstring and check typhints
-        """Turn this multilayer into a  dictionary of meep geometry objects
+    def meep_geometry(self, layer_to_zrange: Dict[str, Tuple[float, float]], process_extrusion: Dict[str, List[Tuple[str, str, str]]] = None, layer_to_material: Dict[str, mp.Medium] = None, dimensions: int = 3) -> Dict[str, List[mp.GeometricObject]]:
+        """Turns this multilayer into a  dictionary of meep geometry objects
         Args:
+            layer_to_zrange: a dictionary of z-positions that describe thicknesses or depths for named process layers
+            process_extrusion: a dictionary of steps that define the processing steps for the masks described in the multilayer
+            layer_to_material: a dictionary mapping the layer to the corresponding meep material
+            dimensions: the dimensionality of the meep FDTD simulation to be run.
+                        If dimensions=3: The geometry is  returned in the expected x,y,z coordinates where the z direction is the axis of extrusion.
+                        If dimensions=2: y and z are swapped, such that geometry extrusion is in the y direction. This allows for slab waveguide simulations using xy plane that conform to meep definition of a 2D simulation
+                        If dimensions=1: Not yet implemented
+
 
         Returns:
-            A dictionary mapping layers to lists of meep geomtery objects
+            Dictionary with layers as keys to lists of meep geomtery objects
         """
 
         # Need a way to rotate the coordinates for meep dimensionality, 1D -> Z, 2D -> XY, 3D, XYZ
@@ -221,20 +229,37 @@ class Multilayer:
                 # skip the first pt, meep doesn't like repeated pts like shapely
             return meep_geom_list
 
-        layer_to_extrusion = self.build_layers(layer_to_zrange=layer_to_zrange,
-                                               process_extrusion=process_extrusion)
         meep_geometries = {}
-        for layer, pattern_zrange in layer_to_extrusion.items():
-            layer = layer.split('_')[0]
-            if layer not in layer_to_material.keys():
-                continue
-            pattern, zrange = pattern_zrange
-            material = layer_to_material[layer]
+        # TODO: This structure is repeated a lot, there must be a more concise way to handle this. There is basically two different iteration that are just slightly different
 
-            if layer in meep_geometries.keys():
-                meep_geometries[layer] += _pattern_to_prisms(pattern, material, zrange)
-            else:
-                meep_geometries[layer] = _pattern_to_prisms(pattern, material, zrange)
+        if process_extrusion is not None:
+            layer_to_extrusion = self._build_layers(layer_to_zrange=layer_to_zrange,
+                                                    process_extrusion=process_extrusion)
+            for layer, pattern_zrange in layer_to_extrusion.items():
+                layer = layer.split('_')[0]
+                if layer not in layer_to_material.keys():
+                    continue
+                pattern, zrange = pattern_zrange
+                material = layer_to_material[layer]
+
+                if layer in meep_geometries.keys():
+                    meep_geometries[layer] += _pattern_to_prisms(pattern, material, zrange)
+                else:
+                    meep_geometries[layer] = _pattern_to_prisms(pattern, material, zrange)
+        else:
+            for layer, pattern in self.layer_to_pattern.items():
+                if layer not in layer_to_material.keys():
+                    continue
+                material = layer_to_material[layer]
+                try:
+                    zrange = layer_to_zrange[layer]
+                except KeyError:
+                    print(f"No zranges given for the layer {layer}")
+
+                if layer in meep_geometries.keys():
+                    meep_geometries[layer] += _pattern_to_prisms(pattern, material, zrange)
+                else:
+                    meep_geometries[layer] = _pattern_to_prisms(pattern, material, zrange)
 
         return meep_geometries
 
@@ -296,12 +321,11 @@ class Multilayer:
             # mesh = trimesh.Trimesh().union(layer_meshes, engine=engine)
             # trying concatenate instead
             mesh = trimesh.util.concatenate(layer_meshes)
-            print(layer, mesh)
             mesh.visual.face_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
             meshes[layer] = mesh
 
         if process_extrusion is not None:
-            layer_to_extrusion = self.build_layers(layer_to_zrange, process_extrusion)
+            layer_to_extrusion = self._build_layers(layer_to_zrange, process_extrusion)
             for layer, pattern_zrange in layer_to_extrusion.items():
                 pattern, zrange = pattern_zrange
                 _add_trimesh_layer(pattern, zrange, layer)
@@ -318,11 +342,10 @@ class Multilayer:
                 process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
                 layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad',
                 layers: Optional[List[str]] = None,
-                include_oxide: bool = True,
-                all_layers: bool = False):  # TODO: make a change here in the logic and simplify the parameters addded this boolean to handle conformal maaping where we don't know the layer names immediately
+                include_oxide: bool = True,):  # TODO:simplify how filled oxide/material should be handled with/without process extrsusions
         meshes = self.to_trimesh_dict(layer_to_zrange, process_extrusion, layer_to_color, engine, include_oxide)
         for layer, mesh in meshes.items():
-            if all_layers:
+            if layers is None:
                 mesh.export(f'{prefix}_{layer}.stl')
             elif layers and layer in layers:
                 mesh.export(f'{prefix}_{layer}.stl')
@@ -345,28 +368,30 @@ class Multilayer:
              engine: str = 'scad'):
         self.to_trimesh_scene(layer_to_zrange, process_extrusion, layer_to_color, ignore_layers, engine).show()
 
-    def build_layers(self, layer_to_zrange: Dict[str, Tuple[float, float]],
-                     process_extrusion: Dict[str, List[Tuple[str, str, str]]]):
+    def _build_layers(self, layer_to_zrange: Dict[str, Tuple[float, float]],
+                      process_extrusion: Dict[str, List[Tuple[str, str, str]]]):
+        """Creates a new dictionary called layer_to_extrusion that describes a 2D map of patterns, and heights for extrusion, that respresent the reults of a psuedo fabrication based on process extrusion
+            Args:
+                layer_to_zrange: a dictionary of z-positions that describe thicknesses or depths for named process layers
+                process_extrusion: a dictionary of steps that define the processing steps for the masks described in the multilayer
+
+            Returns:
+                Dictionary with layers as keys to lists of meep geomtery objects
+        """
         layer_to_extrusion = {}
         layer_to_pattern_processed = self.layer_to_pattern.copy()
         layers = layer_to_pattern_processed.keys()
-        # TODO(Nate): Try to decompose build_layers into smaller functions
-        # TODO(Nate): Sunil:put some documentation here explaining what build_layers does (to help with development). I don't think we expect the users to use this function, though, so I would also put an underscore before build.
+        # TODO(Nate): Try to decompose _build_layers into smaller functions
 
-        # TODO(Nate):Add Conformal deposition logic
-        # TODO(Nate): Move function to utils.py
-        def _um_str(microns: float):
-            return (f'{np.around(float(microns),3):.3f}')
-        # build topographic map
+        # building topographic maps for each process step
         minx, miny, maxx, maxy = self.bounds
         starting_slate = Pattern(gy.Polygon(
             [(minx, miny), (minx, maxy),
              (maxx, maxy), (maxx, miny)]))
         topo_map_dict = {_um_str(0): starting_slate}  # zero is the starting height
 
-        # TODO: sort out the Pattern instance creations, so they aren't necessary
-        # TODO: remove topo_evolution
-        self.topo_evolution = []  # use this to see the map evolutions, inset above and test
+        # TODO: remove topo_evolution, currently just a debugging tool
+        self.topo_evolution = []  # use this to see the topographic map evolutions
 
         for step, operations in process_extrusion.items():
             for layer_relation in operations:
@@ -384,24 +409,22 @@ class Multilayer:
                 if layer in layers:
                     if other_layer in layers:
                         # TODO(Nate): Unnecessary instances. The string boolean operation forces this Pattern(Multipolygon).boolean_opertaion(Pattern(Multipolygon)).shapely
-                        # It is clear that the Pattern() is only providing a lookup dictionary  but the actual input/output/operation is with Multipolygons
+                        # It is clear that the Pattern() is only providing a lookup dictionary  but the actual input/output/operation is with Multipolygons. May be part of a larger codebse adjustment
                         pattern = Pattern(layer_to_pattern_processed[layer]).boolean_operation(
                             Pattern(layer_to_pattern_processed[other_layer]), operation
                         ).shapely
                         layer_to_pattern_processed[layer] = pattern
                     else:
                         pattern = layer_to_pattern_processed[layer]
-                    # insert conformal stuff here
-                    # building the topographic map
+
+                    # Saving and sorting variables for use in the conformal deposition steps
                     thickness = new_zrange[1] - new_zrange[0]
                     heights = list(topo_map_dict.keys())
                     old_topo_map_dict = topo_map_dict.copy()
                     sorted_heights = list(map(float, heights))
                     sorted_heights.sort(reverse=True)
                     # TODO(Nate): Clean up some stuff here
-
-                    # WORKS, now I need to add dilation and fit this into the extrusion flow
-                    # The strategy i to dilate everything, then pairwise difference by height so the tallest is unobstructed. Finally, apply raisig pattern
+                    # The strategy is to dilate everything, then pairwise difference by height so the tallest is unobstructed. Finally, apply the raising_pattern which is based on the current mask layer
                     if 'conformal' in step:
                         if 'etch' in step:
                             raising_pattern = starting_slate.difference(Pattern(pattern))
@@ -413,14 +436,14 @@ class Multilayer:
                                     # dilation, should only occur in not etched regions, need to filter with raisd_pattern and union
                                     dilated_pattern = topo_map_dict[_um_str(supr_h)].offset(grow_d=thickness).intersection(raising_pattern)
                                     topo_map_dict[_um_str(supr_h)] = dilated_pattern.union(topo_map_dict[_um_str(supr_h)])
-                                elif supr_h > infr_h:  # only looking at the necessary upper triangle of the matrix of layers
-                                    #  moving boudaries based for shape dilation and hole shrinkage
+                                elif supr_h > infr_h:  # only looking at the necessary lower triangle of the matrix of layers
+                                    #  moving boudaries for shape dilation and hole shrinkage. The infr_h pattern shrinks based on the dilation of the supr_h pattern
                                     topo_map_dict[_um_str(infr_h)] = Pattern(topo_map_dict[_um_str(infr_h)]).difference(
                                         Pattern(topo_map_dict[_um_str(supr_h)]))
                             topo_map_dict[_um_str(infr_h)] = starting_slate.intersection(topo_map_dict[_um_str(infr_h)])
                     else:
                         raising_pattern = pattern
-                    # Updating the topographic map with dilated structures. Move these actions into the sorted list? actually no because dilation should be finished first
+                    # Updating the heights in the topographic map with dilated structures
                     for elevation in sorted_heights:
                         # material added
                         elevation_str = _um_str(elevation)
@@ -429,29 +452,21 @@ class Multilayer:
                         # new matrial fully etched
                         not_raised = Pattern(topo_map_dict[elevation_str]).difference(
                             (Pattern(raised))).shapely
-                        # what happens if these overlap with existing elevations when raising a pattern. right now it seems to delete the previous elevations
-                        # let's try this
                         topo_map_dict[elevation_str] = Pattern(*not_raised)
                         if _um_str(elevation + thickness) in topo_map_dict.keys():
                             topo_map_dict[_um_str(elevation + thickness)] = topo_map_dict[_um_str(elevation + thickness)].union(Pattern(*raised))
                         else:
                             topo_map_dict[_um_str(elevation + thickness)] = Pattern(*raised)
 
-                    # use the current topographic map and the previous topographic map to make extrusions
-                    # needs to be adjusted to only deal with added materials
+                    # Using the current topographic map and the previous topographic map to make extrusions
                     for old_elevation in heights:
                         for new_elevation in topo_map_dict.keys():
                             if float(old_elevation) >= float(new_elevation):
                                 continue
                             extrusion_zrange = (float(old_elevation), float(new_elevation))
-                            # TODO: there may be coincedent edges which have caused intersection problems in the past
-                            # Fails when a layer is raised to an existing layer b/c the intersection operation undoes the union
                             extrusion_pattern = Pattern(topo_map_dict[new_elevation]).intersection(Pattern(old_topo_map_dict[old_elevation])).shapely
-                            # new_layer = layer + '_' + f'{np.around(float(old_elevation),3)*1000:.0f}' + '_' + f'{np.around(float(new_elevation),3)*1000:.0f}'
                             new_layer = layer + '_' + _um_str(old_elevation) + '_' + _um_str(new_elevation)
-                            # print(new_layer, extrusion_pattern)
                             if extrusion_pattern.geoms:
-                                print(new_layer, "should be extruded")
                                 pattern_shapely = cascaded_union(extrusion_pattern.geoms)
                                 pattern_shapely = MultiPolygon([pattern_shapely]) if isinstance(pattern_shapely, Polygon) else pattern_shapely
                                 layer_to_extrusion[new_layer] = (pattern_shapely, extrusion_zrange)
@@ -459,9 +474,7 @@ class Multilayer:
                     for layer, pattern in topo_map_dict.items():
                         topo_list.append((pattern, layer))
                     self.topo_evolution.append(Multilayer(topo_list))
-        # saving the topographic map for debugging between this logic and the real extrusions, can be removed later
         self.topo = Multilayer(topo_list)
-        # self.topo_evolution = []  # use this to see the map evolutions, inset above and test
 
         return layer_to_extrusion
 
