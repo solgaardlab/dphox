@@ -507,3 +507,83 @@ AIM_PDK = {
 AIM_PDK_PASSIVE_PATH = '../../aim_lib/APSUNY_v35a_passive.design'
 AIM_PDK_WAVEGUIDE_PATH = '../../aim_lib/APSUNY_v35_waveguides.design'
 AIM_PDK_ACTIVE_PATH = '../../aim_lib/APSUNY_v35_actives.design'
+
+
+def get_sinx280_stack(gap, mechanical_thickness, metal_thickness):
+    sinx280_STACK = {
+        'layers': {  # gotta makeup a mapping scheme (material, 0 = real layer / 1 = dummy layer)
+            'handle': (99, 0),  # si handle that is probabaly only useful for generating full sims
+            'box': (98, 0),  # bottom oxide, proabably most useful for grating simulations
+            'nit1': (1, 0),  # nitride waveguide layer
+            'tox': (2, 0),  # top oxide etch mask (data clear), most useful for gratings
+            # TODO: Add internal process check/warning for no etch stop
+            'asi1': (3, 0),  # etch of sacricificial layer of amorphous (data clear)
+            'nit2': (4, 0),  # nitride mechanical layer
+            'metal1': (5, 0),  # nitride mechanical layer
+        },
+
+
+        'zranges': {
+            'handle': (-3, -2.16),  # si handle that is probabaly only useful for generating full sims
+            'box': (-2.16, 0),  # bottom oxide, proabably most useful for grating simulations
+            'nit1': (0, 0.28),  # nitride waveguide layer
+            'tox': (0.28, 0.97),  # top oxide, 690nm thick 0.97=0.69+0.28
+            'asi1': (0.97, 0.97 + gap),  # sacricificial layer of amorphous si
+            'nit2': (0.97 + gap, 0.97 + gap + mechanical_thickness),  # nitride mechanical layer
+            'metal1': (0.97 + gap + mechanical_thickness, 0.97 + gap + mechanical_thickness + metal_thickness),  # top metal layer
+            'dice': (-3, 3)  # dice lines
+        },
+
+        'meep': {
+            # 'handle': mp.Medium(index=3.47),  # si handle that is probabaly only useful for generating full sims
+            'box': mp.Medium(index=1.45),  # bottom oxide, proabably most useful for grating simulations
+            'nit1': mp.Medium(index=1.95),  # nitride waveguide layer
+            'tox': mp.Medium(index=1.45),  # top oxide, 690nm thick 0.97=0.69+0.28
+            # 'asi1': mp.Medium(index=3.47),
+            'nit2': mp.Medium(index=1.95),  # nitride mechanical layer
+        },
+
+
+        'process_extrusion': {
+            'directional_shape_box': [('box', 'dice', 'difference')],
+            'conformal_shape_nit1': [('nit1', 'dice', 'difference')],
+            'conformal_etch_tox': [('tox', 'dice', 'difference')],
+            'conformal_etch_asi1': [('asi1', 'dice', 'difference')],
+            'conformal_shape_nit2': [('nit2', 'dice', 'difference')],
+            'conformal_shape_metal1': [('metal1', 'dice', 'difference')],
+        },
+
+        'cross_sections': {
+            'waveguide_xs': [
+                {
+                    'layer': 'nit1'
+                }
+            ],
+            'ml_xs': [
+                {
+                    'layer': 'asi1'
+                },
+                {
+                    'layer': 'metal1'
+                }
+            ],
+
+        }
+    }
+    return sinx280_STACK
+
+
+GCMESHMSDLA_PDK = {
+    'dc_exp': {
+        'a0': (-7600, -1800, 180)
+    },
+    'mmi_exp': {
+        'a0': (-7600, -1800, 180)
+    },
+    'gc_exp': {
+        'a0': (-7600, -1800, 180)
+    },
+    'mmi_mzi': {
+        'a0': (-7600, -1800, 180)
+    }
+}

@@ -242,6 +242,7 @@ class Multilayer:
                 return mp.Vector3(x, 0, y)
         else:
             axis_extrusion = mp.Vector3(0, 0, 1)
+
             def meep_coord(x, y):
                 return mp.Vector3(x, y, 0)
 
@@ -342,7 +343,7 @@ class Multilayer:
     def to_trimesh_dict(self, layer_to_zrange: Dict[str, Tuple[float, float]],
                         process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
                         layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad',
-                        include_oxide: bool = True):
+                        include_oxide: bool = True, for_comsol=False):
         if include_oxide and 'oxide' not in self.layer_to_pattern:
             print('WARNING: oxide not included, so adding to multilayer')
             self.pattern_to_layer.append((Box(self.size).align(self.center), 'oxide'))
@@ -352,7 +353,7 @@ class Multilayer:
         # TODO(sunil): start using logging rather than printing
         def _add_trimesh_layer(pattern, zrange, layer):
             zmin, zmax = zrange
-            layer = layer.split('_')[0]
+            layer = layer if for_comsol else layer.split('_')[0]
             layer_meshes = []
             for poly in pattern:
                 try:
@@ -383,18 +384,18 @@ class Multilayer:
                 process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
                 layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad',
                 layers: Optional[List[str]] = None,
-                include_oxide: bool = True,):  # TODO:simplify how filled oxide/material should be handled with/without process extrsusions
+                include_oxide: bool = True, for_comsol=False):  # TODO:simplify how filled oxide/material should be handled with/without process extrsusions
         """Exports layer by layer stls representing a psuedo fabrication of the multilayer"
             Args:
                 prefix: A string prepending the output stl layers. "{prefix}_{layer}.stl"
                 layer_to_zrange: a dictionary of z-positions that describe thicknesses or depths for named process layers
                 process_extrusion: a dictionary of steps that define the processing steps for the masks described in the multilayer
                 layer_to_color: An optinal dictionary for  specifying the colors of each layer
-                engine: A str identifying which backend trimesh should use for generating the stls 
+                engine: A str identifying which backend trimesh should use for generating the stls
                 layers: An optional list for specifying the layers to export to stls. By default all layers are exported
                 include_oxide: a boolean to add an addtional block of oxide that fill the 3D space of the psuedo fabrication
         """
-        meshes = self.to_trimesh_dict(layer_to_zrange, process_extrusion, layer_to_color, engine, include_oxide)
+        meshes = self.to_trimesh_dict(layer_to_zrange, process_extrusion, layer_to_color, engine, include_oxide, for_comsol)
         for layer, mesh in meshes.items():
             if layers is None:
                 mesh.export(f'{prefix}_{layer}.stl')
@@ -404,8 +405,8 @@ class Multilayer:
     def to_trimesh_scene(self, layer_to_zrange: Dict[str, Tuple[float, float]],
                          process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
                          layer_to_color: Optional[Dict[str, str]] = None, ignore_layers: Optional[List[str]] = None,
-                         engine: str = 'scad'):
-        meshes = self.to_trimesh_dict(layer_to_zrange, process_extrusion, layer_to_color, engine)
+                         include_oxide: bool = True, engine: str = 'scad'):
+        meshes = self.to_trimesh_dict(layer_to_zrange, process_extrusion, layer_to_color, engine, include_oxide)
         scene = trimesh.Scene()
         ignore_layers = [] if ignore_layers is None else ignore_layers
         for mesh_name, mesh in meshes.items():
@@ -528,52 +529,50 @@ class Multilayer:
                     new_zrange = layer_to_zrange[layer]
                 except KeyError:
                     print(f"No zranges given for the layer {layer}")
-                if layer in layers:
-                    if other_layer in layers:
-                        # TODO(Nate): Unnecessary instances. The string boolean operation forces this
-                        #  Pattern(Multipolygon).boolean_opertaion(Pattern(Multipolygon)).shapely
-                        # It is clear that the Pattern() is only providing a lookup dictionary
-                        # but the actual input/output/operation is with Multipolygons.
-                        # May be part of a larger codebase adjustment
-                        pattern = Pattern(layer_to_pattern_processed[layer]).boolean_operation(
-                            Pattern(layer_to_pattern_processed[other_layer]), operation
-                        ).shapely
-                        layer_to_pattern_processed[layer] = pattern
-                    else:
-                        pattern = layer_to_pattern_processed[layer]
+                if (layer in layers) and (other_layer in layers):
+                    # TODO(Nate): Unnecessary instances. The string boolean operation forces this Pattern(Multipolygon).boolean_opertaion(Pattern(Multipolygon)).shapely
+                    # It is clear that the Pattern() is only providing a lookup dictionary  but the actual input/output/operation is with Multipolygons. May be part of a larger codebse adjustment
+                    pattern = Pattern(layer_to_pattern_processed[layer]).boolean_operation(
+                        Pattern(layer_to_pattern_processed[other_layer]), operation
+                    ).shapely
+                    layer_to_pattern_processed[layer] = pattern
+                elif layer in layers:
+                    pattern = layer_to_pattern_processed[layer]
+                else:
+                    pattern = Pattern(*[])  # needed to preserve conformal mapping with an empty mask
 
-                    if 'dope' in step and operation == 'intersection':
-                        # make a new layer for each doping intersection
-                        zmin, zmax = layer_to_zrange[other_layer]
-                        # TODO(): how to deal with different depth doping currently not addressed
-                        new_zrange = (max(zmax - (new_zrange[1] - new_zrange[0]), zmin), zmax)
+                if 'dope' in step and operation == 'intersection':
+                    # make a new layer for each doping intersection
+                    zmin, zmax = layer_to_zrange[other_layer]
+                    # TODO(): how to deal with different depth doping currently not addressed
+                    new_zrange = (max(zmax - (new_zrange[1] - new_zrange[0]), zmin), zmax)
 
-                    if 'etch' in step:
-                        raising_pattern = bounding_box.difference(Pattern(pattern))
-                    else:
-                        raising_pattern = Pattern(pattern)
+                if 'etch' in step:
+                    raising_pattern = bounding_box.difference(Pattern(pattern))
+                else:
+                    raising_pattern = Pattern(pattern)
 
-                    # Saving and sorting variables for use in the conformal deposition steps
-                    thickness = new_zrange[1] - new_zrange[0]
-                    heights = list(topo_map_dict.keys())
-                    sorted_heights = list(map(float, heights))
-                    sorted_heights.sort(reverse=True)
-                    old_topo_map_dict = topo_map_dict.copy()
+                # Saving and sorting variables for use in the conformal deposition steps
+                thickness = new_zrange[1] - new_zrange[0]
+                heights = list(topo_map_dict.keys())
+                sorted_heights = list(map(float, heights))
+                sorted_heights.sort(reverse=True)
+                old_topo_map_dict = topo_map_dict.copy()
 
-                    if 'conformal' in step:
-                        topo_map_dict = self._conformal_dilation(sorted_heights, thickness, topo_map_dict, raising_pattern, bounding_box)
+                if 'conformal' in step:
+                    topo_map_dict = self._conformal_dilation(sorted_heights, thickness, topo_map_dict, raising_pattern, bounding_box)
 
-                    topo_map_dict = self._raise_surface(sorted_heights, thickness, topo_map_dict, raising_pattern, bounding_box)
+                topo_map_dict = self._raise_surface(sorted_heights, thickness, topo_map_dict, raising_pattern, bounding_box)
 
-                    # Using the current topographic map and the previous topographic map to make extrusions
-                    # TODO: note in a cmp/doping/trench process steps need to be captured well in this
-                    layer_to_extrusion = self._update_layer_to_extrusion(layer, heights, topo_map_dict, old_topo_map_dict, layer_to_extrusion)
+                # Using the current topographic map and the previous topographic map to make extrusions
+                # TODO: note in a cmp/doping/trench process steps need to be captured well in this
+                layer_to_extrusion = self._update_layer_to_extrusion(layer, heights, topo_map_dict, old_topo_map_dict, layer_to_extrusion)
 
-                    # TODO: for debugging, need to remove
-                    topo_list = []
-                    for layer, pattern in topo_map_dict.items():
-                        topo_list.append((pattern, layer))
-                    self.topo_evolution.append(Multilayer(topo_list))
+                # TODO: for debugging, need to remove
+                topo_list = []
+                for layer, pattern in topo_map_dict.items():
+                    topo_list.append((pattern, layer))
+                self.topo_evolution.append(Multilayer(topo_list))
         self.topo = Multilayer(topo_list)
 
         return layer_to_extrusion
