@@ -4,6 +4,10 @@ import scipy.sparse as sp
 from .typing import List, Callable
 
 
+def _um_str(microns: float):
+    return (f'{np.around(float(microns),3):.3f}')
+
+
 def poynting_z(e: np.ndarray, h: np.ndarray):
     e_cross = np.stack([(e[0] + np.roll(e[0], shift=1, axis=1)) / 2,
                         (e[1] + np.roll(e[1], shift=1, axis=0)) / 2])

@@ -2,7 +2,7 @@ import gdspy as gy
 import nazca as nd
 from copy import deepcopy as copy
 from shapely.vectorized import contains
-from shapely.geometry import Polygon, MultiPolygon, GeometryCollection, Point
+from shapely.geometry import Polygon, MultiPolygon, GeometryCollection, Point, LineString
 from shapely.ops import cascaded_union
 from shapely.affinity import translate, rotate
 from descartes import PolygonPatch
@@ -153,8 +153,12 @@ class Pattern:
 
     @classmethod
     def from_shapely(cls, shapely_pattern: Union[Polygon, GeometryCollection]) -> "Pattern":
-        collection = shapely_pattern if isinstance(shapely_pattern, Polygon) \
-            else MultiPolygon([g for g in shapely_pattern.geoms if isinstance(g, Polygon)])
+        try:
+            collection = shapely_pattern if isinstance(shapely_pattern, Polygon) \
+                else MultiPolygon([g for g in shapely_pattern.geoms if isinstance(g, Polygon)])
+        except AttributeError:
+            print(f'shapely_pattern is not a Polygon or a GeometryCollection it is a {type(shapely_pattern)} it will be replaced with an empty MultiPolygon')
+            collection = MultiPolygon([])
         return cls(collection)
 
     def _shapely(self) -> MultiPolygon:

@@ -17,6 +17,13 @@ except ImportError:
     SIMPHOX_IMPORTED = False
     pass
 
+try:
+    import meep as mp
+    from meep import mpb
+    MEEP_IMPORTED = True
+except ImportError:
+    MEEP_IMPORTED = False
+
 
 class LateralNemsPS(Pattern):
     def __init__(self, waveguide_w: float, nanofin_w: float, phaseshift_l: float, gap_w: float,
@@ -156,7 +163,7 @@ class LateralNemsPS(Pattern):
 
         super(LateralNemsPS, self).__init__(*patterns, call_union=False)
         self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads, self.pads = wg, nanofins, rib_etch, gnd_pads, \
-                                                                                 gnd_pads + gnd_connections
+            gnd_pads + gnd_connections
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)
         self.port['a0'] = Port(0, 0, -np.pi)
@@ -585,8 +592,8 @@ class SimpleComb(Pattern):
         pos_comb = Pattern(*lower_teeth)
         edges = [fat_tooth.copy.align(shuttle_comb).halign(shuttle_comb, left=False, opposite=True).translate(
             tooth_param[0]),
-                 fat_tooth.copy.align(shuttle_comb).halign(shuttle_comb, left=True, opposite=True).translate(
-                     -tooth_param[0])]
+            fat_tooth.copy.align(shuttle_comb).halign(shuttle_comb, left=True, opposite=True).translate(
+            -tooth_param[0])]
         shuttle_comb = Pattern(shuttle_comb, *edges)
         pos_comb.align(shuttle_comb).translate(0, -overlap + tooth_param[1])
         comb = Pattern(shuttle_comb, pos_comb)
@@ -682,10 +689,10 @@ class LateralNemsFull(Multilayer):
         device_pads = device.pads if device.pads is not None else []
         dopes = [s.expand(dope_expand).dope(shuttle_dope, dope_grow)
                  for s in [top.shuttle, bot.shuttle] if shuttle_dope is not None] + \
-                [s.expand(dope_expand).dope(spring_dope, dope_grow)
-                 for s in top.springs + bot.springs if spring_dope is not None] + \
-                [s.expand(dope_expand).dope(pad_dope, dope_grow)
-                 for s in top.pads + bot.pads + device_pads if pad_dope is not None]
+            [s.expand(dope_expand).dope(spring_dope, dope_grow)
+             for s in top.springs + bot.springs if spring_dope is not None] + \
+            [s.expand(dope_expand).dope(pad_dope, dope_grow)
+             for s in top.pads + bot.pads + device_pads if pad_dope is not None]
         metals = []
         port = {}
         gnd_pads = []
@@ -714,7 +721,7 @@ class LateralNemsFull(Multilayer):
             vias.extend(sum([mid_via.copy.align(pad).pattern_to_layer for pad in pos_pads], []))
             vias.extend(sum([top_via.copy.align(pad).translate(
                 dy=(-2 * i + 1) * (top_via.size[1] / 2 - trace_w / 2)).pattern_to_layer
-                             for i, pad in enumerate(pos_pads)], []))
+                for i, pad in enumerate(pos_pads)], []))
             port['pos_l'] = Port(pos_box.bounds[0], pos_box.center[1], -np.pi)
             port['pos_b'] = Port(pos_box.center[0], pos_box.bounds[1], -np.pi / 2)
             port['pos_r'] = Port(pos_box.bounds[2], pos_box.center[1], 0)
@@ -739,7 +746,7 @@ class LateralNemsFull(Multilayer):
         self.port = port
         self.port.update(device.port)
 
-    @classmethod
+    @ classmethod
     def from_config(cls, config):
         """Initialize via configuration dictionary (useful for importing from a JSON file)
 
@@ -874,7 +881,7 @@ class NemsMillerNode(Multilayer):
                                np.pi / 2)
         ps_comb_drives = [ps_comb_drive.copy.to(ps_connect_port),
                           ps_comb_drive.copy.flip().to(
-                              ps_connect_port).translate(bend_radius * 2 + upper_interaction_l)]
+            ps_connect_port).translate(bend_radius * 2 + upper_interaction_l)]
 
         # TODO(sunil): bad decomposition here... these should be multilayers!
         tdc_comb_drive = Multilayer([(tdc_comb_connector, ridge), (tdc_comb_rib_etch, rib), (tdc_comb, ridge)] +
@@ -886,7 +893,7 @@ class NemsMillerNode(Multilayer):
         tdc_connect_port = Port(2 * bend_radius + tdc_spring_dim[0], lower_bend_height, 0)
         tdc_comb_drives = [tdc_comb_drive.copy.to(tdc_connect_port),
                            tdc_comb_drive.copy.flip(horiz=True).to(tdc_connect_port).translate(
-                               lower_interaction_l - tdc_spring_dim[0] * 2)]
+            lower_interaction_l - tdc_spring_dim[0] * 2)]
 
         comb_drive_p2l = sum([cd.pattern_to_layer for cd in ps_comb_drives + tdc_comb_drives], [])
         ps_flexure = Box((ps_comb.pos_pad.size[0] - gnd_wg.length + tdc_connector_dim[0], ps_shuttle_w)).flexure(

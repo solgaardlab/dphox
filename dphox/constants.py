@@ -1,3 +1,12 @@
+try:
+    import meep as mp
+    from meep import mpb
+    MEEP_IMPORTED = True
+except ImportError:
+    MEEP_IMPORTED = False
+    pass
+
+
 AMF_STACK = {
     'layers': {
         'waveguide': 10,
