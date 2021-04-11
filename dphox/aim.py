@@ -54,11 +54,11 @@ class AIMNemsTDC(LateralNemsTDC):
                                          rib_etch_grow=rib_etch_grow)
 
 
-class AIMNemsAnchor(NemsAnchor):
+class AIMNemsActuator(NemsActuator):
     def __init__(self, fin_dim=(100, 0.22), shuttle_dim=(50, 2), spring_dim=None, straight_connector=(0.25, 1),
                  tether_connector=(2, 1, 0.5, 1), pos_electrode_dim=(90, 4, 0.5), gnd_electrode_dim=(3, 4),
                  include_support_spring=True, shuttle_stripe_w=1, tooth_param=None):
-        super(AIMNemsAnchor, self).__init__(fin_dim=fin_dim, shuttle_dim=shuttle_dim, spring_dim=spring_dim,
+        super(AIMNemsActuator, self).__init__(fin_dim=fin_dim, shuttle_dim=shuttle_dim, spring_dim=spring_dim,
                                             straight_connector=straight_connector, tether_connector=tether_connector,
                                             pos_electrode_dim=pos_electrode_dim, gnd_electrode_dim=gnd_electrode_dim,
                                             include_support_spring=include_support_spring,
@@ -67,12 +67,12 @@ class AIMNemsAnchor(NemsAnchor):
 
 
 class AIMNemsFull(LateralNemsFull):
-    def __init__(self, device, anchor, clearout_dim,
+    def __init__(self, device, actuator, clearout_dim,
                  pos_box_w=8, gnd_box_h=0,
                  mid_via=Via((0.4, 0.4), 0.1, metal=['m1am', 'm2am'], via=['cbam', 'v1am'], shape=(2, 2), pitch=1),
                  top_via=Via((3.6, 3.6), (1.0, 1.5), metal=['m2am', 'mlam'], via='vaam'),
                  trace_w=3):
-        super(AIMNemsFull, self).__init__(device=device, anchor=anchor, mid_via=mid_via,
+        super(AIMNemsFull, self).__init__(device=device, actuator=actuator, mid_via=mid_via,
                                           top_via=top_via, trace_w=trace_w, pos_box_w=pos_box_w,
                                           gnd_box_h=gnd_box_h, clearout_dim=clearout_dim, clearout_etch_stop_grow=0.5,
                                           dope_expand=0.3, dope_grow=0.1, ridge='seam', rib='ream', shuttle_dope='pdam',
@@ -80,18 +80,23 @@ class AIMNemsFull(LateralNemsFull):
                                           gnd_metal='m2am', clearout_layer='clearout', clearout_etch_stop_layer='snam')
 
 
+class AIMMockThermal(ThermalPS):
+    def __init__(self, waveguide_w=0.48, ps_w=2, length=80,
+                 via=Via((0.4, 0.4), 0.1, metal=['m1am', 'm2am'], via=['v1am'])):
+        super(AIMMockThermal, self).__init__(waveguide_w, ps_w, length, via, ridge='ream', ps_layer='m1am')
+
 ps_pull_apart = AIMNemsPS()
 ps_pull_in = AIMNemsPS(phaseshift_l=phaseshift_l_pull_in, gnd_pad_dim=(3, 4))
 tdc_pull_apart = AIMNemsTDC()
 tdc_pull_in = AIMNemsTDC(interaction_l=interaction_l_pull_in)
 
-pull_apart_anchor = AIMNemsAnchor()
-pull_in_anchor = AIMNemsAnchor(
+pull_apart_actuator = AIMNemsActuator()
+pull_in_actuator = AIMNemsActuator(
     fin_dim=(50, 0.22), shuttle_dim=(40, 3),
     pos_electrode_dim=None, gnd_electrode_dim=None,
     spring_dim=None, include_support_spring=False, shuttle_stripe_w=0
 )
-tether_anchor_tdc = AIMNemsAnchor(
+tether_actuator_tdc = AIMNemsActuator(
     spring_dim=(tether_interaction_l + 5, 0.22),
     pos_electrode_dim=(tether_interaction_l - 5, 4, 0.5),
     fin_dim=(tether_interaction_l, 0.4),
@@ -99,7 +104,7 @@ tether_anchor_tdc = AIMNemsAnchor(
     straight_connector=None,
     include_support_spring=False
 )
-tether_anchor_ps = AIMNemsAnchor(
+tether_actuator_ps = AIMNemsActuator(
     shuttle_dim=(10, 3),
     spring_dim=(tether_phaseshift_l + 10, 0.22),
     pos_electrode_dim=(tether_phaseshift_l, 4, 0.5),
@@ -107,19 +112,19 @@ tether_anchor_ps = AIMNemsAnchor(
     straight_connector=None,
     include_support_spring=False
 )
-tether_anchor_ps_comb = tether_anchor_ps.update(tooth_param=(0.3, 2, 0.15, 0.5),
+tether_actuator_ps_comb = tether_actuator_ps.update(tooth_param=(0.3, 2, 0.15, 0.5),
                                                 pos_electrode_dim=(tether_phaseshift_l, 4, 3.2),
                                                 shuttle_dim=(30, 3))
 
-pull_in_full_ps = AIMNemsFull(device=ps_pull_in, anchor=pull_in_anchor, gnd_box_h=5,
+pull_in_full_ps = AIMNemsFull(device=ps_pull_in, actuator=pull_in_actuator, gnd_box_h=5,
                               clearout_dim=(phaseshift_l_pull_in, 0.3)).update(shuttle_dope=None)
-pull_in_full_tdc = AIMNemsFull(device=tdc_pull_in, anchor=pull_in_anchor,
+pull_in_full_tdc = AIMNemsFull(device=tdc_pull_in, actuator=pull_in_actuator,
                                clearout_dim=(interaction_l_pull_in, 0.3),
                                gnd_box_h=10, pos_box_w=12).update(shuttle_dope=None)
-pull_apart_full_ps = AIMNemsFull(device=ps_pull_apart, anchor=pull_apart_anchor,
+pull_apart_full_ps = AIMNemsFull(device=ps_pull_apart, actuator=pull_apart_actuator,
                                  clearout_dim=(phaseshift_l_pull_apart, 0.3),
                                  gnd_box_h=10, pos_box_w=18)
-pull_apart_full_tdc = AIMNemsFull(device=tdc_pull_apart, anchor=pull_apart_anchor,
+pull_apart_full_tdc = AIMNemsFull(device=tdc_pull_apart, actuator=pull_apart_actuator,
                                   clearout_dim=(interaction_l_pull_apart, 0.3),
                                   gnd_box_h=10, pos_box_w=15)
 
@@ -142,14 +147,14 @@ tether_tdc = tdc_pull_apart.update(
 )
 
 tether_full_ps = pull_apart_full_ps.update(
-    anchor=tether_anchor_ps,
+    actuator=tether_actuator_ps,
     ps=tether_ps,
     clearout_dim=(tether_phaseshift_l + 5, 0.5),
     gnd_box_h=10.4,
 )
 
 tether_full_tdc = pull_apart_full_tdc.update(
-    anchor=tether_anchor_tdc,
+    actuator=tether_actuator_tdc,
     tdc=tether_tdc,
     clearout_dim=(tether_interaction_l + 5, 0.5),
     pos_box_w=11,
@@ -157,7 +162,7 @@ tether_full_tdc = pull_apart_full_tdc.update(
 )
 
 tether_full_comb_ps = pull_apart_full_ps.update(
-    anchor=tether_anchor_ps_comb,
+    actuator=tether_actuator_ps_comb,
     ps=tether_ps,
     clearout_dim=(tether_phaseshift_l + 5, 0.5),
     gnd_box_h=25

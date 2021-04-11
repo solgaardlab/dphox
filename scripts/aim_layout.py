@@ -199,7 +199,7 @@ pull_apart_taper = [pull_apart_full_ps.update(ps=ps_pull_apart.update(**ps_taper
                     for taper_change in (-0.05, -0.1, -0.15) for taper_l in (20, 30, 40)]
 pull_apart_fin = [pull_apart_full_ps.update(ps=ps_pull_apart.update(nanofin_w=nanofin_w))
                   for nanofin_w in (0.15, 0.2, 0.25)]
-pull_apart_stiff = [pull_apart_full_ps.update(anchor=pull_apart_anchor.update(spring_dim=spring_dim))
+pull_apart_stiff = [pull_apart_full_ps.update(actuator=pull_apart_actuator.update(spring_dim=spring_dim))
                     for spring_dim in [(100, 0.3), (100, 0.4)]]
 pull_apart_ps = [chip.mzi_arms([delay_line_50, ps], [delay_line_200],
                                interport_w=test_interport_w, name=f'pull_apart_{i}')
@@ -260,7 +260,7 @@ pull_apart_tdc_devices += [pull_apart_full_tdc.update(
         dc_gap_w=0.125, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2),
         **tdc_taper(20, -0.52)
     ),
-    anchor=pull_apart_anchor.update(pos_electrode_dim=(test_tdc_interaction_short_l, 4, 0.5),
+    actuator=pull_apart_actuator.update(pos_electrode_dim=(test_tdc_interaction_short_l, 4, 0.5),
                                     spring_dim=(test_tdc_interaction_short_l, 0.22),
                                     fin_dim=(test_tdc_interaction_short_l, 0.15)),
     clearout_dim=(test_tdc_interaction_short_l, 0.3),
@@ -296,7 +296,7 @@ pull_in_tdc_devices += [pull_in_full_tdc.update(
         dc_gap_w=0.125, bend_dim=(test_tdc_radius, test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2),
         **tdc_taper(20, -0.52)
     ),
-    anchor=pull_in_anchor.update(shuttle_dim=(test_tdc_interaction_short_l, 5)),
+    actuator=pull_in_actuator.update(shuttle_dim=(test_tdc_interaction_short_l, 5)),
     clearout_dim=(test_tdc_interaction_short_l, 0.1)
 )]
 pull_in_tdc = [dev.nazca_cell(f'pull_in_tdc_{i}') for i, dev in enumerate(pull_in_tdc_devices)]
@@ -369,7 +369,7 @@ print('Defining tether structures...')
 tether = [
              tether_full_ps.update(
                  ps=tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
-                 anchor=tether_anchor_ps.update(
+                 actuator=tether_actuator_ps.update(
                      spring_dim=(psl + 10, 0.22),
                      pos_electrode_dim=(psl, 4, 0.5),
                      fin_dim=(psl, 0.22)
@@ -380,7 +380,7 @@ tether = [
          ] + [
              tether_full_tdc.update(
                  tdc=tether_tdc.update(interaction_l=il, **tdc_taper(taper_l, taper_change)),
-                 anchor=tether_anchor_tdc.update(
+                 actuator=tether_actuator_tdc.update(
                      spring_dim=(il + 5, 0.22),
                      pos_electrode_dim=(il - 5, 4, 0.5),
                      fin_dim=(il, 0.3),
@@ -391,7 +391,7 @@ tether = [
              ((10, -0.1), (15, -0.1), (20, -0.16), (20, -0.32), (20, -0.52))
          ] + [
              tether_full_tdc.update(tdc=tether_tdc.update(interaction_l=test_tdc_interaction_short_l),
-                                    anchor=tether_anchor_tdc.update(
+                                    actuator=tether_actuator_tdc.update(
                                         spring_dim=(test_tdc_interaction_short_l + 12, 0.22),
                                         fin_dim=(test_tdc_interaction_short_l, 0.22),
                                         pos_electrode_dim=(test_tdc_interaction_short_l, 4, 0.5)
@@ -417,7 +417,7 @@ print('Defining aggressive structures...')
 
 tether_ps_safe = tether_full_ps.update(
     ps=tether_ps.update(phaseshift_l=80),
-    anchor=tether_anchor_tdc.update(
+    actuator=tether_actuator_tdc.update(
         spring_dim=(80 + 10, 0.22),
         pos_electrode_dim=(75, 4, 0.4),
         fin_dim=(80, 0.3),
@@ -429,7 +429,7 @@ tether_ps_safe = tether_full_ps.update(
 
 aggressive = [
                 tether_full_comb_ps.update(
-                    anchor=tether_anchor_ps_comb.update(spring_dim=(tether_phaseshift_l, 0.22),
+                    actuator=tether_actuator_ps_comb.update(spring_dim=(tether_phaseshift_l, 0.22),
                          pos_electrode_dim=(tether_phaseshift_l - 15, 4, 3.2),
                          fin_dim=(tether_phaseshift_l - 10, 0.3), shuttle_dim=(20, 3)),
                     ps=tether_ps.update(phaseshift_l=tether_phaseshift_l - 10, **ps_taper(10, -0.05)),
@@ -438,7 +438,7 @@ aggressive = [
              ] + [tether_full_comb_ps] + [tether_ps_safe] * 2 + [pull_in_full_ps] + [
                  tether_full_ps.update(
                      ps=tether_ps.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
-                     anchor=tether_anchor_tdc.update(
+                     actuator=tether_actuator_tdc.update(
                          spring_dim=(psl + 10, 0.22),
                          pos_electrode_dim=(psl - 5, 4, 0.4),
                          fin_dim=(psl, 0.3),
@@ -469,21 +469,21 @@ More inv design and aggressive coupler variations
 extreme = [
               pull_in_full_ps.update(
                   ps=ps_pull_in.update(phaseshift_l=psl, **ps_taper(taper_l, taper_change)),
-                  anchor=pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
+                  actuator=pull_in_actuator.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
                   clearout_dim=(psl, 0.3)
               )
               for psl in (30, 40) for taper_l, taper_change in ((5, -0.1), (10, -0.1), (14, -0.1))
           ] + [
               pull_in_full_ps.update(
                   ps=ps_pull_in.update(phaseshift_l=psl, nanofin_w=nanofin_w),
-                  anchor=pull_in_anchor.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
+                  actuator=pull_in_actuator.update(shuttle_dim=(psl, 3), spring_dim=(psl, 0.22)),
                   clearout_dim=(psl, 0.3)
               )
               for psl in (10, 15) for nanofin_w in (0.25,)
           ] + [
               tether_full_ps.update(
                   ps=tether_ps.update(phaseshift_l=psl, **ps_taper(5, -0.1)),
-                  anchor=tether_anchor_ps.update(
+                  actuator=tether_actuator_ps.update(
                       spring_dim=(psl + 10, 0.22),
                       pos_electrode_dim=(psl - 5, 4, 0.3),
                       fin_dim=(psl, 0.15),
@@ -499,7 +499,7 @@ extreme = [
                                                  test_tdc_interport_w / 2 - 0.125 / 2 - waveguide_w / 2),
                                        **tdc_taper(10, -0.32)
                                        ),
-                  anchor=tether_anchor_tdc.update(
+                  actuator=tether_actuator_tdc.update(
                       spring_dim=(il + 10, 0.22),
                       pos_electrode_dim=(il, 4, 0.4),
                       fin_dim=(il, 0.3),

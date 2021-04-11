@@ -21,8 +21,10 @@ try:
 except ImportError:
     pass
 try:
+    MEEP_IMPORTED = True
     import meep as mp
 except ImportError:
+    MEEP_IMPORTED = False
     print("Unable to import pymeep")
 
 
@@ -34,6 +36,14 @@ class Multilayer:
 
     @classmethod
     def from_nazca_cell(cls, cell: nd.Cell):
+        """
+
+        Args:
+            cell: Nazca cell to get Multilayer
+
+        Returns:
+
+        """
         # a glimpse into cell_iter()
         # code from https://nazca-design.org/forums/topic/clipping-check-distance-and-length-for-interconnects/
         multilayers = defaultdict(list)
@@ -50,13 +60,25 @@ class Multilayer:
 
     @property
     def bounds(self) -> Dim4:
-        """
+        """Bounding box
 
-        Returns: Bounding box for the component
+        Returns:
+            Bounding box for the component of the form (minx, maxx, miny, maxy)
 
         """
         bbox = self.gdspy_cell().get_bounding_box()
         return bbox[0][0], bbox[0][1], bbox[1][0], bbox[1][1]
+
+    @property
+    def size(self) -> Dim2:
+        """Size of the pattern
+
+        Returns:
+            Tuple of the form :code:`(sizex, sizey)`
+
+        """
+        b = self.bounds  # (minx, miny, maxx, maxy)
+        return b[2] - b[0], b[3] - b[1]  # (maxx - minx, maxy - miny)
 
     @property
     def center(self) -> Dim2:
@@ -185,17 +207,21 @@ class Multilayer:
             nd.put_stub()
         return cell
 
-    def meep_geometry(self, layer_to_zrange: Dict[str, Tuple[float, float]], process_extrusion: Dict[str, List[Tuple[str, str, str]]] = None, layer_to_material: Dict[str, mp.Medium] = None, dimensions: int = 3) -> Dict[str, List[mp.GeometricObject]]:
+    def meep_geometry(self, layer_to_zrange: Dict[str, Tuple[float, float]],
+                      process_extrusion: Dict[str, List[Tuple[str, str, str]]] = None,
+                      layer_to_material: Dict = None, dimensions: int = 3) -> Dict:
         """Turns this multilayer into a  dictionary of meep geometry objects
         Args:
             layer_to_zrange: a dictionary of z-positions that describe thicknesses or depths for named process layers
-            process_extrusion: a dictionary of steps that define the processing steps for the masks described in the multilayer
+            process_extrusion: a dictionary of steps that define the processing steps
+                for the masks described in the multilayer
             layer_to_material: a dictionary mapping the layer to the corresponding meep material
             dimensions: the dimensionality of the meep FDTD simulation to be run.
-                        If dimensions=3: The geometry is  returned in the expected x,y,z coordinates where the z direction is the axis of extrusion.
-                        If dimensions=2: y and z are swapped, such that geometry extrusion is in the y direction. This allows for slab waveguide simulations using xy plane that conform to meep definition of a 2D simulation
-                        If dimensions=1: Not yet implemented
-
+                - If dimensions=3: The geometry is returned in the expected x,y,z coordinates where the
+                z direction is the axis of extrusion.
+                - If dimensions=2: y and z are swapped, such that geometry extrusion is in the y direction.
+                This allows for slab waveguide simulations using xy plane that conform to meep definition of a 2D simulation
+                - If dimensions=1: Not yet implemented
 
         Returns:
             Dictionary with layers as keys to lists of meep geomtery objects
@@ -212,7 +238,6 @@ class Multilayer:
                 return mp.Vector3(x, 0, y)
         else:
             axis_extrusion = mp.Vector3(0, 0, 1)
-
             def meep_coord(x, y):
                 return mp.Vector3(x, y, 0)
 
@@ -220,16 +245,20 @@ class Multilayer:
             zmin, zmax = zrange
             meep_geom_list = []
             for poly in pattern:
-                prism_pts = [meep_coord(x, y) for x, y in np.asarray(poly.exterior.coords.xy).T[1:, :]]  # normally is returned as a row of xs and ten a row of ys
-                meep_geom_list.append(mp.Prism(prism_pts, height=(zmax - zmin), axis=axis_extrusion, material=material).shift(zmin * axis_extrusion))
+                # normally is returned as a row of xs and then a row of ys
+                prism_pts = [meep_coord(x, y) for x, y in np.asarray(poly.exterior.coords.xy).T[1:, :]]
+                meep_geom_list.append(mp.Prism(prism_pts, height=(zmax - zmin), axis=axis_extrusion,
+                                               material=material).shift(zmin * axis_extrusion))
+                # overwrite with air material if interiors
                 if list(poly.interiors):
                     for inter in list(poly.interiors):
                         prism_interior_pts = [meep_coord(x, y) for x, y in np.asarray(inter.coords.xy).T[1:, :]]
-                        meep_geom_list.append(mp.Prism(prism_interior_pts, height=(zmax - zmin), axis=axis_extrusion, material=mp.air).shift(zmin * axis_extrusion))
+                        meep_geom_list.append(mp.Prism(prism_interior_pts, height=(zmax - zmin), axis=axis_extrusion,
+                                                       material=mp.air).shift(zmin * axis_extrusion))
                 # skip the first pt, meep doesn't like repeated pts like shapely
             return meep_geom_list
 
-        meep_geometries = {}
+        meep_geometries = defaultdict(list)
         # TODO: This structure is repeated a lot, there must be a more concise way to handle this. There is basically two iterators that are just slightly different
 
         if process_extrusion is not None:
@@ -237,31 +266,21 @@ class Multilayer:
                                                     process_extrusion=process_extrusion)
             for layer, pattern_zrange in layer_to_extrusion.items():
                 layer = layer.split('_')[0]
-                if layer not in layer_to_material.keys():
-                    continue
-                pattern, zrange = pattern_zrange
-                material = layer_to_material[layer]
-
-                if layer in meep_geometries.keys():
+                if layer in layer_to_material.keys():
+                    pattern, zrange = pattern_zrange
+                    material = layer_to_material[layer]
                     meep_geometries[layer] += _pattern_to_prisms(pattern, material, zrange)
-                else:
-                    meep_geometries[layer] = _pattern_to_prisms(pattern, material, zrange)
         else:
             for layer, pattern in self.layer_to_pattern.items():
-                if layer not in layer_to_material.keys():
-                    continue
-                material = layer_to_material[layer]
-                try:
-                    zrange = layer_to_zrange[layer]
-                except KeyError:
-                    print(f"No zranges given for the layer {layer}")
-
-                if layer in meep_geometries.keys():
-                    meep_geometries[layer] += _pattern_to_prisms(pattern, material, zrange)
-                else:
+                if layer in layer_to_material.keys():
+                    material = layer_to_material[layer]
+                    try:
+                        zrange = layer_to_zrange[layer]
+                    except KeyError:
+                        raise KeyError(f"No zranges given for the layer {layer}")
                     meep_geometries[layer] = _pattern_to_prisms(pattern, material, zrange)
 
-        return meep_geometries
+        return dict(meep_geometries)
 
     def _init_multilayer(self) -> Tuple[Dict[Union[int, str], MultiPolygon], Dict[str, Port]]:
         self._pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
@@ -275,10 +294,29 @@ class Multilayer:
         return pattern_dict, port
 
     def add(self, pattern: Pattern, layer: str):
+        """Add pattern, layer to Multilayer
+
+        Args:
+            pattern: :code:`Pattern` to add
+            layer: Layer to incorporate :code:`Pattern`
+
+        Returns:
+
+        """
         self.pattern_to_layer.append((pattern, layer))
         self.layer_to_pattern, self.port = self._init_multilayer()
 
     def plot(self, ax, layer_to_color: Dict[Union[int, str], Union[Dim3, str]], alpha: float = 0.5):
+        """
+
+        Args:
+            ax:
+            layer_to_color:
+            alpha:
+
+        Returns:
+
+        """
         for layer, pattern in self.layer_to_pattern.items():
             ax.add_patch(PolygonPatch(pattern, facecolor=layer_to_color[layer], edgecolor='none', alpha=alpha))
         b = self.bounds
@@ -323,7 +361,8 @@ class Multilayer:
             meshes[layer] = mesh
 
         if process_extrusion is not None:
-            layer_to_extrusion = self._build_layers(layer_to_zrange, process_extrusion)
+            # layer_to_extrusion = self._build_layers(layer_to_zrange, process_extrusion)
+            layer_to_extrusion = self._build_layers_v0(layer_to_zrange, process_extrusion)
             for layer, pattern_zrange in layer_to_extrusion.items():
                 pattern, zrange = pattern_zrange
                 _add_trimesh_layer(pattern, zrange, layer)
@@ -377,7 +416,8 @@ class Multilayer:
         self.to_trimesh_scene(layer_to_zrange, process_extrusion, layer_to_color, ignore_layers, engine).show()
 
     def _conformal_dilation(self, sorted_heights, thickness, topo_map_dict, raising_pattern, bounding_box):
-        # The strategy is to dilate everything, then pairwise difference by height so the tallest is unobstructed. Finally, apply the raising_pattern which is based on the current mask layer
+        # The strategy is to dilate everything, then pairwise difference by height so the tallest is unobstructed.
+        # Finally, apply the raising_pattern which is based on the current mask layer
         for count, infr_h in enumerate(sorted_heights):
             for supr_h in sorted_heights:
                 if count == 0:
@@ -385,7 +425,8 @@ class Multilayer:
                     dilated_pattern = topo_map_dict[_um_str(supr_h)].offset(grow_d=thickness).intersection(raising_pattern)
                     topo_map_dict[_um_str(supr_h)] = dilated_pattern.union(topo_map_dict[_um_str(supr_h)])
                 elif supr_h > infr_h:  # only looking at the necessary lower triangle of the matrix of layers
-                    #  moving boudaries for shape dilation and hole shrinkage. The infr_h pattern shrinks based on the dilation of the supr_h pattern
+                    #  moving boudaries for shape dilation and hole shrinkage.
+                    #  The infr_h pattern shrinks based on the dilation of the supr_h pattern
                     topo_map_dict[_um_str(infr_h)] = Pattern(topo_map_dict[_um_str(infr_h)]).difference(
                         Pattern(topo_map_dict[_um_str(supr_h)]))
             topo_map_dict[_um_str(infr_h)] = bounding_box.intersection(topo_map_dict[_um_str(infr_h)])
@@ -413,12 +454,43 @@ class Multilayer:
                 if float(old_elevation) >= float(new_elevation):
                     continue
                 extrusion_zrange = (float(old_elevation), float(new_elevation))
-                extrusion_pattern = Pattern(topo_map_dict[new_elevation]).intersection(Pattern(old_topo_map_dict[old_elevation])).shapely
+                extrusion_pattern = Pattern(topo_map_dict[new_elevation], call_union=False).intersection(Pattern(old_topo_map_dict[old_elevation], call_union=False)).shapely
                 new_layer = layer + '_' + _um_str(old_elevation) + '_' + _um_str(new_elevation)
                 if extrusion_pattern.geoms:
                     pattern_shapely = cascaded_union(extrusion_pattern.geoms)
                     pattern_shapely = MultiPolygon([pattern_shapely]) if isinstance(pattern_shapely, Polygon) else pattern_shapely
                     layer_to_extrusion[new_layer] = (pattern_shapely, extrusion_zrange)
+        return layer_to_extrusion
+
+    def _build_layers_v0(self, layer_to_zrange: Dict[str, Tuple[float, float]],
+                         process_extrusion: Dict[str, List[Tuple[str, str, str]]]):
+        layer_to_extrusion = {}
+        layers = self.layer_to_pattern.keys()
+        layer_to_pattern_processed = self.layer_to_pattern.copy()
+
+        for step, operations in process_extrusion.items():
+            for layer_relation in operations:
+                layer, other_layer, operation = layer_relation
+                if 'dope' in step and operation == 'intersection':
+                    # make a new layer for each doping intersection
+                    zmin, zmax = layer_to_zrange[other_layer]
+                    z0, z1 = layer_to_zrange[layer]
+                    # TODO(): how to deal with different depth doping currently not addressed
+                    new_zrange = (max(zmax - (z1 - z0), zmin), zmax)
+                else:
+                    new_zrange = layer_to_zrange[layer]
+                if layer in layers:
+                    if other_layer in layers:
+                        pattern = Pattern(layer_to_pattern_processed[layer]).boolean_operation(
+                            Pattern(layer_to_pattern_processed[other_layer]), operation
+                        ).shapely
+                    else:
+                        pattern = layer_to_pattern_processed[layer]
+                    if pattern.geoms:
+                        pattern_shapely = cascaded_union(pattern.geoms)
+                        pattern_shapely = MultiPolygon([pattern_shapely]) if isinstance(pattern_shapely, Polygon) else pattern_shapely
+                        layer_to_pattern_processed[layer] = pattern
+                        layer_to_extrusion[layer] = (pattern_shapely, new_zrange)
         return layer_to_extrusion
 
     def _build_layers(self, layer_to_zrange: Dict[str, Tuple[float, float]],
@@ -454,8 +526,11 @@ class Multilayer:
                     print(f"No zranges given for the layer {layer}")
                 if layer in layers:
                     if other_layer in layers:
-                        # TODO(Nate): Unnecessary instances. The string boolean operation forces this Pattern(Multipolygon).boolean_opertaion(Pattern(Multipolygon)).shapely
-                        # It is clear that the Pattern() is only providing a lookup dictionary  but the actual input/output/operation is with Multipolygons. May be part of a larger codebse adjustment
+                        # TODO(Nate): Unnecessary instances. The string boolean operation forces this
+                        #  Pattern(Multipolygon).boolean_opertaion(Pattern(Multipolygon)).shapely
+                        # It is clear that the Pattern() is only providing a lookup dictionary
+                        # but the actual input/output/operation is with Multipolygons.
+                        # May be part of a larger codebase adjustment
                         pattern = Pattern(layer_to_pattern_processed[layer]).boolean_operation(
                             Pattern(layer_to_pattern_processed[other_layer]), operation
                         ).shapely
@@ -514,9 +589,23 @@ class Multilayer:
         self.layer_to_pattern, self.port = self._init_multilayer()
         return [(fill, layer_name)]
 
+    @classmethod
+    def aggregate(cls, multilayers: List["Multilayer"]):
+        return cls(sum([m.pattern_to_layer for m in multilayers], []))
+
+
+class Grating(Multilayer):
+    def __init__(self, box_dim: Dim2, pitch: float, duty_cycle: float, fill: str, etch: str):
+        self.stripe_w = pitch * duty_cycle
+        self.pitch = pitch
+        self.duty_cycle = duty_cycle
+
+        super(Grating, self).__init__([(Box(box_dim), fill),
+                                       (Box(box_dim).striped(self.stripe_w, (pitch, 0)), etch)])
+
 
 class Via(Multilayer):
-    def __init__(self, via_dim: Dim2, boundary_grow: Union[float, Tuple[float]], metal: Union[str, List[str]],
+    def __init__(self, via_dim: Dim2, boundary_grow: Union[float, Dim2], metal: Union[str, List[str]],
                  via: Union[str, List[str]], pitch: float = 0, shape: Optional[Shape2] = None):
         """Via / metal multilayer stack (currently all params should be specified to 2 decimal places)
 

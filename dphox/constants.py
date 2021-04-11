@@ -9,77 +9,82 @@ except ImportError:
 
 AMF_STACK = {
     'layers': {
-        'waveguide': 10,
-        'grating': 11,
-        'via': 100,
-        'via_heater': 120,
-        'mt_heater': 125,
-        'heater': 115,
-        'slab': 12,
-        'pad': 150,
-        'trench': 160
+        'ridge': (10, 0),
+        'rib': (11, 0),
+        'v1': (100, 0),
+        'v2': (120, 0),
+        'mt_heater': (125,  0),
+        'heater': (115, 0),
+        'slab': (12, 0),
+        'pad': (150, 0),
+        'trench': (160, 0)
     },
     'cross_sections': {
         'heater_xs': [
             {
-                'layer': 115,    # heater
+                'layer': 'heater',
                 'growx': 0.755,  # (waveguide_w - heater_w) / 2 + 0.005
                 'growy': 0.005
             },
             {
-                'layer': 10,   # waveguide
+                'layer': 'ridge',
                 'growy': 0.001
             }
         ],
         'metal_xs': [
             {
-                'layer': 125,  # mt_heater
+                'layer': 'mt_heater',
             }
         ],
-        'via_heater_xs': [
+        'v1_xs': [
             {
-                'layer': 120   # via_heater
+                'layer': 'v1'
+            }
+        ],
+        'v2_xs': [
+            {
+                'layer': 'v2'
             },
             {
-                'layer': 125,  # mt_heater
+                'layer': 'mt_heater',
                 'growx': 1.5,
                 'growy': 1.5
             },
             {
-                'layer': 115,  # heater
+                'layer': 'mt_heater',  # heater
                 'growx': 1.5,
                 'growy': 1.5
             }
         ],
         'grating_xs': [
             {
-                'layer': 11    # grating
+                'layer': 'rib'    # grating
             }
         ],
         'waveguide_xs': [
             {
-                'layer': 10,   # waveguide
+                'layer': 'ridge',   # waveguide
                 'growy': 0.004
             }
         ],
         'pad_xs': [
             {
-                'layer': 125   # mt_heater
+                'layer': 'mt_heater'   # mt_heater
             },
             {
-                'layer': 150,  # pad
+                'layer': 'pad',  # pad
                 'growx': -2,
                 'growy': -2
             }
         ],
         'trench_xs': [
             {
-                'layer': 160   # trench
+                'layer': 'trench'   # trench
             }
         ],
         'slab_xs': [
             {
-                'layer': 12    # slab
+                'layer': 'slab'    # slab
             }
         ]
     },

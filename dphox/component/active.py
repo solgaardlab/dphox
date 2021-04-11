@@ -1,6 +1,6 @@
 from ..typing import *
 from .pattern import Pattern, Path, get_linear_adiabatic, cubic_taper, Port
-from .passive import Waveguide, DC, Box
+from .passive import Waveguide, DC, Box, MMI
 from .multilayer import Multilayer, Via
 
 from copy import deepcopy as copy
@@ -11,7 +11,6 @@ MEEP_IMPORTED = False  # for meep sims
 try:
     SIMPHOX_IMPORTED = True
     from simphox.device import ModeDevice, MaterialBlock, SILICON, Material
-
     AIR = Material('Air', (0, 0, 0), 1)
 except ImportError:
     SIMPHOX_IMPORTED = False
@@ -370,13 +369,13 @@ class LateralNemsTDC(Pattern):
             return LateralNemsTDC(**config)
 
 
-class NemsAnchor(Pattern):
+class NemsActuator(Pattern):
     def __init__(self, fin_dim: Dim2, shuttle_dim: Dim2, spring_dim: Dim2 = None,
                  straight_connector: Optional[Dim2] = None, tether_connector: Optional[Dim4] = None,
                  pos_electrode_dim: Optional[Dim3] = None, gnd_electrode_dim: Optional[Dim2] = None,
                  include_support_spring: bool = False, tooth_param: Dim3 = None, pull_in_sep: float = 0,
                  shuttle_stripe_w: float = 1):
-        """NEMS anchor (the main MEMS section for the phase shifter and tunable directional coupler)
+        """NEMS actuator (the main MEMS section for the phase shifter and tunable directional coupler)
 
         Args:
             fin_dim: fixed fin dimension (x, y)
@@ -390,7 +389,7 @@ class NemsAnchor(Pattern):
             tooth_param: (length, width, inter-tooth gap, overlap) (suggested: (0.3, 3, 0.15, 0.5))
             shuttle_stripe_w: design an etch hole shuttle consisting of stripes of width ``shuttle_stripe_w``
                 (if 0, do not add a striped shuttle).
-            pull_in_sep: horizontal pull in separation for the anchor, ignored if not pull in
+            pull_in_sep: horizontal pull in separation for the actuator, ignored if not pull in
                 (final pos electrode dim is positive)
         """
         self.fin_dim = fin_dim
@@ -480,7 +479,7 @@ class NemsAnchor(Pattern):
                 pads.extend([gnd_electrode_left, gnd_electrode_right])
                 gnd_pads = [gnd_electrode_left, gnd_electrode_right]
 
-        super(NemsAnchor, self).__init__(*patterns, call_union=False)
+        super(NemsActuator, self).__init__(*patterns, call_union=False)
         self.pads, self.springs, self.shuttle, self.comb = pads, springs, shuttle, comb
         self.pos_pads, self.gnd_pads = pos_pads, gnd_pads
         shift = [-connector.center[0], -connector.bounds[1]]
@@ -505,7 +504,7 @@ class NemsAnchor(Pattern):
             self.__init__(**config)
             return self
         else:
-            return NemsAnchor(**config)
+            return NemsActuator(**config)
 
 
 class ContactWaveguide(Pattern):
@@ -519,10 +518,10 @@ class ContactWaveguide(Pattern):
             waveguide_w: waveguide width
             length: length of waveguide
             rib_taper_param: rib taper params
-            gnd_contact_dim:
-            gnd_connector_dim:
+            gnd_contact_dim: ground contact dimension for the contacted waveguide
+            gnd_connector_dim: ground connector dimension for the contacted waveguide
             rib_etch_grow:
-            flipped:
+            flipped: flip the rib connector / actuator
         """
         self.waveguide_w = waveguide_w
         self.rib_taper_param = rib_taper_param
@@ -557,11 +556,37 @@ class ContactWaveguide(Pattern):
         self.port['b0'] = Port(length, 0)
 
 
+class ThermalPS(Multilayer):
+    def __init__(self, waveguide_w: float, ps_w: float, length: float, via: Via, ridge: str, ps_layer: str):
+        """Thermal phase shifter (e.g. TiN phase shifter)
+
+        Args:
+            waveguide_w: Waveguide width
+            ps_w: Phase shifter width
+            via: Via to connect heater to the top metal layer
+            ridge: Waveguide layer
+            ps_layer: Phase shifter layer (e.g. TiN)
+        """
+
+        waveguide = Waveguide(waveguide_w=waveguide_w, length=length)
+        ps = Waveguide(waveguide_w=ps_w, length=length)
+        left_via, right_via = via.copy.align(ps.port['a0'].xy), via.copy.align(ps.port['b0'].xy)
+
+        super(ThermalPS, self).__init__(
+            [(waveguide, ridge), (ps, ps_layer)] + left_via.pattern_to_layer + right_via.pattern_to_layer
+        )
+
+        self.port['a0'] = waveguide.port['a0']
+        self.port['b0'] = waveguide.port['b0']
+        self.port['gnd'] = Port(self.bounds[0], 0, -np.pi)
+        self.port['pos'] = Port(self.bounds[1], 0)
+
+
 class SimpleComb(Pattern):
     def __init__(self, tooth_param: Dim3, overlap: float = 0, side_align: bool = False,
                  edge_tooth_factor: int = 3, shuttle_pad_dim: Optional[Dim2] = None,
                  pos_pad_dim: Optional[Dim2] = None):
-        """
+        """Simple comb drive structure (e.g., for comb-based lateral phase shifter)
 
         Args:
 
@@ -625,7 +650,7 @@ class SimpleComb(Pattern):
 
 
 class LateralNemsFull(Multilayer):
-    def __init__(self, device: Union[LateralNemsPS, LateralNemsTDC], anchor: NemsAnchor,
+    def __init__(self, device: Union[LateralNemsPS, LateralNemsTDC], actuator: NemsActuator,
                  mid_via: Via, top_via: Via, trace_w: float,
                  pos_box_w: float, gnd_box_h: float, clearout_dim: Dim2, dope_grow: float, dope_expand: float,
                  ridge: str, rib: str, shuttle_dope: str,
@@ -636,7 +661,7 @@ class LateralNemsFull(Multilayer):
 
         Args:
             device: phase shifter or tunable directional coupler
-            anchor: top anchor (None in pull-in case)
+            actuator: top actuator (None in pull-in case)
             mid_via: gnd ``Via`` connection
             top_via: pos ``Via`` connection
             trace_w: trace width
@@ -677,13 +702,13 @@ class LateralNemsFull(Multilayer):
         self.config = copy(self.__dict__)
         self.config.update({
             device_name: device.config,
-            'anchor': anchor.config,
+            'actuator': actuator.config,
             'top_via': top_via.config,
             'mid_via': mid_via.config,
         })
 
-        top = anchor.copy.to(device.port['fin0'])
-        bot = anchor.copy.to(device.port['fin1'])
+        top = actuator.copy.to(device.port['fin0'])
+        bot = actuator.copy.to(device.port['fin1'])
         full = Pattern(top, bot, device)
         vias = []
         device_pads = device.pads if device.pads is not None else []
@@ -699,7 +724,7 @@ class LateralNemsFull(Multilayer):
         if gnd_metal is not None:
             if top.gnd_pads:
                 gnd_pads = top.gnd_pads + bot.gnd_pads
-            elif device_name == 'ps' and anchor.gnd_electrode_dim is None:
+            elif device_name == 'ps' and actuator.gnd_electrode_dim is None:
                 if not device.gnd_pads:
                     raise ValueError('No ground pads available...')
                 gnd_pads = device.gnd_pads
@@ -737,7 +762,7 @@ class LateralNemsFull(Multilayer):
             gnd_box = Box((gnd.size[0], gnd.size[1] + gnd_box_h * 0.8)).hollow(trace_w).align(gnd)
             metals.append((gnd_box, gnd_metal))
             vias.extend(sum([mid_via.copy.align(pad).pattern_to_layer for pad in gnd_pads], []))
-            if anchor.gnd_electrode_dim is None:
+            if actuator.gnd_electrode_dim is None:
                 port['gnd_l'] = Port(gnd_box.bounds[0] + trace_w / 2, gnd_box.bounds[3], np.pi / 2)
                 port['gnd_r'] = Port(gnd_box.bounds[2] - trace_w / 2, gnd_box.bounds[3], np.pi / 2)
 
@@ -959,6 +984,52 @@ class NemsMillerNode(Multilayer):
         self.gnd_wg_rib_etch = gnd_wg_rib_etch
 
 
+class MZI(Multilayer):
+    def __init__(self, coupler: Union[DC, MMI], top: List[Union[Multilayer, float]], bottom: List[Union[Multilayer, float]],
+                 ridge: str):
+        """
+
+        Args:
+            dc: Directional coupler or MMI for MZI
+            top:
+            bottom:
+            ridge:
+        """
+        patterns = [dc]
+        top_port = dc.port['b0']
+        bottom_port = dc.port['b1']
+        for t in top:
+            d = t if isinstance(t, Multilayer) else Waveguide(dc.waveguide_w, t)
+            patterns.append(d.to(top_port))
+            top_port = d.port['b0']
+        for b in bottom:
+            d = b if isinstance(b, Multilayer) else Waveguide(dc.waveguide_w, b)
+            patterns.append(d.to(bottom_port))
+            bottom_port = d.port['b0']
+
+        arm_length_diff = top_port.x - bottom_port.x
+
+        if arm_length_diff > 0:
+            patterns.append(Waveguide(dc.waveguide_w, arm_length_diff).to(bottom_port))
+        elif arm_length_diff < 0:
+            patterns.append(Waveguide(dc.waveguide_w, -arm_length_diff).to(top_port))
+            top_port = patterns[-1].port['b0']
+
+        final_dc = dc.copy.to(top_port)
+        patterns.append(final_dc)
+
+        pattern_to_layer = sum([[(p, ridge)] if isinstance(p, Pattern) else p.pattern_to_layer for p in patterns], [])
+
+        super(MZI, self).__init__(pattern_to_layer)
+
+        self.dc = dc
+        self.top = top
+        self.bottom = bottom
+        self.port['a0'] = patterns[0].port['a0']
+        self.port['b0'] = patterns[0].port['b0']
+        self.port['a1'] = final_dc.port['a1']
+        self.port['b1'] = final_dc.port['b1']
+
 # class RingResonator(Pattern):
 #     def __init__(self, waveguide_w: float, taper_l: float = 0,
 #                  taper_params: Union[np.ndarray, List[float]] = None,
@@ -989,10 +1060,10 @@ class NemsMillerNode(Multilayer):
 
 
 def _handle_nems_config(config):
-    anchor = NemsAnchor(**config['anchor']) if isinstance(config['anchor'], dict) else config['anchor']
+    actuator = NemsActuator(**config['actuator']) if isinstance(config['actuator'], dict) else config['actuator']
     top_via = Via(**config['top_via']) if isinstance(config['top_via'], dict) else config['top_via']
     mid_via = Via(**config['mid_via']) if isinstance(config['mid_via'], dict) else config['mid_via']
-    for key in ('anchor', 'top_via', 'mid_via'):
+    for key in ('actuator', 'top_via', 'mid_via'):
         del config[key]
     if 'tdc' in config:
         device = LateralNemsTDC(**config['tdc']) if isinstance(config['tdc'], dict) else config['tdc']
@@ -1007,7 +1078,7 @@ def _handle_nems_config(config):
         raise AttributeError('Config not supported')
     return {
         'device': device,
-        'anchor': anchor,
+        'actuator': actuator,
         'top_via': top_via,
         'mid_via': mid_via,
         **config
