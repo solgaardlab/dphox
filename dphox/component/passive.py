@@ -2,8 +2,11 @@ from ..typing import *
 from .pattern import Pattern, Path, Port
 
 from copy import deepcopy as copy
-from shapely.geometry import MultiPolygon, box, Polygon
+from shapely.geometry import MultiPolygon, box, MultiPoint
 import numpy as np
+import nazca as nd
+
+from ..utils import circle
 
 try:
     import plotly.graph_objects as go
@@ -24,40 +27,66 @@ class Box(Pattern):
                                   decimal_places=decimal_places)
 
     @classmethod
-    def bbox(cls, pattern: Pattern):
+    def bbox(cls, pattern: Pattern) -> Pattern:
+        """Bounding box for pattern
+
+        Args:
+            pattern: The pattern over which to take a bounding box
+
+        Returns:
+            A bounding box pattern of the same size as :code:`pattern`
+
+        """
         return cls(pattern.size).align(pattern)
 
-    def expand(self, grow: float):
+    def expand(self, grow: float) -> Pattern:
+        """An aligned box that grows by amount :code:`grow`
+
+        Args:
+            grow: The amount to grow the box
+
+        Returns:
+            The box after the grow transformation
+
+        """
         big_box_dim = (self.box_dim[0] + grow, self.box_dim[1] + grow)
         return Box(big_box_dim).align(self)
 
-    def hollow(self, thickness: float):
+    def hollow(self, thickness: float) -> Pattern:
+        """A hollow box of thickness :code:`thickness` on all four sides.
+
+        Args:
+            thickness: Thickness of the box
+
+        Returns:
+
+        """
         return Pattern(
             self.difference(Box((self.box_dim[0] - 2 * thickness, self.box_dim[1])).align(self)),
             self.difference(Box((self.box_dim[0], self.box_dim[1] - 2 * thickness)).align(self)),
         )
 
-    def u(self, thickness: float):
+    def u(self, thickness: float) -> Pattern:
         return Pattern(
             self.difference(Box((self.box_dim[0] - 2 * thickness, self.box_dim[1])).align(self)),
             self.difference(Box((self.box_dim[0], self.box_dim[1] - thickness)).align(self).valign(self)),
         )
 
-    def striped(self, stripe_w: float, pitch: Optional[Dim2] = None):
+    def striped(self, stripe_w: float, pitch: Optional[Dim2] = None) -> Pattern:
         pitch = (stripe_w * 2, stripe_w * 2) if pitch is None else pitch
-        patterns = [self.hollow(stripe_w)]
+        patterns = [self.hollow(stripe_w)] if pitch[0] > 0 and pitch[1] > 0 else []
         if pitch[0] > 0 and not 3 * pitch[1] >= self.size[0]:
             # edges of etch holes are really thick
             # TODO: make the edges lean toward large holes over small holes. currently attepting to subtract the last pitch
             xs = np.mgrid[self.bounds[0] + pitch[0]:self.bounds[2]:pitch[0]]
-            patterns.append(Pattern(*[Box((stripe_w, self.size[1])).halign(x) for x in xs]).align(patterns[0]))
+            patterns.append(Pattern(*[Box((stripe_w, self.size[1])).halign(x) for x in xs], call_union=False).align(self.center))
         if pitch[1] > 0 and not 3 * pitch[1] >= self.size[1]:
             ys = np.mgrid[self.bounds[1] + pitch[1]:self.bounds[3]:pitch[1]]
-            patterns.append(Pattern(*[Box((self.size[0], stripe_w)).valign(y) for y in ys]).align(patterns[0]))
+            patterns.append(Pattern(*[Box((self.size[0], stripe_w)).valign(y) for y in ys], call_union=False).align(self.center))
         return Pattern(*patterns, call_union=False)
 
     def flexure(self, spring_dim: Dim2, connector_dim: Dim2 = None, symmetric_connector: bool = True,
-                stripe_w: float = 1):
+                stripe_w: float = 1) -> Pattern:
         spring = Box(spring_dim).align(self)
         connector = Box(connector_dim).align(self)
         connectors = []
@@ -86,7 +115,7 @@ class DC(Pattern):
             interaction_l: interaction length
             coupler_boundary_taper_ls: coupler boundary tapers length
             coupler_boundary_taper: coupler boundary taper params
-            end_bend_dim: If specified, places an additional end bend (see DC)
+            end_bend_dim: If specified, places an additional end bend
             use_radius: use radius to define bends
         """
         self.bend_dim = bend_dim
@@ -201,7 +230,7 @@ class GratingPad(Pattern):
             super(GratingPad, self).__init__(path)
         self.port['a0'] = Port(0, 0)
 
-    def to(self, port: Dim2):
+    def to(self, port: Dim2) -> Pattern:
         if self.out:
             return self.translate(port[0], port[1])
         else:
@@ -211,10 +240,10 @@ class GratingPad(Pattern):
 
 class Interposer(Pattern):
     def __init__(self, waveguide_w: float, n: int, period: float, radius: float,
-                 trombone_radius: Optional[float] = None,
-                 final_period: Optional[float] = None, self_coupling_extension_dim: Optional[Dim2] = None,
-                 horiz_dist: float = 0, num_trombones: int = 1):
-        """
+                 trombone_radius: Optional[float] = None, final_period: Optional[float] = None,
+                 self_coupling_extension_dim: Optional[Dim2] = None, self_coupling_final: bool = True,
+                 horiz_dist: float = 0, num_trombones: int = 1, trombone_at_end: bool = True):
+        """Pitch-changing array of waveguides
 
         Args:
             waveguide_w: waveguide width
@@ -224,9 +253,8 @@ class Interposer(Pattern):
             trombone_radius: trombone bend radius
             final_period: final period for the interposer
             self_coupling_extension_dim: self coupling for alignment
-            horiz_dist: additional horizontal distance (usually to make room for wirebonds)
+            horiz_dist: additional horizontal distance
             num_trombones: number of trombones
-            shift: translate this component in xy
         """
         trombone_radius = radius if trombone_radius is None else trombone_radius
         final_period = period if final_period is None else final_period
@@ -246,6 +274,9 @@ class Interposer(Pattern):
             num_trombones = int(np.ceil(max_length_diff / 2 / (final_period - 3 * radius))) \
                 if not num_trombones else num_trombones
             length_diff = (angled_length - x_length) * idx if idx < mid else (angled_length - x_length) * (n - 1 - idx)
+            if not trombone_at_end:
+                for _ in range(num_trombones):
+                    path.trombone(length_diff / 2 / num_trombones, radius=trombone_radius)
             path.segment(horiz_dist)
             if idx < mid:
                 path.turn(radius, -angle)
@@ -257,23 +288,31 @@ class Interposer(Pattern):
                 path.segment(angled_length * (mid - n + idx))
                 path.turn(radius, -angle)
                 path.segment(x_length * (n - idx))
-            for _ in range(num_trombones):
-                path.trombone(length_diff / 2 / num_trombones, radius=trombone_radius)
+            if trombone_at_end:
+                for _ in range(num_trombones):
+                    path.trombone(length_diff / 2 / num_trombones, radius=trombone_radius)
             paths.append(path)
             init_pos[idx] = np.asarray((0, period * idx))
             final_pos[idx] = np.asarray((path.x, path.y))
 
         if self_coupling_extension_dim is not None:
-            dx, dy = final_pos[0, 0], final_pos[0, 1]
+            if self_coupling_final:
+                dx, dy = final_pos[0, 0], final_pos[0, 1]
+                p = final_period
+                s = 1
+            else:
+                dx, dy = init_pos[0, 0], init_pos[0, 1]
+                p = period
+                s = -1
             radius, grating_length = self_coupling_extension_dim
-            self_coupling_path = Path(width=waveguide_w).rotate(-np.pi).translate(dx=dx, dy=dy - final_period)
-            self_coupling_path.turn(radius, -np.pi, tolerance=0.001)
+            self_coupling_path = Path(width=waveguide_w).rotate(-np.pi * self_coupling_final).translate(dx=dx, dy=dy - p)
+            self_coupling_path.turn(radius, -np.pi * s, tolerance=0.001)
             self_coupling_path.segment(length=grating_length + 5)
-            self_coupling_path.turn(radius=radius, angle=np.pi / 2, tolerance=0.001)
-            self_coupling_path.segment(length=final_period * (n + 1) - 6 * radius)
-            self_coupling_path.turn(radius=radius, angle=np.pi / 2, tolerance=0.001)
+            self_coupling_path.turn(radius=radius, angle=np.pi / 2 * s, tolerance=0.001)
+            self_coupling_path.segment(length=p * (n + 1) - 6 * radius)
+            self_coupling_path.turn(radius=radius, angle=np.pi / 2 * s, tolerance=0.001)
             self_coupling_path.segment(length=grating_length + 5)
-            self_coupling_path.turn(radius=radius, angle=-np.pi, tolerance=0.001)
+            self_coupling_path.turn(radius=radius, angle=-np.pi * s, tolerance=0.001)
             paths.append(self_coupling_path)
 
         super(Interposer, self).__init__(*paths, call_union=False)
@@ -368,11 +407,21 @@ class AlignmentCross(Pattern):
         super(AlignmentCross, self).__init__(p, q)
 
 
+class HoleArray(Pattern):
+    def __init__(self, diameter: float, grid_shape: Tuple[int, int], pitch: Optional[float] = None, n_points: int = 8):
+        self.diameter = diameter
+        self.pitch = pitch
+        self.grid_shape = grid_shape
+        super(HoleArray, self).__init__(MultiPolygon([(circle(radius=0.5 * diameter, n=n_points,
+                                                              xy=(i * pitch, j * pitch)), [])
+                                                      for i in range(grid_shape[0]) for j in range(grid_shape[1])
+                                                      ]), call_union=False)
+
+
 class DelayLine(Pattern):
     def __init__(self, waveguide_width: float, delay_length: float, bend_radius: float, straight_length: float,
                  number_bend_pairs: int = 1, flip: bool = False):
-        """
-        Delay Line
+        """Delay Line
         Args:
             waveguide_width: the waveguide width
             delay_length: the delay line length increase over the straight length
