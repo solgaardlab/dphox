@@ -985,50 +985,52 @@ class NemsMillerNode(Multilayer):
 
 
 class MZI(Multilayer):
-    def __init__(self, coupler: Union[DC, MMI], top: List[Union[Multilayer, float]], bottom: List[Union[Multilayer, float]],
-                 ridge: str):
-        """
+    def __init__(self, coupler: Union[DC, MMI], ridge: str, top: List[Union[Multilayer, float]] = None,
+                 bottom: List[Union[Multilayer, float]] = None):
+        """An MZI with multilayer devices in the arms (e.g., phase shifters and/or grating taps)
 
         Args:
-            dc: Directional coupler or MMI for MZI
-            top:
-            bottom:
-            ridge:
+            coupler: Directional coupler or MMI for MZI
+            top: Top arm (waveguide matching bottom arm length if None)
+            bottom: Bottom arm (waveguide matching top arm length if None)
+            ridge: Waveguide layer string
         """
-        patterns = [dc]
-        top_port = dc.port['b0']
-        bottom_port = dc.port['b1']
-        for t in top:
-            d = t if isinstance(t, Multilayer) else Waveguide(dc.waveguide_w, t)
-            patterns.append(d.to(top_port))
-            top_port = d.port['b0']
-        for b in bottom:
-            d = b if isinstance(b, Multilayer) else Waveguide(dc.waveguide_w, b)
-            patterns.append(d.to(bottom_port))
-            bottom_port = d.port['b0']
+        patterns = [coupler]
+        top_port = coupler.port['b0']
+        bottom_port = coupler.port['b1']
+        if top is not None:
+            for t in top:
+                d = t if isinstance(t, Multilayer) else Waveguide(coupler.waveguide_w, t)
+                patterns.append(d.to(top_port))
+                top_port = d.port['b0']
+        if bottom is not None:
+            for b in bottom:
+                d = b if isinstance(b, Multilayer) else Waveguide(coupler.waveguide_w, b)
+                patterns.append(d.to(bottom_port))
+                bottom_port = d.port['b0']
 
         arm_length_diff = top_port.x - bottom_port.x
 
         if arm_length_diff > 0:
-            patterns.append(Waveguide(dc.waveguide_w, arm_length_diff).to(bottom_port))
+            patterns.append(Waveguide(coupler.waveguide_w, arm_length_diff).to(bottom_port))
         elif arm_length_diff < 0:
-            patterns.append(Waveguide(dc.waveguide_w, -arm_length_diff).to(top_port))
+            patterns.append(Waveguide(coupler.waveguide_w, -arm_length_diff).to(top_port))
             top_port = patterns[-1].port['b0']
 
-        final_dc = dc.copy.to(top_port)
-        patterns.append(final_dc)
+        final_coupler = coupler.copy.to(top_port)
+        patterns.append(final_coupler)
 
         pattern_to_layer = sum([[(p, ridge)] if isinstance(p, Pattern) else p.pattern_to_layer for p in patterns], [])
 
         super(MZI, self).__init__(pattern_to_layer)
 
-        self.dc = dc
+        self.coupler = coupler
         self.top = top
         self.bottom = bottom
         self.port['a0'] = patterns[0].port['a0']
         self.port['b0'] = patterns[0].port['b0']
-        self.port['a1'] = final_dc.port['a1']
-        self.port['b1'] = final_dc.port['b1']
+        self.port['a1'] = final_coupler.port['a1']
+        self.port['b1'] = final_coupler.port['b1']
 
 # class RingResonator(Pattern):
 #     def __init__(self, waveguide_w: float, taper_l: float = 0,
