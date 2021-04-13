@@ -152,7 +152,7 @@ class DC(Pattern):
             paths = [dc_without_interaction, dc_interaction.shapely - cuts]
         else:
             paths = lower_path, upper_path
-        super(DC, self).__init__(*paths)
+        super(DC, self).__init__(*paths, call_union=False)
         self.lower_path, self.upper_path = Pattern(lower_path), Pattern(upper_path)
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['a1'] = Port(0, interport_distance, -np.pi)
@@ -205,37 +205,30 @@ class MMI(Pattern):
 
 
 class GratingPad(Pattern):
-    def __init__(self, pad_dim: Dim2, taper_l: float, final_width: float, out: bool = False,
+    def __init__(self, pad_dim: Dim2, taper_l: float, final_w: float, out: bool = False,
                  end_l: Optional[float] = None, bend_dim: Optional[Dim2] = None, layer: int = 0):
         self.pad_dim = pad_dim
         self.taper_l = taper_l
-        self.final_width = final_width
+        self.final_w = final_w
         self.out = out
         self.bend_dim = bend_dim
         self.end_l = taper_l if end_l is None else end_l
 
         if out:
-            path = Path(final_width)
+            path = Path(final_w)
             if end_l > 0:
                 path.segment(end_l)
             if bend_dim:
                 path.sbend(bend_dim)
             super(GratingPad, self).__init__(path.segment(taper_l, final_width=pad_dim[1]).segment(pad_dim[0]))
         else:
-            path = Path(pad_dim[1]).segment(pad_dim[0]).segment(taper_l, final_width=final_width)
+            path = Path(pad_dim[1]).segment(pad_dim[0]).segment(taper_l, final_width=final_w)
             if bend_dim:
                 path.sbend(bend_dim, layer=layer)
             if end_l > 0:
                 path.segment(end_l, layer=layer)
             super(GratingPad, self).__init__(path)
         self.port['a0'] = Port(0, 0)
-
-    def to(self, port: Dim2) -> Pattern:
-        if self.out:
-            return self.translate(port[0], port[1])
-        else:
-            bend_y = self.bend_dim[1] if self.bend_dim else 0
-            return self.translate(port[0] - self.size[0], port[1] - bend_y)
 
 
 class Interposer(Pattern):
@@ -468,3 +461,11 @@ class DelayLine(Pattern):
         super(DelayLine, self).__init__(p)
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['b0'] = Port(self.bounds[2], 0)
+
+
+class TapDC(Pattern):
+    def __init__(self, dc: DC, grating_pad: GratingPad):
+        in_grating, out_grating = grating_pad.copy.to(dc.port['b1']), grating_pad.copy.to(dc.port['a1'])
+        super(TapDC, self).__init__(dc, in_grating, out_grating)
+        self.port['a0'] = dc.port['a0']
+        self.port['b0'] = dc.port['b0']

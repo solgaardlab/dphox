@@ -35,6 +35,10 @@ class Multilayer:
         self.layer_to_pattern, self.port = self._init_multilayer()
 
     @classmethod
+    def from_pattern(cls, pattern: Pattern, layer: str):
+        return cls([(pattern, layer)])
+
+    @classmethod
     def from_nazca_cell(cls, cell: nd.Cell):
         """
 
