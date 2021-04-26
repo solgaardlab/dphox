@@ -153,11 +153,17 @@ class DC(Pattern):
         else:
             paths = lower_path, upper_path
         super(DC, self).__init__(*paths, call_union=False)
-        self.lower_path, self.upper_path = Pattern(lower_path), Pattern(upper_path)
+        self.lower_path, self.upper_path = Pattern(lower_path, call_union=False), Pattern(upper_path, call_union=False)
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['a1'] = Port(0, interport_distance, -np.pi)
         self.port['b0'] = Port(self.size[0], 0)
         self.port['b1'] = Port(self.size[0], interport_distance)
+        self.lower_path.port = {'a0': self.port['a0'], 'b0': self.port['b0']}
+        self.lower_path.wg_path = self.lower_path
+        self.upper_path.port = {'a0': self.port['a1'], 'b0': self.port['b1']}
+        self.upper_path.wg_path = self.upper_path
+        self.interport_distance = interport_distance
+        self.reference_patterns.extend([self.lower_path, upper_path])
 
     @property
     def interaction_points(self) -> np.ndarray:
@@ -166,6 +172,10 @@ class DC(Pattern):
         br = bl + np.asarray((self.interaction_l, 0))
         tr = tl + np.asarray((self.interaction_l, 0))
         return np.vstack((bl, tl, br, tr))
+
+    @property
+    def path_array(self):
+        return np.array([self.polys[:3], self.polys[3:]])
 
 
 class MMI(Pattern):
@@ -386,6 +396,10 @@ class Waveguide(Pattern):
         self.port['a0'] = Port(0, 0, -np.pi)
         self.port['b0'] = Port(self.size[0], 0)
 
+    @property
+    def wg_path(self) -> Pattern:
+        return self
+
 
 class AlignmentCross(Pattern):
     def __init__(self, line_dim: Dim2):
@@ -469,3 +483,7 @@ class TapDC(Pattern):
         super(TapDC, self).__init__(dc, in_grating, out_grating)
         self.port['a0'] = dc.port['a0']
         self.port['b0'] = dc.port['b0']
+        self.dc = dc
+        self.reference_patterns.append(self.dc)
+        self.wg_path = self.dc.lower_path
+
