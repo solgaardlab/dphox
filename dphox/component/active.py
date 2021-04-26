@@ -1,7 +1,7 @@
 from ..typing import *
 from .pattern import Pattern, Path, get_linear_adiabatic, cubic_taper, Port
-from .passive import Waveguide, DC, Box, MMI
-from .multilayer import Multilayer, Via
+from .passive import Waveguide, DC, Box, MMI, TapDC
+from .multilayer import Multilayer, Via, MultilayerPath
 
 from copy import deepcopy as copy
 
@@ -11,6 +11,7 @@ MEEP_IMPORTED = False  # for meep sims
 try:
     SIMPHOX_IMPORTED = True
     from simphox.device import ModeDevice, MaterialBlock, SILICON, Material
+
     AIR = Material('Air', (0, 0, 0), 1)
 except ImportError:
     SIMPHOX_IMPORTED = False
@@ -19,6 +20,7 @@ except ImportError:
 try:
     import meep as mp
     from meep import mpb
+
     MEEP_IMPORTED = True
 except ImportError:
     MEEP_IMPORTED = False
@@ -162,7 +164,7 @@ class LateralNemsPS(Pattern):
 
         super(LateralNemsPS, self).__init__(*patterns, call_union=False)
         self.waveguide, self.nanofins, self.rib_brim, self.gnd_pads, self.pads = wg, nanofins, rib_etch, gnd_pads, \
-            gnd_pads + gnd_connections
+                                                                                 gnd_pads + gnd_connections
         dy = np.asarray((0, self.nanofin_w / 2 + self.waveguide_w / 2 + self.gap_w))
         center = np.asarray(self.center)
         self.port['a0'] = Port(0, 0, -np.pi)
@@ -172,6 +174,8 @@ class LateralNemsPS(Pattern):
             self.port['ps1'] = Port(gap_path.bounds[2], 0)
             self.port['fin0'] = Port(*(center + dy))
             self.port['fin1'] = Port(*(center - dy), np.pi)
+        self.wg_path = self.waveguide
+
 
     def effective_index(self, waveguide_h: float = 0.22, grid_spacing: float = 0.01,
                         wg_z: float = 1, sim_size: Dim2 = (2.5, 2)):
@@ -549,7 +553,7 @@ class ContactWaveguide(Pattern):
         patterns = rib_brim + [wg, gnd_connection] + pads
 
         super(ContactWaveguide, self).__init__(*patterns)
-        self.wg, self.rib_brim, self.pads = wg, rib_brim_etch, pads
+        self.wg_path, self.rib_brim, self.pads = wg, rib_brim_etch, pads
         self.rib_brim_w = sum(rib_taper_param) + waveguide_w
         self.reference_patterns = [wg] + rib_brim_etch + pads
         self.port['a0'] = Port(0, 0, -np.pi)
@@ -576,10 +580,14 @@ class ThermalPS(Multilayer):
             [(waveguide, ridge), (ps, ps_layer)] + left_via.pattern_to_layer + right_via.pattern_to_layer
         )
 
+        self.ps = ps
+        self.waveguide = waveguide
         self.port['a0'] = waveguide.port['a0']
         self.port['b0'] = waveguide.port['b0']
         self.port['gnd'] = Port(self.bounds[0], 0, -np.pi)
         self.port['pos'] = Port(self.bounds[1], 0)
+        self.wg_path = self.waveguide
+
 
 
 class SimpleComb(Pattern):
@@ -618,7 +626,7 @@ class SimpleComb(Pattern):
         edges = [fat_tooth.copy.align(shuttle_comb).halign(shuttle_comb, left=False, opposite=True).translate(
             tooth_param[0]),
             fat_tooth.copy.align(shuttle_comb).halign(shuttle_comb, left=True, opposite=True).translate(
-            -tooth_param[0])]
+                -tooth_param[0])]
         shuttle_comb = Pattern(shuttle_comb, *edges)
         pos_comb.align(shuttle_comb).translate(0, -overlap + tooth_param[1])
         comb = Pattern(shuttle_comb, pos_comb)
@@ -714,10 +722,10 @@ class LateralNemsFull(Multilayer):
         device_pads = device.pads if device.pads is not None else []
         dopes = [s.expand(dope_expand).dope(shuttle_dope, dope_grow)
                  for s in [top.shuttle, bot.shuttle] if shuttle_dope is not None] + \
-            [s.expand(dope_expand).dope(spring_dope, dope_grow)
-             for s in top.springs + bot.springs if spring_dope is not None] + \
-            [s.expand(dope_expand).dope(pad_dope, dope_grow)
-             for s in top.pads + bot.pads + device_pads if pad_dope is not None]
+                [s.expand(dope_expand).dope(spring_dope, dope_grow)
+                 for s in top.springs + bot.springs if spring_dope is not None] + \
+                [s.expand(dope_expand).dope(pad_dope, dope_grow)
+                 for s in top.pads + bot.pads + device_pads if pad_dope is not None]
         metals = []
         port = {}
         gnd_pads = []
@@ -746,7 +754,7 @@ class LateralNemsFull(Multilayer):
             vias.extend(sum([mid_via.copy.align(pad).pattern_to_layer for pad in pos_pads], []))
             vias.extend(sum([top_via.copy.align(pad).translate(
                 dy=(-2 * i + 1) * (top_via.size[1] / 2 - trace_w / 2)).pattern_to_layer
-                for i, pad in enumerate(pos_pads)], []))
+                             for i, pad in enumerate(pos_pads)], []))
             port['pos_l'] = Port(pos_box.bounds[0], pos_box.center[1], -np.pi)
             port['pos_b'] = Port(pos_box.center[0], pos_box.bounds[1], -np.pi / 2)
             port['pos_r'] = Port(pos_box.bounds[2], pos_box.center[1], 0)
@@ -771,7 +779,7 @@ class LateralNemsFull(Multilayer):
         self.port = port
         self.port.update(device.port)
 
-    @ classmethod
+    @classmethod
     def from_config(cls, config):
         """Initialize via configuration dictionary (useful for importing from a JSON file)
 
@@ -906,7 +914,7 @@ class NemsMillerNode(Multilayer):
                                np.pi / 2)
         ps_comb_drives = [ps_comb_drive.copy.to(ps_connect_port),
                           ps_comb_drive.copy.flip().to(
-            ps_connect_port).translate(bend_radius * 2 + upper_interaction_l)]
+                              ps_connect_port).translate(bend_radius * 2 + upper_interaction_l)]
 
         # TODO(sunil): bad decomposition here... these should be multilayers!
         tdc_comb_drive = Multilayer([(tdc_comb_connector, ridge), (tdc_comb_rib_etch, rib), (tdc_comb, ridge)] +
@@ -918,7 +926,7 @@ class NemsMillerNode(Multilayer):
         tdc_connect_port = Port(2 * bend_radius + tdc_spring_dim[0], lower_bend_height, 0)
         tdc_comb_drives = [tdc_comb_drive.copy.to(tdc_connect_port),
                            tdc_comb_drive.copy.flip(horiz=True).to(tdc_connect_port).translate(
-            lower_interaction_l - tdc_spring_dim[0] * 2)]
+                               lower_interaction_l - tdc_spring_dim[0] * 2)]
 
         comb_drive_p2l = sum([cd.pattern_to_layer for cd in ps_comb_drives + tdc_comb_drives], [])
         ps_flexure = Box((ps_comb.pos_pad.size[0] - gnd_wg.length + tdc_connector_dim[0], ps_shuttle_w)).flexure(
@@ -985,52 +993,143 @@ class NemsMillerNode(Multilayer):
 
 
 class MZI(Multilayer):
-    def __init__(self, coupler: Union[DC, MMI], ridge: str, top: List[Union[Multilayer, float]] = None,
-                 bottom: List[Union[Multilayer, float]] = None):
+    def __init__(self, coupler: Union[DC, MMI], ridge: str,
+                 top_internal: List[Union[Multilayer, float]] = None,
+                 bottom_internal: List[Union[Multilayer, float]] = None,
+                 top_external: List[Union[Multilayer, float]] = None,
+                 bottom_external: List[Union[Multilayer, float]] = None
+                 ):
         """An MZI with multilayer devices in the arms (e.g., phase shifters and/or grating taps)
 
         Args:
             coupler: Directional coupler or MMI for MZI
-            top: Top arm (waveguide matching bottom arm length if None)
-            bottom: Bottom arm (waveguide matching top arm length if None)
+            top_internal: Top arm (waveguide matching bottom arm length if None)
+            bottom_internal: Bottom arm (waveguide matching top arm length if None)
+            top_internal: Top input (waveguide matching bottom arm length if None)
+            bottom_internal: Bottom input (waveguide matching top arm length if None)
             ridge: Waveguide layer string
         """
         patterns = [coupler]
-        top_port = coupler.port['b0']
-        bottom_port = coupler.port['b1']
-        if top is not None:
-            for t in top:
-                d = t if isinstance(t, Multilayer) else Waveguide(coupler.waveguide_w, t)
-                patterns.append(d.to(top_port))
-                top_port = d.port['b0']
-        if bottom is not None:
-            for b in bottom:
-                d = b if isinstance(b, Multilayer) else Waveguide(coupler.waveguide_w, b)
-                patterns.append(d.to(bottom_port))
-                bottom_port = d.port['b0']
+        port = coupler.port
 
-        arm_length_diff = top_port.x - bottom_port.x
+        if top_external:
+            top_input = MultilayerPath(coupler.waveguide_w, top_external, ridge)
+            top_input.to(coupler.port['a1'], 'b0')
+            port['a1'] = top_input.port['a0']
+            patterns.append(top_input)
+        if bottom_external:
+            bottom_input = MultilayerPath(coupler.waveguide_w, bottom_external, ridge)
+            bottom_input.to(coupler.port['a0'], 'b0')
+            port['a0'] = bottom_input.port['a0']
+            patterns.append(bottom_input)
+
+        if top_internal:
+            top_arm = MultilayerPath(coupler.waveguide_w, top_internal, ridge).to(port['b1'])
+            port['b1'] = top_arm.port['b0']
+        if bottom_internal:
+            bottom_arm = MultilayerPath(coupler.waveguide_w, bottom_internal, ridge).to(port['b0'])
+            port['b0'] = bottom_arm.port['b0']
+
+        arm_length_diff = port['b1'].x - port['b0'].x
 
         if arm_length_diff > 0:
-            patterns.append(Waveguide(coupler.waveguide_w, arm_length_diff).to(bottom_port))
+            if bottom_internal:
+                bottom_arm.append(arm_length_diff)
+            else:
+                bottom_arm = Waveguide(coupler.waveguide_w, arm_length_diff).to(port['b0'])
+            port['b0'] = bottom_arm.port['b0']
         elif arm_length_diff < 0:
-            patterns.append(Waveguide(coupler.waveguide_w, -arm_length_diff).to(top_port))
-            top_port = patterns[-1].port['b0']
+            if top_internal:
+                top_arm.append(arm_length_diff)
+            else:
+                top_arm = Waveguide(coupler.waveguide_w, arm_length_diff).to(port['b0'])
+            port['b1'] = top_arm.port['b1']
 
-        final_coupler = coupler.copy.to(top_port)
+        patterns.extend([top_arm, bottom_arm])
+
+        final_coupler = coupler.copy.to(port['b0'])
         patterns.append(final_coupler)
 
         pattern_to_layer = sum([[(p, ridge)] if isinstance(p, Pattern) else p.pattern_to_layer for p in patterns], [])
 
         super(MZI, self).__init__(pattern_to_layer)
 
-        self.coupler = coupler
-        self.top = top
-        self.bottom = bottom
-        self.port['a0'] = patterns[0].port['a0']
-        self.port['b0'] = patterns[0].port['b0']
-        self.port['a1'] = final_coupler.port['a1']
-        self.port['b1'] = final_coupler.port['b1']
+        self.init_coupler = coupler
+        self.final_coupler = final_coupler
+        self.top_arm = top_arm
+        self.bottom_arm = bottom_arm
+        self.top_input = top_input if top_external else None
+        self.bottom_input = bottom_input if bottom_external else None
+        self.port = port
+        self.ridge = ridge
+        self.interport_distance = self.init_coupler.interport_distance
+        self.waveguide_w = coupler.waveguide_w
+
+    def path(self, flip: bool = False):
+        first = self.init_coupler.lower_path.flip() if flip else self.init_coupler.lower_path
+        second = self.final_coupler.lower_path.flip() if flip else self.final_coupler.lower_path
+
+        # top_arm_poly = Pattern(self.top_arm.wg_path,
+        #                        self.init_coupler.path_array[1, -1],
+        #                        self.final_coupler.path_array[1, 0])
+        # bottom_arm_poly = Pattern(self.bottom_arm.wg_path,
+        #                           self.init_coupler.path_array[0, -1],
+        #                           self.final_coupler.path_array[0, 0]).shapely
+        # top_input_poly = Pattern(self.top_input.wg_path,
+        #                          *list(self.init_coupler.path_array[1, :-1])).shapely
+        # bottom_input_poly = Pattern(self.bottom_input.wg_path,
+        #                             *list(self.init_coupler.path_array[0, :-1])).shapely
+        # return np.array(
+        #     [[bottom_input_poly, bottom_arm_poly] + list(self.final_coupler.path_array[1, 1:]),
+        #      [top_input_poly, top_arm_poly] + list(self.final_coupler.path_array[0, 1:])]
+        # )
+        return MultilayerPath(
+            waveguide_w=self.init_coupler.waveguide_w,
+            sequence=[self.bottom_input.copy, first.copy, self.bottom_arm.copy, second.copy],
+            path_layer=self.ridge
+        )
+
+
+class Mesh(Multilayer):
+    def __init__(self, mzi: MZI, n: int, triangular: bool = True):
+        """Default rectangular mesh, but does triangular mesh if specified
+        Note: triangular meshes can self-configure, but rectangular meshes cannot.
+
+        Args:
+            mzi:
+            n:
+            triangular:
+        """
+        self.mzi = mzi
+        self.n = n
+        self.triangular = triangular
+        num_straight = (n - 1) - np.hstack([np.arange(1, n), np.arange(n - 2, 0, -1)]) - 1 if triangular \
+            else np.tile((0, 1), n // 2)[:n]
+
+        ports = [Port(0, i * mzi.interport_distance) for i in range(n)]
+
+        paths = []
+        for idx in range(n):  # waveguides
+            cols = []
+            for layer in range(2 * n - 3 if triangular else n):
+                flip = idx == n - 1 or (idx - layer % 2 < n and idx > num_straight[layer]) and (idx + layer) % 2
+                path = mzi.copy.path(flip)
+                cols.append(path)
+            paths.append(MultilayerPath(self.mzi.waveguide_w, cols, self.mzi.ridge).to(ports[idx], 'a0'))
+            print([(path.port['a0'].xy, path.port['b0'].xy) for path in paths])
+
+        pattern_to_layer = sum([path.pattern_to_layer for path in paths], [])
+        super(Mesh, self).__init__(pattern_to_layer)
+        self.port = {
+            f'a{i}': Port(0, i * mzi.interport_distance, -np.pi) for i in range(n)
+        }.update({
+            f'b{i}': Port(self.size[0], i * mzi.interport_distance) for i in range(n)
+        })
+        self.interport_distance = mzi.interport_distance
+        self.waveguide_w = self.mzi.waveguide_w
+        # number of straight waveguide in the column
+        self.num_straight = num_straight
+
 
 # class RingResonator(Pattern):
 #     def __init__(self, waveguide_w: float, taper_l: float = 0,
