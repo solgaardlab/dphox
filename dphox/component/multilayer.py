@@ -637,7 +637,7 @@ class MultilayerPath(Multilayer):
 
     @property
     def wg_path(self):
-        return Pattern(*[p.wg_path for p in self.patterns])
+        return Pattern(*[p.wg_path for p in self.patterns], call_union=False)
 
     def append(self, element: Union[Multilayer, Pattern, float]):
         self.__init__(self.waveguide_w, self.sequence + [element], self.path_layer)

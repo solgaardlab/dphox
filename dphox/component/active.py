@@ -824,6 +824,44 @@ class NemsMillerNode(Multilayer):
                  pos_metal: str, gnd_metal: str,
                  clearout_buffer_w: float, clearout_layer: str, clearout_etch_stop_layer: str,
                  clearout_etch_stop_grow: float, dope_grow: float, dope_expand: float):
+        """
+
+        Args:
+            waveguide_w:
+            upper_interaction_l:
+            lower_interaction_l:
+            gap_w:
+            bend_radius:
+            upper_bend_extension:
+            lower_bend_extension:
+            ps_comb:
+            tdc_comb:
+            comb_wg:
+            gnd_wg:
+            pos_via:
+            gnd_via:
+            tdc_pad_dim:
+            ps_clearout_dim:
+            ps_spring_dim:
+            tdc_spring_dim:
+            ps_shuttle_w:
+            tdc_shuttle_w:
+            end_l:
+            trace_w:
+            connector_dim:
+            ridge:
+            rib:
+            dope:
+            comb_dope:
+            pos_metal:
+            gnd_metal:
+            clearout_buffer_w:
+            clearout_layer:
+            clearout_etch_stop_layer:
+            clearout_etch_stop_grow:
+            dope_grow:
+            dope_expand:
+        """
         self.waveguide_w = waveguide_w
         self.upper_interaction_l = upper_interaction_l
         self.lower_interaction_l = lower_interaction_l
@@ -1105,18 +1143,18 @@ class Mesh(Multilayer):
         self.triangular = triangular
         num_straight = (n - 1) - np.hstack([np.arange(1, n), np.arange(n - 2, 0, -1)]) - 1 if triangular \
             else np.tile((0, 1), n // 2)[:n]
-
+        n_layers = 2 * n - 3 if triangular else n
         ports = [Port(0, i * mzi.interport_distance) for i in range(n)]
 
         paths = []
         for idx in range(n):  # waveguides
             cols = []
-            for layer in range(2 * n - 3 if triangular else n):
+            for layer in range(n_layers):
                 flip = idx == n - 1 or (idx - layer % 2 < n and idx > num_straight[layer]) and (idx + layer) % 2
                 path = mzi.copy.path(flip)
                 cols.append(path)
+            cols.append(mzi.bottom_arm.copy)
             paths.append(MultilayerPath(self.mzi.waveguide_w, cols, self.mzi.ridge).to(ports[idx], 'a0'))
-            print([(path.port['a0'].xy, path.port['b0'].xy) for path in paths])
 
         pattern_to_layer = sum([path.pattern_to_layer for path in paths], [])
         super(Mesh, self).__init__(pattern_to_layer)
@@ -1129,7 +1167,36 @@ class Mesh(Multilayer):
         self.waveguide_w = self.mzi.waveguide_w
         # number of straight waveguide in the column
         self.num_straight = num_straight
+        self.paths = paths
+        self.num_dummy_polys = (len(self.paths[0].wg_path.polys) - 6 * n_layers) / (2 * n_layers + 1)
+        self.num_taps = 2 * n_layers + 1
+        self.n_layers = n_layers
+        self.num_poly_per_col = self.num_dummy_polys * 2 + 6
 
+    @property
+    def path_array(self):
+        sizes = [0, self.num_dummy_polys + 2] + [self.num_dummy_polys + 3] * (2 * self.n_layers - 1) + [self.num_dummy_polys + 2]
+        slices = np.cumsum(sizes, dtype=int)
+        return np.array(
+            [[path.wg_path.polys[slices[s]:slices[s + 1]]
+              for s in range(len(slices) - 1)] for path in self.paths]
+        )
+
+    def phase_shifter_array(self, ps_layer: str):
+        """
+
+        Args:
+            ps_layer: name of the layer for the polygons
+
+        Returns:
+            Phase shifter array polygons
+
+        """
+        if ps_layer in self.layer_to_pattern:
+            return [ps for ps in self.layer_to_pattern[ps_layer].geoms]
+        else:
+            raise ValueError(f'The phase shifter layer {ps_layer} is not correct '
+                             f'or there is no phase shifter in this mesh')
 
 # class RingResonator(Pattern):
 #     def __init__(self, waveguide_w: float, taper_l: float = 0,
