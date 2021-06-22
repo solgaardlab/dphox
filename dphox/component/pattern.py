@@ -1,10 +1,8 @@
-from collections import defaultdict, namedtuple
-
 import gdspy as gy
 import nazca as nd
 from copy import deepcopy as copy
 from shapely.vectorized import contains
-from shapely.geometry import Polygon, MultiPolygon, GeometryCollection, Point
+from shapely.geometry import Polygon, MultiPolygon, GeometryCollection, Point, LineString
 from shapely.ops import cascaded_union
 from shapely.affinity import translate, rotate
 from descartes import PolygonPatch
@@ -127,12 +125,14 @@ class Pattern:
             *patterns: A list of polygons specified by the user, can be a Path, gdspy Polygon, shapely Polygon,
             shapely MultiPolygon or Pattern
             call_union: Do not call union
+            decimal_places: decimal places for rounding (in case of tiny errors in polygons)
     """
 
     def __init__(self, *patterns: Union[Path, gy.Polygon, gy.FlexPath, Polygon, MultiPolygon, "Pattern", np.ndarray],
-                 call_union: bool = True):
+                 call_union: bool = True, decimal_places: int = 3):
         self.config = copy(self.__dict__)
         self.polys = []
+        self.decimal_places = decimal_places
         for pattern in patterns:
             if isinstance(pattern, Pattern):
                 self.polys += pattern.polys
@@ -153,8 +153,12 @@ class Pattern:
 
     @classmethod
     def from_shapely(cls, shapely_pattern: Union[Polygon, GeometryCollection]) -> "Pattern":
-        collection = shapely_pattern if isinstance(shapely_pattern, Polygon) \
-            else MultiPolygon([g for g in shapely_pattern.geoms if isinstance(g, Polygon)])
+        try:
+            collection = shapely_pattern if isinstance(shapely_pattern, Polygon) \
+                else MultiPolygon([g for g in shapely_pattern.geoms if isinstance(g, Polygon)])
+        except AttributeError:
+            print(f'shapely_pattern is not a Polygon or a GeometryCollection it is a {type(shapely_pattern)} it will be replaced with an empty MultiPolygon')
+            collection = MultiPolygon([])
         return cls(collection)
 
     def _shapely(self) -> MultiPolygon:
@@ -265,8 +269,8 @@ class Pattern:
 
         """
         x = self.bounds[0] if left else self.bounds[2]
-        p = (c.bounds[0] if left and not opposite or opposite and not left else c.bounds[2]) \
-            if isinstance(c, Pattern) else c
+        p = c if isinstance(c, float) or isinstance(c, int) \
+            else (c.bounds[0] if left and not opposite or opposite and not left else c.bounds[2])
         self.translate(dx=p - x)
         return self
 
@@ -283,8 +287,8 @@ class Pattern:
 
         """
         y = self.bounds[1] if bottom else self.bounds[3]
-        p = (c.bounds[1] if bottom and not opposite or opposite and not bottom else c.bounds[3]) \
-            if isinstance(c, Pattern) else c
+        p = c if isinstance(c, float) or isinstance(c, int) \
+            else (c.bounds[1] if bottom and not opposite or opposite and not bottom else c.bounds[3])
         self.translate(dy=p - y)
         return self
 
@@ -292,7 +296,7 @@ class Pattern:
         """Flip the component across a center point (default (0, 0))
 
         Args:
-            center:
+            center: The center point about which to flip
             horiz: do horizontal flip, otherwise vertical flip
 
         Returns:
@@ -310,11 +314,11 @@ class Pattern:
         # any patterns in this pattern should also be flipped
         for pattern in self.reference_patterns:
             pattern.flip(center, horiz)
-        self.port = {name: Port(-port.x + 2 * center[0], port.y, port.a) if horiz else
-                     Port(port.x, -port.y + 2 * center[1], port.a) for name, port in self.port.items()}
+        self.port = {name: Port(-port.x + 2 * center[0], port.y, -port.a) if horiz else
+                     Port(port.x, -port.y + 2 * center[1], -port.a) for name, port in self.port.items()}
         return self
 
-    def rotate(self, angle: float, origin: str = (0, 0)) -> "Pattern":
+    def rotate(self, angle: float, origin: Tuple[float, float] = (0, 0)) -> "Pattern":
         """Runs Shapely's rotate operation on the geometry
 
         Args:
@@ -397,7 +401,7 @@ class Pattern:
     def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> nd.Cell:
         with nd.Cell(cell_name) as cell:
             for poly in self.polys:
-                nd.Polygon(points=np.asarray(poly.exterior.coords.xy).T, layer=layer).put()
+                nd.Polygon(points=np.around(np.asarray(poly.exterior.coords.xy).T, decimals=3), layer=layer).put()
             for name, port in self.port.items():
                 nd.Pin(name).put(*port.xya_deg)
             nd.put_stub()
@@ -434,8 +438,13 @@ class Pattern:
             new_pattern.port = self.port
         return new_pattern
 
-    def to(self, port: Port):
-        return self.rotate(port.a_deg).translate(port.x, port.y)
+    def to(self, port: Port, from_port: Optional[str] = None):
+        if from_port is None:
+            return self.rotate(port.a_deg).translate(port.x, port.y)
+        else:
+            return self.rotate(port.a_deg - self.port[from_port].a_deg + 180, origin=self.port[from_port].xy).translate(
+                port.x - self.port[from_port].x, port.y - self.port[from_port].y
+            )
 
     @classmethod
     def from_gds(cls, filename):

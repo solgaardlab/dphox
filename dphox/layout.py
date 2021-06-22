@@ -5,7 +5,6 @@ Created on Thu Apr 23 17:19:16 2020
 @author: Sunil Pai, Nate Abebe, Rebecca Hwang, Yu Miao
 """
 
-
 import nazca as nd
 
 from .component import *
@@ -47,6 +46,7 @@ class NazcaLayout:
         self.dicing_ic = nd.interconnects.Interconnect(width=100, xs='dicing_xs')
         self.m1_ic = nd.interconnects.Interconnect(width=4, xs='m1_xs')
         self.m2_ic = nd.interconnects.Interconnect(width=4, xs='m2_xs')
+        self.ml_ic_trace = nd.interconnects.Interconnect(width=4, xs='ml_xs')
         self.ml_ic = nd.interconnects.Interconnect(width=100, xs='ml_xs')
         self.v1_via = Via((0.4, 0.4), 0.1, metal=['m1am', 'm2am'], via='v1am').nazca_cell('v1_via')
         self.va_via = Via((3.6, 3.6), 1.5, metal=['mlam', 'm2am'], via='vaam').nazca_cell('va_via')
@@ -59,7 +59,7 @@ class NazcaLayout:
                rib_brim_w: float = 2, gnd_connector_dim: Optional[Dim2] = (1, 2),
                flip: bool = False, dope_grow: float = 0.25, name='gnd_wg') -> nd.Cell:
         c = ContactWaveguide(waveguide_w=waveguide_w, length=length, gnd_contact_dim=gnd_contact_dim,
-                             rib_brim_w=rib_brim_w, gnd_connector_dim=gnd_connector_dim, flipped=flip,
+                             rib_taper_param=cubic_taper(1.52), gnd_connector_dim=gnd_connector_dim, flipped=flip,
                              rib_etch_grow=0.25)
         pad_to_layer = sum([pad.metal_contact(('cbam', 'm1am', 'v1am', 'm2am')) for pad in c.pads], [])
         dopes = list(zip([p.offset(dope_grow) for p in c.pads], ('pppam',)))
@@ -67,11 +67,11 @@ class NazcaLayout:
         device = Multilayer([(c, 'seam')] + pad_to_layer + ridge_etch + dopes)
         return device.nazca_cell(name)
 
-    def autoroute_turn(self, n: Union[int, List, np.ndarray], level: int = 1,
+    def autoroute_turn(self, n: Union[int, List, np.ndarray], flip_via: bool = True, include_via: bool = True,
                        period: float = 50, final_period: float = 20, width: float = 8,
                        connector_x: float = 0, connector_y: float = 0, turn_radius: float = 0, overlap: float = 0,
                        name: str = 'autoroute_turn'):
-        mt_ic = self.m1_ic if level == 1 else self.m2_ic
+        mt_ic = self.ml_ic
         with nd.Cell(f'{name}_{period}_{final_period}_{connector_x}_{connector_y}') as autoroute_turn:
             route_arr = np.ones(n) if isinstance(n, int) else np.asarray(n)
             route_num = 0
@@ -86,6 +86,9 @@ class NazcaLayout:
                     nd.Pin(f'b{int(route_num)}').put(start.pin['b0'].x, start.pin['b0'].y, 180)
                     nd.Pin(f'p{int(route_num)}', pin=output.pin['b0']).put()
                     route_num += 1
+                if include_via:
+                    self.va_via.put(start.pin['a0'].x, start.pin['a0'].y, 180 if flip_via else 0)
+                    self.va_via.put(output.pin['b0'].x, output.pin['b0'].y, 90)
             nd.put_stub()
         return autoroute_turn
 
@@ -108,6 +111,7 @@ class NazcaLayout:
                 return device
             else:
                 return dev.put()
+
         with nd.Cell(name) as cell:
             devices = [_put_device(dev) for dev in device_list]
             nd.Pin('a0').put(devices[0].pin['a0'])
@@ -207,7 +211,8 @@ class NazcaLayout:
 
     def bond_pad_array(self, n_pads: Shape2, pitch: Union[float, Dim2] = 100,
                        pad_dim: Dim2 = (40, 40), labels: Optional[np.ndarray] = None,
-                       use_labels: bool = True, stagger_x_frac: float = 0, use_ml_only: bool = False):
+                       use_labels: bool = True, stagger_x_frac: float = 0, use_ml_only: bool = False,
+                       flipped_text: bool = False):
         # TODO(): move this out of layout.py
         pad_w, pad_l = pad_dim
         pitch = pitch if isinstance(pitch, tuple) else (pitch, pitch)
@@ -224,12 +229,12 @@ class NazcaLayout:
                     nd.Pin(f'u{i},{j}').put(pad.pin['a0'])
                     nd.Pin(f'd{i},{j}').put(pad.pin['b0'])
                     if use_labels:
-                        x = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='rc',
+                        x = nd.text(text=f'{i + 1 if labels is None else labels[i]}', align='lc',
                                     layer='seam', height=pad_dim[0] / 2)
-                        y = nd.text(text=f'{j + 1 if labels is None else labels[i]}', align='rc',
+                        y = nd.text(text=f'{j + 1 if labels is None else labels[i]}', align='lc',
                                     layer='seam', height=pad_dim[0] / 2)
-                        y.put(x_loc, -pad_l / 2 + j * pitch[1])
-                        x.put(x_loc, 0.27 * pad_l + j * pitch[1])
+                        y.put(x_loc + pad_w * (0.6 + 0.5 * flipped_text), -pad_l * 0.8 + j * pitch[1], flop=flipped_text)
+                        x.put(x_loc + pad_w * (0.6 + 0.5 * flipped_text), j * pitch[1], flop=flipped_text)
             nd.put_stub()
         return bond_pad_array
 
@@ -346,10 +351,10 @@ class NazcaLayout:
                 nd.Pin(f'b{idx}').put(curr_x, interport_w * idx, 0)
         return triangular_mesh
 
-    def mzi_node(self, diff_ps: nd.Cell, dc: nd.Cell, tap_internal: Optional[nd.Cell] = None,
+    def mzi_node(self, diff_ps: nd.Cell, dc: Optional[nd.Cell] = None, tap_internal: Optional[nd.Cell] = None,
                  tap_external: Optional[nd.Cell] = None, name: Optional[str] = 'mzi',
                  include_input_ps: bool = True, grating: Optional[nd.Cell] = None, detector: Optional[nd.Cell] = None,
-                 detector_loopback_params: Dim2 = None, sep: float = 0):
+                 detector_loopback_params: Dim2 = None, sep: float = 0, extend_detector: float = 10):
         with nd.Cell(name=name) as node:
             if include_input_ps:
                 input_ps = diff_ps.put()
@@ -397,10 +402,12 @@ class NazcaLayout:
                     nd.Pin('p2').put(d.pin['p'])
                     nd.Pin('n2').put(d.pin['n'])
                 else:
-                    d = detector.put(node.pin['b1'], flip=True)
+                    self.waveguide_ic.strt(extend_detector).put(node.pin['b1'])
+                    d = detector.put(flip=True)
                     nd.Pin('p1').put(d.pin['p'])
                     nd.Pin('n1').put(d.pin['n'])
-                    d = detector.put(node.pin['b0'])
+                    self.waveguide_ic.strt(extend_detector).put(node.pin['b0'])
+                    d = detector.put()
                     nd.Pin('p2').put(d.pin['p'])
                     nd.Pin('n2').put(d.pin['n'])
             nd.put_stub()
@@ -429,7 +436,7 @@ class NazcaLayout:
         return gratings
 
     def tap_line(self, n_taps: int, radius: float = 5, inter_tap_gap: float = 60,
-                 inter_wg_dist: float = 350, name: str = 'tap_line'):
+                 inter_wg_dist: float = 352, name: str = 'tap_line'):
         with nd.Cell(name=f'{name}_{n_taps}') as tap_line:
             inp = self.waveguide_ic.strt(0).put(0, 0, 90)
             nd.Pin('in').put(inp.pin['a0'])
@@ -510,7 +517,9 @@ class NazcaLayout:
                 else:
                     node = device.put(line.pin[f'a{2 * i + 1}'])
                 if 'gnd_r' in node.pin:
-                    node.raise_pins(['gnd_r', 'pos_r' if left_pad_orientation else 'pos_l'], [f'gnd{i}', f'pos{i}'])
+                    node.raise_pins(['gnd_r', 'pos_r' if left_pad_orientation else 'pos_l', 'pos_b'], [f'gnd{i}',
+                                                                                                       f'pos{i}',
+                                                                                                       f'pos2_{i}'])
                 d1 = detector.put(node.pin['b0'])
                 d2 = detector.put(node.pin['b1'], flip=True)
                 autoroute_node_detector(d2.pin['p'], d1.pin['n'], d2.pin['n'], d1.pin['p'])

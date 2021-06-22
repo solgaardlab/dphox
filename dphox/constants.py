@@ -1,76 +1,90 @@
+try:
+    import meep as mp
+    from meep import mpb
+    MEEP_IMPORTED = True
+except ImportError:
+    MEEP_IMPORTED = False
+    pass
+
+
 AMF_STACK = {
     'layers': {
-        'waveguide': 10,
-        'grating': 11,
-        'via': 100,
-        'via_heater': 120,
-        'mt_heater': 125,
-        'heater': 115,
-        'slab': 12,
-        'pad': 150,
-        'trench': 160
+        'ridge': (10, 0),
+        'rib': (11, 0),
+        'v1': (100, 0),
+        'v2': (120, 0),
+        'mt_heater': (125,  0),
+        'heater': (115, 0),
+        'slab': (12, 0),
+        'pad': (150, 0),
+        'trench': (160, 0)
     },
     'cross_sections': {
         'heater_xs': [
             {
-                'layer': 115,    # heater
+                'layer': 'heater',
                 'growx': 0.755,  # (waveguide_w - heater_w) / 2 + 0.005
                 'growy': 0.005
             },
             {
-                'layer': 10,   # waveguide
+                'layer': 'ridge',
                 'growy': 0.001
             }
         ],
         'metal_xs': [
             {
-                'layer': 125,  # mt_heater
+                'layer': 'mt_heater',
             }
         ],
-        'via_heater_xs': [
+        'v1_xs': [
             {
-                'layer': 120   # via_heater
+                'layer': 'v1'
+            }
+        ],
+        'v2_xs': [
+            {
+                'layer': 'v2'
             },
             {
-                'layer': 125,  # mt_heater
+                'layer': 'mt_heater',
                 'growx': 1.5,
                 'growy': 1.5
             },
             {
-                'layer': 115,  # heater
+                'layer': 'mt_heater',  # heater
                 'growx': 1.5,
                 'growy': 1.5
             }
         ],
         'grating_xs': [
             {
-                'layer': 11    # grating
+                'layer': 'rib'    # grating
             }
         ],
         'waveguide_xs': [
             {
-                'layer': 10,   # waveguide
+                'layer': 'ridge',   # waveguide
                 'growy': 0.004
             }
         ],
         'pad_xs': [
             {
-                'layer': 125   # mt_heater
+                'layer': 'mt_heater'   # mt_heater
             },
             {
-                'layer': 150,  # pad
+                'layer': 'pad',  # pad
                 'growx': -2,
                 'growy': -2
             }
         ],
         'trench_xs': [
             {
-                'layer': 160   # trench
+                'layer': 'trench'   # trench
             }
         ],
         'slab_xs': [
             {
-                'layer': 12    # slab
+                'layer': 'slab'    # slab
             }
         ]
     },
@@ -310,13 +324,13 @@ AIM_STACK = {
         'm1am': (1.135, 1.24),  # metal 1 contact to caam/cbam # guessing
         'v1am': (1.24, 1.74),  # via to m1am # guessing
         'm2am': (1.74, 1.83),  # metal 2 level # guessing
-        'vaam': (1.83, 2.03),  # aluminum via to m2am # guessing
+        'vaam': (1.83, 2.23),  # aluminum via to m2am # guessing
         'tzam': (0.64, 2.00),  # tzam # guessing
         'diam': (-2.00, 2.00),  # diam, dicing channel # guessing
-        'paam': (1.95, 2.00),  # metal passivation # guessing
-        'mlam': (1.73, 1.95),  # mteal pad layer # guessing
-        'oxide': (-2.00, 2.00),  # oxide fill
-        'clearout': (-2.00, 2.00),  # pseudo clearout for nems devices
+        'paam': (2.23, 2.33),  # metal passivation # guessing
+        'mlam': (2.23, 2.33),  # mteal pad layer # guessing
+        'oxide': (-2.00, 2.50),  # oxide fill
+        'clearout': (-2.00, 2.50),  # pseudo clearout for nems devices
     },
     'process_extrusion': {
         # ream, si ridge remaining
@@ -362,7 +376,7 @@ AIM_STACK = {
     'layer_to_color': {
         'seam': (0.5, 0.5, 0.5, 1),
         'ream': (0.5, 0.5, 0.5, 1),
-        'oxide': (0.8, 0.0, 0.1, 0.5),
+        'oxide': (0.8, 0, 0, 0.5),
         'cbam': (0.9, 0.5, 0.0, 1),
         'v1am': (0.9, 0.5, 0.0, 1),
         'vaam': (0.9, 0.5, 0.0, 1),
@@ -376,7 +390,8 @@ AIM_STACK = {
         'nnam': (1.0, 0.3, 0.3, 0.7),
         'nnnam': (1.0, 0.3, 0.3, 0.9),
         'fnam': (0.8, 0, 0, 0.5),
-        'snam': (0.8, 0.5, 0, 0.5)
+        'snam': (0.8, 0.5, 0, 0.5),
+        'clearout': (0.7, 0.7, 0.2, 0.5),
     },
     'cross_sections': {
         'v1_xs': [
@@ -483,8 +498,8 @@ AIM_PDK = {
     'cl_band_thermo_optic_phase_shifter': {
         'a0': (0, 0, 180),
         'b0': (0, 100, 0),
-        'p': (47.3, 12.5, 90),
-        'n': (52.3, 12.5, 90),
+        'p': (47.3, 12.499, 90),
+        'n': (52.3, 12.499, 90),
     }
 }
 
