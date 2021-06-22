@@ -1,5 +1,5 @@
 from .pattern import Path, Pattern, Port
-from .passive import Box
+from .passive import Box, Waveguide
 from ..typing import *
 from ..utils import _um_str
 
@@ -9,7 +9,7 @@ import numpy as np
 import gdspy as gy
 import nazca as nd
 from shapely.geometry import Polygon, MultiPolygon, Point
-from shapely.affinity import rotate
+from shapely.affinity import rotate, translate
 from shapely.ops import cascaded_union
 from descartes import PolygonPatch
 import trimesh
@@ -122,14 +122,16 @@ class Multilayer:
         """
         for pattern, _ in self.pattern_to_layer:
             pattern.translate(dx, dy)
-        self.layer_to_pattern, self.port = self._init_multilayer()
+        self.layer_to_pattern, _ = self._init_multilayer()
+        for name, port in self.port.items():
+            self.port[name] = Port(port.x + dx, port.y + dy, port.a)
         return self
 
     def rotate(self, angle: float, origin: str = (0, 0)) -> "Multilayer":
         """Rotate the multilayer by rotating all of the patterns within it individually
 
         Args:
-            angle: rotation angle
+            angle: rotation angle in degrees
             origin: origin of rotation
 
         Returns:
@@ -160,8 +162,13 @@ class Multilayer:
         self.layer_to_pattern, _ = self._init_multilayer()
         return self
 
-    def to(self, port: Port):
-        return self.rotate(port.a_deg).translate(port.x, port.y)
+    def to(self, port: Port,  port_name: Optional[str] = None):
+        if port_name is None:
+            return self.rotate(port.a_deg).translate(port.x, port.y)
+        else:
+            return self.rotate(port.a_deg - self.port[port_name].a_deg + 180, origin=self.port[port_name].xy).translate(
+                port.x - self.port[port_name].x, port.y - self.port[port_name].y
+            )
 
     @property
     def copy(self) -> "Multilayer":
@@ -596,6 +603,45 @@ class Multilayer:
     @classmethod
     def aggregate(cls, multilayers: List["Multilayer"]):
         return cls(sum([m.pattern_to_layer for m in multilayers], []))
+
+
+class MultilayerPath(Multilayer):
+    def __init__(self, waveguide_w: float, sequence: List[Union[Multilayer, Pattern, float]], path_layer: str):
+        """Multilayer path for appending a linear sequence of elements end-to-end (based on port 0)
+
+        Args:
+            waveguide_w: Waveguide width
+            sequence: Sequence
+            path_layer: Path layer
+        """
+        patterns = []
+        if not len(sequence):
+            raise ValueError('Require a nonzero multilayer sequence length')
+        port = None
+        for p in sequence:
+            if p is not None:
+                d = p if isinstance(p, Multilayer) or isinstance(p, Pattern) else Waveguide(waveguide_w, p)
+                if port is None:
+                    patterns.append(d.to(Port(0, 0), 'a0'))
+                else:
+                    patterns.append(d.to(port, 'a0'))
+                port = d.port['b0']
+        pattern_to_layer = sum([[(p, path_layer)] if isinstance(p, Pattern) else p.pattern_to_layer for p in patterns], [])
+        super(MultilayerPath, self).__init__(pattern_to_layer)
+        self.port['a0'] = Port(0, 0, -np.pi)
+        self.port['b0'] = port
+        self.patterns = patterns
+        self.sequence = sequence
+        self.waveguide_w = waveguide_w
+        self.path_layer = path_layer
+
+    @property
+    def wg_path(self):
+        return Pattern(*[p.wg_path for p in self.patterns], call_union=False)
+
+    def append(self, element: Union[Multilayer, Pattern, float]):
+        self.__init__(self.waveguide_w, self.sequence + [element], self.path_layer)
+        return self
 
 
 class Grating(Multilayer):

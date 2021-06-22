@@ -296,7 +296,7 @@ class Pattern:
         """Flip the component across a center point (default (0, 0))
 
         Args:
-            center:
+            center: The center point about which to flip
             horiz: do horizontal flip, otherwise vertical flip
 
         Returns:
@@ -318,7 +318,7 @@ class Pattern:
                      Port(port.x, -port.y + 2 * center[1], -port.a) for name, port in self.port.items()}
         return self
 
-    def rotate(self, angle: float, origin: str = (0, 0)) -> "Pattern":
+    def rotate(self, angle: float, origin: Tuple[float, float] = (0, 0)) -> "Pattern":
         """Runs Shapely's rotate operation on the geometry
 
         Args:
@@ -438,8 +438,13 @@ class Pattern:
             new_pattern.port = self.port
         return new_pattern
 
-    def to(self, port: Port):
-        return self.rotate(port.a_deg).translate(port.x, port.y)
+    def to(self, port: Port, from_port: Optional[str] = None):
+        if from_port is None:
+            return self.rotate(port.a_deg).translate(port.x, port.y)
+        else:
+            return self.rotate(port.a_deg - self.port[from_port].a_deg + 180, origin=self.port[from_port].xy).translate(
+                port.x - self.port[from_port].x, port.y - self.port[from_port].y
+            )
 
     @classmethod
     def from_gds(cls, filename):
