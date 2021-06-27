@@ -1,6 +1,6 @@
-from .multilayer import Multilayer, MultilayerPath
+from .multilayer import Multilayer, MultilayerPath, Via
 from .passive import DC, MMI, Waveguide
-from .pattern import Port
+from .pattern import Port, Pattern
 from ..typing import List, Union
 
 import numpy as np
