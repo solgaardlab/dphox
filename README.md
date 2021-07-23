@@ -1,6 +1,10 @@
 ![dphox](https://user-images.githubusercontent.com/7623867/93381618-ca48ed00-f815-11ea-980c-0fff994441a5.png)
 
-Design module for photonic simulations and tapeouts (internal to Solgaard lab).
+Design module for photonic simulations and tapeouts. 
+
+**Note**: This is a work in progress.
+No documentation or examples are yet available, but will be made available in the coming months.
+Testing code is also yet to come, and will also be added in the coming months.
 
 ## Installation
 
@@ -11,13 +15,6 @@ Install in your python environment using:
 You can then change `dphox` if necessary.
 When importing `dphox`, you can now treat it as any other module.
 No filepath setting necessary because `dphox` will be in your environment's `site-packages` directory.
-
-For the AIM PDK imports, please save PDK files
-in a separate folder of your choice (or in `dphox/aim_lib/`).
-You will always specify these folders when using the PDK 
-(see `dphox.gds.aim.AIMPhotonicsChip`). Please do not commit
-these files to `dphox` as they tend to inflate contributions
-(these are specified via a `.gitignore`).
 
 ## Git Workflow
 

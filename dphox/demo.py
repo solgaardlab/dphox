@@ -14,11 +14,8 @@ mzi = MZI(dc,
           top_external=[ps.copy],
           bottom_external=[ps.copy], ridge='ream')
 
-tapped_mzi = MZI(dc,
-                 top_internal=[5, tap, 5, ps],
-                 bottom_internal=[5, tap.copy, 5, ps.copy],
-                 top_external=[5, tap.copy, 5, ps.copy],
-                 bottom_external=[5, tap.copy, 5, ps.copy], ridge='ream')
+tapped_mzi = MZI(dc, top_internal=[5, tap, 5, ps], bottom_internal=[5, tap.copy, 5, ps.copy],
+                 top_external=[5, tap.copy, 5, ps.copy], bottom_external=[5, tap.copy, 5, ps.copy], ridge='ream')
 
 mesh = Mesh(mzi, 6)
 tapped_mesh = Mesh(tapped_mzi, 6)
