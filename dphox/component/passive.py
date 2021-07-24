@@ -2,9 +2,8 @@ from ..typing import *
 from .pattern import Pattern, Path, Port
 
 from copy import deepcopy as copy
-from shapely.geometry import MultiPolygon, box, MultiPoint
+from shapely.geometry import MultiPolygon, box
 import numpy as np
-import nazca as nd
 
 from ..utils import circle
 

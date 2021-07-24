@@ -1,5 +1,4 @@
 import gdspy as gy
-import nazca as nd
 from copy import deepcopy as copy
 from shapely.vectorized import contains
 from shapely.geometry import Polygon, MultiPolygon, GeometryCollection, Point, LineString
@@ -13,6 +12,12 @@ try:
     import plotly.graph_objects as go
 except ImportError:
     pass
+
+NAZCA_IMPORTED = True
+try:
+    import nazca as nd
+except ImportError:
+    NAZCA_IMPORTED = False
 
 from ..typing import *
 
@@ -398,7 +403,9 @@ class Pattern:
         pattern = self.shapely.buffer(grow_d)
         return Pattern(pattern if isinstance(pattern, MultiPolygon) else pattern)
 
-    def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> nd.Cell:
+    def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> "nd.Cell":
+        if not NAZCA_IMPORTED:
+            raise ImportError('Nazca not installed! Please install nazca prior to running nazca_cell().')
         with nd.Cell(cell_name) as cell:
             for poly in self.polys:
                 nd.Polygon(points=np.around(np.asarray(poly.exterior.coords.xy).T, decimals=3), layer=layer).put()

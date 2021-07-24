@@ -4,6 +4,5 @@ matplotlib
 shapely
 gdspy
 descartes
-nazca
 trimesh
 triangle

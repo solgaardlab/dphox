@@ -7,7 +7,7 @@ from collections import defaultdict
 
 import numpy as np
 import gdspy as gy
-import nazca as nd
+
 from shapely.geometry import Polygon, MultiPolygon, Point
 from shapely.affinity import rotate, translate
 from shapely.ops import cascaded_union
@@ -25,7 +25,11 @@ try:
     import meep as mp
 except ImportError:
     MEEP_IMPORTED = False
-    print("Unable to import pymeep")
+try:
+    NAZCA_IMPORTED = True
+    import nazca as nd
+except ImportError:
+    NAZCA_IMPORTED = False
 
 
 class Multilayer:
@@ -196,7 +200,7 @@ class Multilayer:
                 cell.add(gy.Polygon(np.asarray(poly.exterior.coords.xy).T, layer=layer))
         return cell
 
-    def nazca_cell(self, cell_name: str, callback: Optional[Callable] = None) -> nd.Cell:
+    def nazca_cell(self, cell_name: str, callback: Optional[Callable] = None) -> "nd.Cell":
         """Turn this multilayer into a Nazca cell
 
         Args:
@@ -206,6 +210,8 @@ class Multilayer:
         Returns:
             A Nazca cell
         """
+        if not NAZCA_IMPORTED:
+            raise ImportError('Nazca not installed! Please install nazca prior to running nazca_cell().')
         with nd.Cell(cell_name) as cell:
             for pattern, layer in self._pattern_to_layer.items():
                 for poly in pattern.polys:
