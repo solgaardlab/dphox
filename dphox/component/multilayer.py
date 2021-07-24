@@ -43,7 +43,7 @@ class Multilayer:
         return cls([(pattern, layer)])
 
     @classmethod
-    def from_nazca_cell(cls, cell: nd.Cell):
+    def from_nazca_cell(cls, cell: "nd.Cell"):
         """
 
         Args:
