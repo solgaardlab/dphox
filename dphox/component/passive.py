@@ -109,6 +109,8 @@ class DC(Pattern):
 
         Args:
             bend_dim: if use_radius is True (bend_radius, bend_height), else (bend_width, bend_height)
+                If a third dimension is specified then the width of the waveguide portion in the interaction
+                region is specified, which may be useful for broadband coupling.
             waveguide_w: waveguide width
             gap_w: gap between the waveguides
             interaction_l: interaction length
@@ -127,6 +129,8 @@ class DC(Pattern):
         self.coupler_boundary_taper = coupler_boundary_taper
 
         interport_distance = waveguide_w + 2 * bend_dim[1] + gap_w
+        if len(bend_dim) == 3:
+            interport_distance += bend_dim[2] - waveguide_w
         if end_bend_dim:
             interport_distance += 2 * end_bend_dim[1]
 
@@ -363,9 +367,9 @@ class Waveguide(Pattern):
                 if taper_l > 0 and taper_param is not None:
                     p.polynomial_taper(taper_l, taper_param, num_taper_evaluations)
         if symmetric:
-            if not length >= 2 * np.sum(taper_ls):
+            if not length > 2 * np.sum(taper_ls):
                 raise ValueError(
-                    f'Require length >= 2 * np.sum(taper_ls) but got {length} < {2 * np.sum(taper_ls)}')
+                    f'Require length > 2 * np.sum(taper_ls) but got {length} <= {2 * np.sum(taper_ls)}')
             if taper_params is not None:
                 p.segment(length - 2 * np.sum(taper_ls))
                 for taper_l, taper_param in zip(reversed(taper_ls), reversed(taper_params)):

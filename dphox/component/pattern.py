@@ -36,26 +36,30 @@ class Path(gy.Path):
                         layer=layer)
         return self
 
-    def sbend(self, bend_dim: Dim2, layer: int = 0, inverted: bool = False, use_radius: bool = False):
+    def sbend(self, bend_dim: Union[Dim2, Dim3], layer: int = 0, inverted: bool = False, use_radius: bool = False):
+        curr_width = 2 * self.w
+        final_width = bend_dim[-1] if len(bend_dim) == 3 else curr_width
         if use_radius is False:
             pole_1 = np.asarray((bend_dim[0] / 2, 0))
             pole_2 = np.asarray((bend_dim[0] / 2, (-1) ** inverted * bend_dim[1]))
             pole_3 = np.asarray((bend_dim[0], (-1) ** inverted * bend_dim[1]))
-            self.bezier([pole_1, pole_2, pole_3], layer=layer)
+            self.bezier([pole_1, pole_2, pole_3], final_width=final_width, layer=layer)
         else:
+            halfway_final_width = (final_width + curr_width) / 2
             if bend_dim[1] > 2 * bend_dim[0]:
                 angle = np.pi / 2 * (-1) ** inverted
-                self.turn(bend_dim[0], angle, number_of_points=199)
+                self.turn(bend_dim[0], angle, final_width=halfway_final_width, number_of_points=199)
                 self.segment(bend_dim[1] - 2 * bend_dim[0])
-                self.turn(bend_dim[0], -angle, number_of_points=199)
+                self.turn(bend_dim[0], -angle, final_width=final_width, number_of_points=199)
             else:
                 angle = np.arccos(1 - bend_dim[1] / 2 / bend_dim[0]) * (-1) ** inverted
-                self.turn(bend_dim[0], angle, number_of_points=199)
-                self.turn(bend_dim[0], -angle, number_of_points=199)
+                self.turn(bend_dim[0], angle, final_width=final_width, number_of_points=199)
+                self.turn(bend_dim[0], -angle, final_width=final_width, number_of_points=199)
         return self
 
-    def dc(self, bend_dim: Dim2, interaction_l: float, end_l: float = 0, layer: int = 0,
+    def dc(self, bend_dim: Union[Dim2, Dim3], interaction_l: float, end_l: float = 0, layer: int = 0,
            inverted: bool = False, end_bend_dim: Optional[Dim3] = None, use_radius: bool = False):
+        curr_width = self.w * 2
         if end_bend_dim:
             if end_bend_dim[-1] > 0:
                 self.segment(end_bend_dim[-1], layer=layer)
@@ -64,34 +68,11 @@ class Path(gy.Path):
             self.segment(end_l, layer=layer)
         self.sbend(bend_dim, layer, inverted, use_radius)
         self.segment(interaction_l, layer=layer)
-        self.sbend(bend_dim, layer, not inverted, use_radius)
+        self.sbend((*bend_dim[:2], curr_width), layer, not inverted, use_radius)
         if end_l > 0:
             self.segment(end_l, layer=layer)
         if end_bend_dim:
             self.sbend(end_bend_dim[:2], layer, not inverted, use_radius)
-            if end_bend_dim[-1] > 0:
-                self.segment(end_bend_dim[-1], layer=layer)
-        return self
-
-    def mzi(self, bend_dim: Dim2, interaction_l: float, arm_l: float, end_l: float = 0, layer: int = 0,
-            inverted: bool = False, end_bend_dim: Optional[Dim3] = None, use_radius: bool = False):
-        if end_bend_dim:
-            if end_bend_dim[-1] > 0:
-                self.segment(end_bend_dim[-1], layer=layer)
-            self.sbend(end_bend_dim[:2], layer, inverted)
-        if end_l > 0:
-            self.segment(end_l, layer=layer)
-        self.sbend(bend_dim, layer, inverted, use_radius)
-        self.segment(interaction_l, layer=layer)
-        self.sbend(bend_dim, layer, not inverted, use_radius)
-        self.segment(arm_l, layer=layer)
-        self.sbend(bend_dim, layer, inverted, use_radius)
-        self.segment(interaction_l, layer=layer)
-        self.sbend(bend_dim, layer, not inverted, use_radius)
-        if end_l > 0:
-            self.segment(end_l, layer=layer)
-        if end_bend_dim:
-            self.sbend(end_bend_dim[:2], layer, not inverted)
             if end_bend_dim[-1] > 0:
                 self.segment(end_bend_dim[-1], layer=layer)
         return self
