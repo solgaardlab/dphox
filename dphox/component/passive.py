@@ -101,7 +101,7 @@ class Box(Pattern):
 
 
 class DC(Pattern):
-    def __init__(self, bend_dim: Dim2, waveguide_w: float, gap_w: float, interaction_l: float,
+    def __init__(self, bend_dim: Union[Dim2, Dim3], waveguide_w: float, gap_w: float, interaction_l: float,
                  coupler_boundary_taper_ls: Tuple[float, ...] = (0,),
                  coupler_boundary_taper: Optional[Tuple[Tuple[float, ...]]] = None,
                  end_bend_dim: Optional[Dim3] = None, use_radius: bool = False):
@@ -157,10 +157,10 @@ class DC(Pattern):
             paths = lower_path, upper_path
         super(DC, self).__init__(*paths, call_union=False)
         self.lower_path, self.upper_path = Pattern(lower_path, call_union=False), Pattern(upper_path, call_union=False)
-        self.port['a0'] = Port(0, 0, -np.pi)
-        self.port['a1'] = Port(0, interport_distance, -np.pi)
-        self.port['b0'] = Port(self.size[0], 0)
-        self.port['b1'] = Port(self.size[0], interport_distance)
+        self.port['a0'] = Port(0, 0, -np.pi, w=waveguide_w)
+        self.port['a1'] = Port(0, interport_distance, -np.pi, w=waveguide_w)
+        self.port['b0'] = Port(self.size[0], 0, w=waveguide_w)
+        self.port['b1'] = Port(self.size[0], interport_distance, w=waveguide_w)
         self.lower_path.port = {'a0': self.port['a0'], 'b0': self.port['b0']}
         self.lower_path.wg_path = self.lower_path
         self.upper_path.port = {'a0': self.port['a1'], 'b0': self.port['b1']}
@@ -211,10 +211,10 @@ class MMI(Pattern):
         p_11 = copy(p_00).rotate(np.pi, center)
         super(MMI, self).__init__(mmi, p_00, p_01, p_10, p_11)
         bend_y = 2 * self.bend_dim[1] if self.bend_dim else 0
-        self.port['a0'] = Port(0, 0, -np.pi)
-        self.port['a1'] = Port(0, self.interport_distance + bend_y, -np.pi)
-        self.port['b0'] = Port(self.size[0], 0)
-        self.port['b1'] = Port(self.size[0], self.interport_distance + bend_y)
+        self.port['a0'] = Port(0, 0, -np.pi, waveguide_w)
+        self.port['a1'] = Port(0, self.interport_distance + bend_y, -np.pi, waveguide_w)
+        self.port['b0'] = Port(self.size[0], 0, w=waveguide_w)
+        self.port['b1'] = Port(self.size[0], self.interport_distance + bend_y, w=waveguide_w)
 
 
 class GratingPad(Pattern):
@@ -327,8 +327,8 @@ class Interposer(Pattern):
         self.init_pos = init_pos
         self.final_pos = final_pos
         for idx in range(n):
-            self.port[f'a{idx}'] = Port(*init_pos[idx], -np.pi)
-            self.port[f'b{idx}'] = Port(*final_pos[idx])
+            self.port[f'a{idx}'] = Port(*init_pos[idx], -np.pi, w=waveguide_w)
+            self.port[f'b{idx}'] = Port(*final_pos[idx], w=waveguide_w)
 
 
 class Waveguide(Pattern):
@@ -396,8 +396,8 @@ class Waveguide(Pattern):
                 super(Waveguide, self).__init__(pattern)
         else:
             super(Waveguide, self).__init__(p)
-        self.port['a0'] = Port(0, 0, -np.pi)
-        self.port['b0'] = Port(self.size[0], 0)
+        self.port['a0'] = Port(0, 0, -np.pi, w=waveguide_w)
+        self.port['b0'] = Port(self.size[0], 0, w=waveguide_w)
 
     @property
     def wg_path(self) -> Pattern:
@@ -429,17 +429,17 @@ class HoleArray(Pattern):
 
 
 class DelayLine(Pattern):
-    def __init__(self, waveguide_width: float, delay_length: float, bend_radius: float, straight_length: float,
+    def __init__(self, waveguide_w: float, delay_length: float, bend_radius: float, straight_length: float,
                  number_bend_pairs: int = 1, flip: bool = False):
         """Delay Line
         Args:
-            waveguide_width: the waveguide width
+            waveguide_w: the waveguide width
             delay_length: the delay line length increase over the straight length
             bend_radius: the bend radius of turns in the squiggle delay line
             straight_length: the comparative straight segment this matches
             flip: whether to flip the usual direction of the delay line
         """
-        self.waveguide_width = waveguide_width
+        self.waveguide_w = waveguide_w
         self.delay_length = delay_length
         self.bend_radius = bend_radius
         self.straight_length = straight_length
@@ -458,7 +458,7 @@ class DelayLine(Pattern):
                 f"The delay line does not fit in the horizontal distance of"
                 f"{straight_length} increase the number of bend pairs")
         height = (4 * number_bend_pairs - 2) * bend_radius
-        p = Path(waveguide_width)
+        p = Path(waveguide_w)
         p.segment(length=bend_radius)
         p.segment(length=segment_length)
 
@@ -476,8 +476,8 @@ class DelayLine(Pattern):
         p.segment(length=extra_length)
 
         super(DelayLine, self).__init__(p)
-        self.port['a0'] = Port(0, 0, -np.pi)
-        self.port['b0'] = Port(self.bounds[2], 0)
+        self.port['a0'] = Port(0, 0, -np.pi, w=waveguide_w)
+        self.port['b0'] = Port(self.bounds[2], 0, w=waveguide_w)
 
 
 class TapDC(Pattern):

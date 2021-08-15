@@ -87,17 +87,19 @@ class Path(gy.Path):
 
 
 class Port:
-    def __init__(self, x: float, y: float, a: float = 0):
+    def __init__(self, x: float, y: float, a: float = 0, w: float = 0):
         """Port used by dphox
 
         Args:
             x: x position of the port
             y: y position of the port
             a: angle (orientation) of the port (in radians)
+            w: the width of the port (optional)
         """
         self.x = x
         self.y = y
         self.a = a
+        self.w = w
         self.a_deg = a * 180 / np.pi
         self.xy = (x, y)
         self.xya = (x, y, a)
@@ -218,7 +220,7 @@ class Pattern:
         for pattern in self.reference_patterns:
             pattern.translate(dx, dy)
         for name, port in self.port.items():
-            self.port[name] = Port(port.x + dx, port.y + dy, port.a)
+            self.port[name] = Port(port.x + dx, port.y + dy, port.a, port.w)
         return self
 
     def align(self, pattern_or_center: Union["Pattern", Tuple[float, float]],

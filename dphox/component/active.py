@@ -120,10 +120,9 @@ class Mesh(Multilayer):
         pattern_to_layer = sum([path.pattern_to_layer for path in paths], [])
         super(Mesh, self).__init__(pattern_to_layer)
         self.port = {
-            f'a{i}': Port(0, i * mzi.interport_distance, -np.pi) for i in range(n)
-        }.update({
-            f'b{i}': Port(self.size[0], i * mzi.interport_distance) for i in range(n)
-        })
+            **{f'a{i}': Port(0, i * mzi.interport_distance, -np.pi) for i in range(n)},
+            **{f'b{i}': Port(self.size[0], i * mzi.interport_distance) for i in range(n)}
+        }
         self.interport_distance = mzi.interport_distance
         self.waveguide_w = self.mzi.waveguide_w
         # number of straight waveguide in the column
