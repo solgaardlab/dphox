@@ -8,7 +8,7 @@ from pydantic.dataclasses import dataclass
 from shapely.affinity import rotate
 from shapely.geometry import MultiPolygon, Point, Polygon
 
-from .foundry import Foundry, fabricate, CommonLayer, FABLESS
+from .foundry import Foundry, fabricate, CommonLayer, FABLESS, ProcessOp
 from .pattern import Box, Pattern, Port
 from .typing import Dict, List, Optional, Int2, Float2, Float3, Float4, Tuple, Union
 from .utils import fix_dataclass_init_docs
@@ -305,8 +305,8 @@ class Device:
         b = self.bounds  # (minx, miny, maxx, maxy)
         return b[2] - b[0], b[3] - b[1]  # (maxx - minx, maxy - miny)
 
-    def trimesh(self, foundry: Foundry = FABLESS):
-        return fabricate(self.layer_to_geoms, foundry)
+    def trimesh(self, foundry: Foundry = FABLESS, exclude_layer: Optional[List[CommonLayer]] = None):
+        return fabricate(self.layer_to_geoms, foundry, exclude_layer=exclude_layer)
 
     @classmethod
     def aggregate(cls, devices: List["Device"], name: Optional[str] = None):

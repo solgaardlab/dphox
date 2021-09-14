@@ -24,10 +24,11 @@ before_install: &before_install
 install:
   pip install codecov && pip install pytest
 
-script:
-  coverage run -m pytest tests
-after_success:
-  - codecov
+#script:
+#  coverage run -m pytest tests
+#after_success:
+#  - codecov
+#add this once tests are implemented
 
 deploy:
   provider: pypi

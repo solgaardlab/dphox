@@ -150,7 +150,11 @@ class ProcessStep:
 @fix_dataclass_init_docs
 @dataclass
 class Foundry:
-    """The :code:`Foundry` class defines the full stack of process steps
+    """The :code:`Foundry` class defines the full stack of process steps.
+
+    For any step where the :code:`start_height` si not specified, the :code:`Foundry` class will assume a start height
+    that is directly above the previously deposited layer. Note this does not support conformal deposition as this
+    assumes all layers below are planarized.
 
     Attributes:
         stack: List of process steps that when applied sequentially lead to a full foundry stack
@@ -165,20 +169,27 @@ class Foundry:
         start_height = 0
         for step in self.stack:
             step.start_height = start_height if step.start_height is None else step.start_height
-            start_height = step.start_height + step.thickness
+            start_height = step.start_height + step.thickness if step.process_op == ProcessOp.GROW else step.start_height
 
     @property
     def layer_to_gds_label(self):
         return {step.layer: step.gds_label for step in self.stack}
 
 
-def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_device: Optional[Scene] = None) -> Scene:
+def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_device: Optional[Scene] = None,
+              exclude_layer: Optional[List[CommonLayer]] = None) -> Scene:
     """Fabricate a device based on a layer-to-geometry dict, :code:`Foundry`, and initial device (type :code:`Scene`).
+
+    This method is fairly rudimentary and will not implement things like conformal deposition. At the moment,
+    you can implement things like rib etches which can be determined using 2d shape operations. Depositions in
+    layers above etched layers will just start from the maximum z extent of the previous layer. This is specified
+    by the :code:`Foundry` stack.
 
     Args:
         layer_to_geom: A dictionary mapping each layer to the `full` Shapely geometry for that layer.
         foundry: The foundry for each layer
         init_device: The initial device on which to start fabrication  (useful for post-processing simulations).
+        exclude_process_op: Exclude all process ops in this list.
 
     Returns:
         The device :code:`Scene` to visualize.
@@ -189,6 +200,7 @@ def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_dev
     bound_list = np.array([p.bounds for _, p in layer_to_geom.items()]).T
     xy_extent = np.min(bound_list[0]), np.min(bound_list[1]), np.max(bound_list[2]), np.max(bound_list[3])
     mesh = extrude_polygon(box(*xy_extent), height=foundry.height)
+    exclude_layer = [] if exclude_layer is None else exclude_layer
     if 'clad' not in device.geometry and foundry.cladding is not None:
         device.add_geometry(mesh, geom_name='clad')
         mesh.visual.face_colors = (*foundry.cladding.color, 0.5)
@@ -198,7 +210,9 @@ def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_dev
         dz = step.start_height
         meshes = []
         layer = step.layer
-        if layer in layer_to_geom:
+        if layer in exclude_layer:
+            continue
+        elif layer in layer_to_geom:
             for poly in layer_to_geom[layer]:
                 meshes.append(extrude_polygon(poly, height=step.thickness))
             mesh = concatenate(meshes)
@@ -209,24 +223,31 @@ def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_dev
                 device.add_geometry(mesh.apply_translation((0, 0, dz)), geom_name=mesh_name)
             elif step.process_op == ProcessOp.DRI_ETCH:
                 # Directly etch device
-                for mat in device.geometry:
-                    device.geometry[mat.name] = difference(device.geometry[mat.name],
-                                                           mesh.apply_translation((0, 0, dz - step.thickness)),
-                                                           engine='blender')
+                # TODO: convert this to a 2D geometry function
+                # for mat in device.geometry:
+                #     device.geometry[mat.name] = difference(device.geometry[mat.name],
+                #                                            mesh.apply_translation((0, 0, dz - step.thickness)))
+                raise NotImplementedError(f"Fabrication method not yet implemented for `{step.process_op.value}`")
             elif step.process_op == ProcessOp.DOPE:
                 # only support to dope silicon at the moment
                 if prev_mat != SILICON:
                     raise ValueError("The previous material must be crystalline silicon for dopant implantation.")
-                mesh = intersection([mesh.apply_translation((0, 0, dz - step.thickness)),
-                                    device.geometry[prev_mesh_name]], engine='blender')
-                device.geometry[prev_mesh_name] = difference(device.geometry[prev_mesh_name], mesh)
-                device.add_geometry(mesh, geom_name=mesh_name)
+                # TODO: convert this to a 2D geometry function
+                # mesh = intersection([mesh.apply_translation((0, 0, dz - step.thickness)),
+                #                     device.geometry[prev_mesh_name]])
+                # device.geometry[prev_mesh_name] = difference(device.geometry[prev_mesh_name], mesh)
+                # just add the geometry
+                device.add_geometry(mesh.apply_translation((0, 0, dz - step.thickness)), geom_name=mesh_name)
             elif step.process_op == ProcessOp.SAC_ETCH:
-                device.geometry['clad'] -= difference(device.geometry['clad'], mesh, engine='blender')
+
+                raise NotImplementedError(f"Fabrication method not yet implemented for `{step.process_op.value}`")
+                # device.geometry['clad'] -= difference(device.geometry['clad'], mesh)
+                # device.add_geometry(mesh, geom_name=mesh_name)
             else:
                 raise NotImplementedError(f"Fabrication method not yet implemented for `{step.process_op.value}`")
             prev_mesh_name = mesh_name
-        prev_mat = step.mat
+        if step.process_op == ProcessOp.GROW:
+            prev_mat = step.mat
     return device
 
 

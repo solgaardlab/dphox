@@ -910,7 +910,7 @@ class Box(Pattern):
         return Pattern(*patterns)
 
     def flexure(self, spring_extent: Float2, connector_extent: Float2 = None,
-                stripe_w: float = 1, symmetric: bool = True) -> Pattern:
+                stripe_w: float = 1, symmetric: bool = True, spring_center: bool = True) -> Pattern:
         """A crab-leg flexure (useful for MEMS actuation).
 
         Args:
@@ -934,8 +934,11 @@ class Box(Pattern):
                     connector.copy.valign(self).halign(self),
                     connector.copy.valign(self).halign(self, left=False)
                 ]
-        return Pattern(self.striped(stripe_w),
-                       spring.copy.valign(self), spring.copy.valign(self, bottom=False), *connectors)
+        springs = [
+            spring.copy.valign(self),
+            spring.copy if spring_center else spring.copy.valign(self, bottom=False)
+        ]
+        return Pattern(self.striped(stripe_w), *springs, *connectors)
 
 
 @fix_dataclass_init_docs
@@ -983,9 +986,10 @@ class MEMSFlexure(Pattern):
     pitch: Union[float, Float2]
     spring_extent: Float2
     connector_extent: Float2 = None
+    spring_center: bool = True
 
     def __post_init_post_parse__(self):
         super(MEMSFlexure, self).__init__(Box(self.extent).flexure(self.spring_extent, self.connector_extent,
-                                                                   self.stripe_w))
+                                                                   self.stripe_w, self.spring_center))
         self.box = Box(self.extent)
         self.reference_patterns.append(self.box)
