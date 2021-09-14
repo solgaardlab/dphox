@@ -1,13 +1,20 @@
+from pydantic.dataclasses import dataclass
 import numpy as np
 
-from .typing import Tuple
+from .typing import Float3, Tuple, Optional
 
 
-def _um_str(microns: float):
-    return f'{np.around(float(microns),3):.3f}'
+def fix_dataclass_init_docs(cls):
+    """Fix the ``__init__`` documentation for a :class:`dataclasses.dataclass`.
 
+    Args:
+        cls: The class whose docstring needs fixing
 
-def circle(radius: float, n: int = 20, xy: Tuple[float, float] = (0, 0)):
-    u = np.linspace(0, 2 * np.pi, n + 1)
-    polygon = [(radius * np.sin(a) + xy[0], radius * np.cos(a) + xy[1]) for a in u]
-    return polygon
+    Returns:
+        The class that was passed so this function can be used as a decorator
+
+    See Also:
+        https://github.com/agronholm/sphinx-autodoc-typehints/issues/123
+    """
+    cls.__init__.__qualname__ = f'{cls.__name__}.__init__'
+    return cls

@@ -12,3 +12,4 @@ data/*
 aim_lib/*
 *.gds
 *.stl
+doc/source/_build

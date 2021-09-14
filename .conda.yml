@@ -4,10 +4,8 @@ channels:
   - anaconda
 dependencies:
   - python=3.7
-  - numpy
-  - scipy
+  - trimesh
+  - shapely
   - sphinx-autodoc-typehints
-  - jax
   - xarray
-  - scikit-image
   - matplotlib

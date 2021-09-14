@@ -1,3 +1,4 @@
+pydantic
 numpy
 scipy
 matplotlib

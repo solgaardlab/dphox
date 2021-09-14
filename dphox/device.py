@@ -1,20 +1,17 @@
-import dataclasses
-import numpy as np
 from collections import defaultdict
 from copy import deepcopy as copy
 
 import gdspy as gy
-import trimesh
+import numpy as np
 from descartes import PolygonPatch
+from pydantic.dataclasses import dataclass
 from shapely.affinity import rotate
-from shapely.geometry import Polygon, MultiPolygon, Point
-from shapely.ops import cascaded_union
-from trimesh import creation, visual
+from shapely.geometry import MultiPolygon, Point, Polygon
 
-from .passive import Box, Waveguide
-from .pattern import Path, Pattern, Port
-from dphox.typing import Tuple, Dict, Union, Optional, Callable, PolygonLike, List, Size2, Size3, Size4, Shape2
-from dphox.utils import Material
+from .foundry import Foundry, fabricate, CommonLayer, FABLESS
+from .pattern import Box, Pattern, Port
+from .typing import Dict, List, Optional, Int2, Float2, Float3, Float4, Tuple, Union
+from .utils import fix_dataclass_init_docs
 
 try:
     import plotly.graph_objects as go
@@ -32,59 +29,93 @@ except ImportError:
     NAZCA_IMPORTED = False
 
 
-@dataclasses.dataclass
-class Process:
-    zlim: Dict[Union[int, str], Tuple[float, float]]
-    material: Dict[Union[int, str], Material]
+class Device:
+    """A :code:`Device` defines a device (active or passive) in a GDS.
 
+    A :code:`Device` is a core object in DPhox, which enables composition of multiple :code:`Pattern` or
+    :code:`Polygon` mapped to process stack layers into a single :code:`Device`. Once the process is defined,
+    :code:`Trimesh` may be used to show a full 3D model of the device. Additionally, a :code:`Device` can be mapped
+    to a GDSPY or Nazca cell.
 
-class Multilayer:
-    def __init__(self, pattern_to_layer: List[Tuple[Union[Pattern, Path, PolygonLike],
-                                                    Union[int, str]]] = None):
+    Attributes:
+        name: Name of the device. This name can be anything you choose, ideally not repeating
+            any previously defined :code:`Device`.
+        pattern_to_layer: A list of tuples, each consisting of a :code:`Pattern` or :code:`PolygonLike` followed by
+            a layer label (integer or string).
+    """
+
+    def __init__(self, name: str, pattern_to_layer: List[Tuple[Pattern, Union[int, str]]] = None):
+        self.name = name
         self.pattern_to_layer = [] if pattern_to_layer is None else pattern_to_layer
-        self.layer_to_pattern, self.port = self._init_multilayer()
+        self.pattern_to_layer = [(Pattern(comp), layer) for comp, layer in self.pattern_to_layer]
+        self.layer_to_geoms, self.port = self._init_multilayer()
+
+    def _init_multilayer(self) -> Tuple[Dict[Union[int, str], MultiPolygon], Dict[str, Port]]:
+        layer_to_polys = defaultdict(list)
+        for component, layer in self.pattern_to_layer:
+            layer_to_polys[layer].extend(component.polys)
+        pattern_dict = {layer: MultiPolygon(polys) for layer, polys in layer_to_polys.items()}
+        # TODO: temporary way to assign ports
+        port = dict(sum([list(pattern.port.items()) for pattern, _ in self.pattern_to_layer], []))
+        return pattern_dict, port
 
     @classmethod
-    def from_pattern(cls, pattern: Pattern, layer: str):
-        return cls([(pattern, layer)])
+    def from_pattern(cls, pattern: Pattern, name: str, layer: str):
+        """A class method to convert a :code:`Pattern` into a :code:`Device`.
+
+        Args:
+            pattern: The pattern that is being used to generate the device.
+            name: Name for the component.
+            layer: The layer for the pattern.
+
+        Returns:
+            The :code:`Device` containing the :code:`Pattern` at the specified :code:`layer`.
+
+        """
+        return cls(name, [(pattern, layer)])
 
     @classmethod
     def from_nazca_cell(cls, cell: "nd.Cell"):
-        """
+        """Get the Device from a nazca cell (assumes nazca is installed).
+
+        See Also:
+            https://nazca-design.org/forums/topic/clipping-check-distance-and-length-for-interconnects/
 
         Args:
             cell: Nazca cell to get Multilayer
 
         Returns:
+            The :code:`Device` with the :code:`nazca` cell.
 
         """
         # a glimpse into cell_iter()
-        # code from https://nazca-design.org/forums/topic/clipping-check-distance-and-length-for-interconnects/
+        # code from
         multilayers = defaultdict(list)
         for named_tuple in nd.cell_iter(cell, flat=True):
             if named_tuple.cell_start:
                 for i, (polygon, points, bbox) in enumerate(named_tuple.iters['polygon']):
                     if polygon.layer == 'bb_pin':
+                        # TODO(sunil): actually extract the pins from this layer.
                         continue
                     # fixing point definitions from mask to 1nm precision,
                     # kinda hacky but is physical and prevents false polygons
                     points = np.around(points, decimals=3)
                     multilayers[polygon.layer].append(Pattern(Polygon(points)))
-        return cls([(Pattern(*pattern_list), layer) for layer, pattern_list in multilayers.items()])
+        return cls(cell.name, [(Pattern(*pattern_list), layer) for layer, pattern_list in multilayers.items()])
 
     @property
-    def bounds(self) -> Size4:
+    def bounds(self) -> Float4:
         """Bounding box
 
         Returns:
             Bounding box for the component of the form (minx, maxx, miny, maxy)
 
         """
-        bbox = self.gdspy_cell().get_bounding_box()
-        return bbox[0][0], bbox[0][1], bbox[1][0], bbox[1][1]
+        bound_list = np.array([p.bounds for p, _ in self.pattern_to_layer]).T
+        return np.min(bound_list[0]), np.min(bound_list[1]), np.max(bound_list[2]), np.max(bound_list[3])
 
     @property
-    def center(self) -> Size2:
+    def center(self) -> Float2:
         """
 
         Returns:
@@ -94,7 +125,7 @@ class Multilayer:
         b = self.bounds  # (minx, miny, maxx, maxy)
         return (b[2] + b[0]) / 2, (b[3] + b[1]) / 2  # (avgx, avgy)
 
-    def align(self, c: Union["Pattern", Tuple[float, float]]) -> "Multilayer":
+    def align(self, c: Union["Pattern", Float2]) -> "Device":
         """Align center of pattern
 
         Args:
@@ -109,59 +140,70 @@ class Multilayer:
         self.translate(center[0] - old_x, center[1] - old_y)
         return self
 
-    def translate(self, dx: float = 0, dy: float = 0) -> "Multilayer":
-        """Translate the multilayer by translating all of the patterns within it individually
+    def translate(self, dx: float = 0, dy: float = 0) -> "Device":
+        """Translate the device by translating all of the patterns within it.
 
         Args:
-            dx: translation in x
-            dy: translation in y
+            dx: translation in x.
+            dy: translation in y.
 
         Returns:
+            The translated device.
 
         """
         for pattern, _ in self.pattern_to_layer:
             pattern.translate(dx, dy)
-        self.layer_to_pattern, _ = self._init_multilayer()
+        self.layer_to_geoms, _ = self._init_multilayer()
         for name, port in self.port.items():
             self.port[name] = Port(port.x + dx, port.y + dy, port.a)
         return self
 
-    def rotate(self, angle: float, origin: str = (0, 0)) -> "Multilayer":
-        """Rotate the multilayer by rotating all of the patterns within it individually
+    def rotate(self, angle: float, origin: Float2 = (0, 0)) -> "Device":
+        """Rotate the device by rotating all of the patterns within it.
 
         Args:
-            angle: rotation angle in degrees
-            origin: origin of rotation
+            angle: rotation angle in degrees.
+            origin: origin of rotation.
 
         Returns:
-            Rotated pattern
+            The rotated device.
 
         """
         for pattern, _ in self.pattern_to_layer:
             pattern.rotate(angle, origin)
-        self.layer_to_pattern, _ = self._init_multilayer()
+        self.layer_to_geoms, _ = self._init_multilayer()
         port_to_point = {name: rotate(Point(*port.xy), angle, origin) for name, port in self.port.items()}
         self.port = {name: Port(float(point.x), float(point.y), self.port[name].a + angle)
                      for name, point in port_to_point.items()}
         return self
 
-    def flip(self, center: Tuple[float, float] = (0, 0), horiz: bool = False) -> "Multilayer":
-        """Flip the multilayer about center (vertical, or about x-axis, by default)
+    def reflect(self, center: Float2 = (0, 0), horiz: bool = False) -> "Device":
+        """Reflected the multilayer about center (vertical, or about x-axis, by default)
 
         Args:
-            center: center about which to flip
-            horiz: flip horizontally instead of vertically
+            center: center about which to reflect
+            horiz: reflect horizontally instead of vertically
 
         Returns:
-            Flipped pattern
+            Reflected pattern.
 
         """
         for pattern, _ in self.pattern_to_layer:
-            pattern.flip(center, horiz)
-        self.layer_to_pattern, _ = self._init_multilayer()
+            pattern.reflect(center, horiz)
+        self.layer_to_geoms, _ = self._init_multilayer()
         return self
 
     def to(self, port: Port, port_name: Optional[str] = None):
+        """Translate the device so the origin (or port :code:`port_name`) is matched with that of :code:`port`.
+
+        Args:
+            port: The port to which the device should be moved
+            port_name: The port name corresponding to this device's port that should be connected to :code:`port`.
+
+        Returns:
+            The resultant device.
+
+        """
         if port_name is None:
             return self.rotate(port.a).translate(port.x, port.y)
         else:
@@ -170,7 +212,7 @@ class Multilayer:
             )
 
     @property
-    def copy(self) -> "Multilayer":
+    def copy(self) -> "Device":
         """Return a copy of this layer for repeated use
 
         Returns:
@@ -179,27 +221,25 @@ class Multilayer:
         """
         return copy(self)
 
-    def gdspy_cell(self, cell_name: str = 'dummy') -> gy.Cell:
-        """
-
-        Args:
-            cell_name: Cell name
+    @property
+    def gdspy_cell(self) -> gy.Cell:
+        """Turn this multilayer into a GDSPY cell.
 
         Returns:
-            A GDSPY cell
+            A GDSPY cell.
 
         """
-        cell = gy.Cell(cell_name, exclude_from_current=(cell_name == 'dummy'))
-        for pattern, layer in self._pattern_to_layer.items():
+        cell = gy.Cell(self.name)
+        for pattern, layer in self.pattern_to_layer:
             for poly in pattern.polys:
                 cell.add(gy.Polygon(np.asarray(poly.exterior.coords.xy).T, layer=layer))
         return cell
 
-    def nazca_cell(self, cell_name: str, callback: Optional[Callable] = None) -> "nd.Cell":
+    @property
+    def nazca_cell(self) -> "nd.Cell":
         """Turn this multilayer into a Nazca cell
 
         Args:
-            cell_name: Cell name
             callback: Callback function to call using Nazca (adding pins, other structures)
 
         Returns:
@@ -207,28 +247,15 @@ class Multilayer:
         """
         if not NAZCA_IMPORTED:
             raise ImportError('Nazca not installed! Please install nazca prior to running nazca_cell().')
-        with nd.Cell(cell_name) as cell:
-            for pattern, layer in self._pattern_to_layer.items():
+        with nd.Cell(self.name) as cell:
+            for pattern, layer in self.pattern_to_layer:
                 for poly in pattern.polys:
                     nd.Polygon(points=list(np.around(np.asarray(poly.exterior.coords.xy).T, decimals=3)),
                                layer=layer).put()
             for name, port in self.port.items():
                 nd.Pin(name).put(*port.xya)
-            if callback is not None:
-                callback()
             nd.put_stub()
         return cell
-
-    def _init_multilayer(self) -> Tuple[Dict[Union[int, str], MultiPolygon], Dict[str, Port]]:
-        self._pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
-                                  for comp, layer in self.pattern_to_layer}
-        layer_to_polys = defaultdict(list)
-        for component, layer in self._pattern_to_layer.items():
-            layer_to_polys[layer].extend(component.polys)
-        pattern_dict = {layer: MultiPolygon(polys) for layer, polys in layer_to_polys.items()}
-        # TODO: temporary way to assign ports
-        port = dict(sum([list(pattern.port.items()) for pattern, _ in self.pattern_to_layer], []))
-        return pattern_dict, port
 
     def add(self, pattern: Pattern, layer: str):
         """Add pattern, layer to Multilayer
@@ -241,28 +268,34 @@ class Multilayer:
 
         """
         self.pattern_to_layer.append((pattern, layer))
-        self.layer_to_pattern, self.port = self._init_multilayer()
+        self.layer_to_geoms, self.port = self._init_multilayer()
 
-    def plot(self, ax, layer_to_color: Dict[Union[int, str], Union[Size3, str]], alpha: float = 0.5):
-        """
+    def plot(self, ax, foundry: Foundry = FABLESS, alpha: float = 0.5):
+        """Plot this device on a matplotlib plot.
 
         Args:
-            ax:
-            layer_to_color:
-            alpha:
+            ax: Matplotlib axis handle to plot the device.
+            alpha: The transparency factor for the plot (to see overlay of structures from many layers).
 
         Returns:
 
         """
-        for layer, pattern in self.layer_to_pattern.items():
-            ax.add_patch(PolygonPatch(pattern, facecolor=layer_to_color[layer], edgecolor='none', alpha=alpha))
+        for layer, pattern in self.layer_to_geoms.items():
+            color = None
+            for step in foundry.stack:
+                if step.layer == layer:
+                    color = step.mat.color
+                    break
+            if color is None:
+                raise ValueError("The layer does not exist in the foundry stack, so could not find a color.")
+            ax.add_patch(PolygonPatch(pattern, facecolor=color, edgecolor='none', alpha=alpha))
         b = self.bounds
         ax.set_xlim((b[0], b[2]))
         ax.set_ylim((b[1], b[3]))
         ax.set_aspect('equal')
 
     @property
-    def size(self) -> Size2:
+    def size(self) -> Float2:
         """Size of the pattern
 
         Returns:
@@ -272,217 +305,73 @@ class Multilayer:
         b = self.bounds  # (minx, miny, maxx, maxy)
         return b[2] - b[0], b[3] - b[1]  # (maxx - minx, maxy - miny)
 
-    def to_trimesh_dict(self, layer_to_zrange: Dict[str, Tuple[float, float]],
-                        process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
-                        layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad',
-                        include_oxide: bool = True):
-        if include_oxide and 'oxide' not in self.layer_to_pattern:
-            print('WARNING: oxide not included, so adding to multilayer')
-            self.pattern_to_layer.append((Box(self.size).align(self.center), 'oxide'))
-            self.layer_to_pattern, self.port = self._init_multilayer()
-        meshes = {}  # The initialization for the dictionary of all trimesh meshes
-
-        # TODO(sunil): start using logging rather than printing
-        def _add_trimesh_layer(pattern, zrange, layer):
-            zmin, zmax = zrange
-            layer = layer.split('_')[0]
-            layer_meshes = []
-            for poly in pattern:
-                try:
-                    layer_meshes.append(
-                        trimesh.creation.extrude_polygon(poly, height=zmax - zmin).apply_translation((0, 0, zmin)))
-                except IndexError:
-                    print('WARNING: bad polygon, skipping')
-            layer_meshes = layer_meshes + [meshes[layer]] if layer in meshes.keys() else layer_meshes
-            mesh = trimesh.util.concatenate(layer_meshes)
-            mesh.visual.face_colors = visual.random_color() if layer_to_color is None else layer_to_color[layer]
-            meshes[layer] = mesh
-
-        if process_extrusion is not None:
-            # layer_to_extrusion = self._build_layers(layer_to_zrange, process_extrusion)
-            layer_to_extrusion = self.build_layers(layer_to_zrange, process_extrusion)
-            for layer, pattern_zrange in layer_to_extrusion.items():
-                pattern, zrange = pattern_zrange
-                _add_trimesh_layer(pattern, zrange, layer)
-            return meshes
-        else:
-            for layer, pattern in self.layer_to_pattern.items():
-                try:
-                    _add_trimesh_layer(pattern, layer_to_zrange[layer], layer)
-                except KeyError:
-                    print(f"No zranges given for the layer {layer}")
-            return meshes
-
-    def to_stls(self, prefix: str, layer_to_zrange: Dict[str, Tuple[float, float]],
-                process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
-                layer_to_color: Optional[Dict[str, str]] = None, engine: str = 'scad',
-                layers: Optional[List[str]] = None,
-                include_oxide: bool = True, ):
-        """Exports layer by layer stls representing a psuedo fabrication of the multilayer"
-            Args:
-                prefix: A string prepending the output stl layers. "{prefix}_{layer}.stl"
-                layer_to_zrange: a dictionary of z-positions that describe thicknesses or depths for named process layers
-                process_extrusion: a dictionary of steps that define the processing steps for the masks described in the multilayer
-                layer_to_color: An optinal dictionary for  specifying the colors of each layer
-                engine: A str identifying which backend trimesh should use for generating the stls 
-                layers: An optional list for specifying the layers to export to stls. By default all layers are exported
-                include_oxide: a boolean to add an addtional block of oxide that fill the 3D space of the psuedo fabrication
-        """
-        meshes = self.to_trimesh_dict(layer_to_zrange, process_extrusion, layer_to_color, engine, include_oxide)
-        for layer, mesh in meshes.items():
-            if layers is None:
-                mesh.export(f'{prefix}_{layer}.stl')
-            elif layers and layer in layers:
-                mesh.export(f'{prefix}_{layer}.stl')
-
-    def to_trimesh_scene(self, layer_to_zrange: Dict[str, Tuple[float, float]],
-                         process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
-                         layer_to_color: Optional[Dict[str, str]] = None, ignore_layers: Optional[List[str]] = None,
-                         engine: str = 'scad'):
-        meshes = self.to_trimesh_dict(layer_to_zrange, process_extrusion, layer_to_color, engine)
-        scene = trimesh.Scene()
-        ignore_layers = [] if ignore_layers is None else ignore_layers
-        for mesh_name, mesh in meshes.items():
-            if mesh_name not in ignore_layers:
-                scene.add_geometry(mesh, mesh_name)
-        return scene
-
-    def show(self, layer_to_zrange: Dict[str, Tuple[float, float]],
-             process_extrusion: Optional[Dict[str, List[Tuple[str, str, str]]]] = None,
-             layer_to_color: Optional[Dict[str, str]] = None, ignore_layers: Optional[List[str]] = None,
-             engine: str = 'scad'):
-        self.to_trimesh_scene(layer_to_zrange, process_extrusion, layer_to_color, ignore_layers, engine).show()
-
-    def build_layers(self, layer_to_zrange: Dict[str, Tuple[float, float]],
-                     process_extrusion: Dict[str, List[Tuple[str, str, str]]]):
-        layer_to_extrusion = {}
-        layers = self.layer_to_pattern.keys()
-        layer_to_pattern_processed = self.layer_to_pattern.copy()
-
-        for step, operations in process_extrusion.items():
-            for layer_relation in operations:
-                layer, other_layer, operation = layer_relation
-                if 'dope' in step and operation == 'intersection':
-                    # make a new layer for each doping intersection
-                    zmin, zmax = layer_to_zrange[other_layer]
-                    z0, z1 = layer_to_zrange[layer]
-                    # TODO(): how to deal with different depth doping currently not addressed
-                    new_zrange = (max(zmax - (z1 - z0), zmin), zmax)
-                else:
-                    new_zrange = layer_to_zrange[layer]
-                if layer in layers:
-                    if other_layer in layers:
-                        pattern = Pattern(layer_to_pattern_processed[layer]).boolean_operation(
-                            Pattern(layer_to_pattern_processed[other_layer]), operation
-                        ).shapely
-                    else:
-                        pattern = layer_to_pattern_processed[layer]
-                    if pattern.geoms:
-                        pattern_shapely = cascaded_union(pattern.geoms)
-                        pattern_shapely = MultiPolygon([pattern_shapely]) if isinstance(pattern_shapely,
-                                                                                        Polygon) else pattern_shapely
-                        layer_to_pattern_processed[layer] = pattern
-                        layer_to_extrusion[layer] = (pattern_shapely, new_zrange)
-        return layer_to_extrusion
-
-    def fill_material(self, layer_name: str, growth: float, centered_layer: str = None):
-        all_patterns = [Pattern(poly) for layer, poly in self.layer_to_pattern.items()]
-        all_patterns = Pattern(*all_patterns)
-        minx, miny, maxx, maxy = all_patterns.bounds
-        centered_pattern = all_patterns if centered_layer is None else Pattern(self.layer_to_pattern[centered_layer])
-        fill = Pattern(gy.Polygon(
-            [(minx - growth / 2, miny - growth / 2), (minx - growth / 2, maxy + growth / 2),
-             (maxx + growth / 2, maxy + growth / 2), (maxx + growth / 2, miny - growth / 2)]
-        )).align(centered_pattern)
-        self.pattern_to_layer.append((fill, layer_name))
-        self._pattern_to_layer = {comp: layer if isinstance(comp, Pattern) else Pattern(comp)
-                                  for comp, layer in self.pattern_to_layer}
-        self.layer_to_pattern, self.port = self._init_multilayer()
-        return [(fill, layer_name)]
+    def trimesh(self, foundry: Foundry = FABLESS):
+        return fabricate(self.layer_to_geoms, foundry)
 
     @classmethod
-    def aggregate(cls, multilayers: List["Multilayer"]):
-        return cls(sum([m.pattern_to_layer for m in multilayers], []))
+    def aggregate(cls, devices: List["Device"], name: Optional[str] = None):
+        name = '|'.join([m.name for m in devices]) if name is None else name
+        return cls(name, sum([m.pattern_to_layer for m in devices], []))
 
 
-class MultilayerPath(Multilayer):
-    def __init__(self, waveguide_w: float, sequence: List[Union[Multilayer, Pattern, float]], path_layer: str):
-        """Multilayer path for appending a linear sequence of elements end-to-end (based on port 0)
+@fix_dataclass_init_docs
+@dataclass
+class Grating(Device):
+    """Grating with partial etch.
 
-        Args:
-            waveguide_w: Waveguide width
-            sequence: Sequence
-            path_layer: Path layer
-        """
-        patterns = []
-        if not len(sequence):
-            raise ValueError('Require a nonzero multilayer sequence length')
-        port = None
-        for p in sequence:
-            if p is not None:
-                d = p if isinstance(p, Multilayer) or isinstance(p, Pattern) else Waveguide(waveguide_w, p)
-                if port is None:
-                    patterns.append(d.to(Port(0, 0), 'a0'))
-                else:
-                    patterns.append(d.to(port, 'a0'))
-                port = d.port['b0']
-        pattern_to_layer = sum([[(p, path_layer)] if isinstance(p, Pattern) else p.pattern_to_layer for p in patterns],
-                               [])
-        super(MultilayerPath, self).__init__(pattern_to_layer)
-        self.port['a0'] = Port(0, 0, -180)
-        self.port['b0'] = port
-        self.patterns = patterns
-        self.sequence = sequence
-        self.waveguide_w = waveguide_w
-        self.path_layer = path_layer
+    extent: Dimension of the extent of the grating
+    pitch: float
+    duty_cycle: The fill factor for the grating
 
-    @property
-    def wg_path(self):
-        return Pattern(*[p.wg_path for p in self.patterns], call_union=False)
+    """
+    extent: Float2
+    pitch: float
+    duty_cycle: float
+    name: str = 'grating'
 
-    def append(self, element: Union[Multilayer, Pattern, float]):
-        self.__init__(self.waveguide_w, self.sequence + [element], self.path_layer)
-        return self
+    def __post_init__(self):
+        self.stripe_w = self.pitch * self.duty_cycle
+        self.pitch = self.pitch
+        self.duty_cycle = self.duty_cycle
+
+        super(Grating, self).__init__(self.name,
+                                      [(Box(self.extent), CommonLayer.RIB_SI),
+                                       (Box(self.extent).striped(self.stripe_w, (self.pitch, 0)), CommonLayer.RIDGE_SI)])
 
 
-class Grating(Multilayer):
-    def __init__(self, box_dim: Size2, pitch: float, duty_cycle: float, fill: str, etch: str):
-        self.stripe_w = pitch * duty_cycle
-        self.pitch = pitch
-        self.duty_cycle = duty_cycle
+@fix_dataclass_init_docs
+@dataclass
+class Via(Device):
+    """Via / metal multilayer stack (currently all params should be specified to 2 decimal places)
 
-        super(Grating, self).__init__([(Box(box_dim), fill),
-                                       (Box(box_dim).striped(self.stripe_w, (pitch, 0)), etch)])
+    Attributes:
+        via_extent: Dimensions of the via (or each via in via array).
+        boundary_grow: Boundary growth around the via or via array.
+        metal: Metal layer labels for the via (the thin metal layers)
+        via: Via layer labels for the via (the actual tall vias)
+        pitch: Pitch of the vias (center to center)
+        shape: Shape of the array (rows, cols)
+        name: Name of the via
+    """
 
+    via_extent: Float2
+    boundary_grow: Union[float, Float2]
+    metal: Union[str, List[str]] = (CommonLayer.METAL_1, CommonLayer.METAL_2)
+    via: Union[str, List[str]] = CommonLayer.VIA_1_2
+    pitch: float = 0
+    shape: Optional[Int2] = None
+    name: str = 'via'
 
-class Via(Multilayer):
-    def __init__(self, via_dim: Size2, boundary_grow: Union[float, Size2], metal: Union[str, List[str]],
-                 via: Union[str, List[str]], pitch: float = 0, shape: Optional[Shape2] = None):
-        """Via / metal multilayer stack (currently all params should be specified to 2 decimal places)
+    def __post_init_post_parse__(self):
+        self.metal = (self.metal,) if isinstance(self.metal, str) else self.metal
+        self.boundary_grow = self.boundary_grow if isinstance(self.boundary_grow, tuple)\
+            else tuple([self.boundary_grow] * len(self.metal))
 
-        Args:
-            via_dim: dimensions of the via (or each via in via array)
-            boundary_grow: boundary growth around the via or via array
-            metal: Metal layers
-            via: Via layers
-            pitch: Pitch of the vias (center to center)
-            shape: Shape of the array (rows, cols)
-        """
-        self.via_dim = via_dim
-        metal = (metal,) if isinstance(metal, str) else metal
-        boundary_grow = boundary_grow if isinstance(boundary_grow, tuple) else tuple([boundary_grow] * len(metal))
-        self.boundary_grow = boundary_grow
-        self.metal = metal
-        self.via = via
-        self.pitch = pitch
-        self.shape = shape
-        self.config = copy(self.__dict__)
-
-        max_boundary_grow = max(boundary_grow)
-        via_pattern = Box(via_dim, decimal_places=2)
-        if pitch > 0 and shape is not None:
+        max_boundary_grow = max(self.boundary_grow)
+        via_pattern = Box(self.via_extent, decimal_places=2)
+        if self.pitch > 0 and self.shape is not None:
             patterns = []
-            x, y = np.meshgrid(np.arange(shape[0]) * pitch, np.arange(shape[1]) * pitch)
+            x, y = np.meshgrid(np.arange(self.shape[0]) * self.pitch, np.arange(self.shape[1]) * self.pitch)
             for x, y in zip(x.flatten(), y.flatten()):
                 patterns.append(via_pattern.copy.translate(x, y))
             via_pattern = Pattern(*patterns, decimal_places=2)
@@ -490,13 +379,16 @@ class Via(Multilayer):
                         via_pattern.size[1] + 2 * max_boundary_grow), decimal_places=2).align((0, 0)).halign(0)
         via_pattern.align(boundary)
         layers = []
-        if isinstance(via, list):
-            layers += [(via_pattern.copy, layer) for layer in via]
-        elif isinstance(via, str):
-            layers += [(via_pattern, via)]
+        if isinstance(self.via, list):
+            layers += [(via_pattern.copy, layer) for layer in self.via]
+        elif isinstance(self.via, str):
+            layers += [(via_pattern, self.via)]
         layers += [(Box((via_pattern.size[0] + 2 * bg,
                          via_pattern.size[1] + 2 * bg), decimal_places=2).align(boundary), layer)
-                   for layer, bg in zip(metal, boundary_grow)]
-        super(Via, self).__init__(layers)
-        self.port['a0'] = Port(self.bounds[0], 0, np.pi)
-        self.port['b0'] = Port(self.bounds[2], 0)
+                   for layer, bg in zip(self.metal, self.boundary_grow)]
+        super(Via, self).__init__(self.name, layers)
+        self.port['w'] = Port(self.bounds[0], 0, -180)
+        self.port['e'] = Port(self.bounds[2], 0)
+        self.port['s'] = Port(0, self.bounds[1], -90)
+        self.port['n'] = Port(0, self.bounds[3], 90)
+        self.port['c'] = Port(0, 0)

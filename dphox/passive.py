@@ -1,12 +1,15 @@
-import dataclasses
-from copy import deepcopy as copy
+from enum import Enum
 
 import numpy as np
-from shapely.geometry import MultiPolygon, box
+from pydantic import Field
+from pydantic.dataclasses import dataclass
+from shapely.geometry import MultiPolygon
 
-from .pattern import Pattern, Path, Port
-from ..typing import Size2, Size3, Union, Optional, Tuple
-from ..utils import circle
+from .device import Device
+from .pattern import Box, Ellipse, GdspyPath, Pattern, Port, TaperSpec
+from .typing import Float2, Int2, Optional, Tuple, Union, List, Dict
+from .utils import fix_dataclass_init_docs
+from .foundry import CommonLayer
 
 try:
     import plotly.graph_objects as go
@@ -14,165 +17,179 @@ except ImportError:
     pass
 
 
-@dataclasses.dataclass
-class Box(Pattern):
-    """Box with default center at origin
+@fix_dataclass_init_docs
+@dataclass
+class Waveguide(Pattern):
+    """Waveguide, the core photonic structure for guiding light.
+
+    A waveguide is a patterned slab of core material that is capable of guiding light. Here, we define a general
+    waveguide class which can be tapered or optionally consist of recursively defined waveguides, i.e. via
+    :code:`subtract_waveguide`, that enable the definition of complex adiabatic coupling and perturbation strategies.
+    This enables the :code:`Waveguide` class to be used in a variety of contexts including multimode interference.
 
     Attributes:
-        box_dim: Box dimension (box width, box height)
+        waveguide_extent: Tuple of waveguide width, length at the input of the waveguide path. Note that the taper
+            can extend to be wider than the original extent width.
+        waveguide_taper: A :code:`TaperSpec` or list of :code:`TaperSpec`'s that sequentially taper the waveguide width
+            according to a :code:`Path.polynomial_taper` specification.
+        subtract_waveguide: A waveguide to subtract from the current waveguide. This is recursively defined, allowing
+            for the definition of highly complex waveguiding structures.
+        symmetric: Whether to symmetrically apply the taper params. For example, if a :code:`Waveguide`
+            were to be tapered by specifying :code:`taper_params` and `taper_ls`, the :code:`symmetric == True`
+            case would result in an inverted taper back to the original waveguide width. This is common in
+            certain applications such as crossings and phase shifters, thus it is set to :code:`True` by default,
+            though there are some devices such as waveguide terminations and escalators where such behavior is
+            not required.
     """
-    box_dim: Size2
-    decimal_places: int = 3
+    extent: Float2
+    taper: Union[TaperSpec, List[TaperSpec]] = Field(default_factory=list)
+    subtract_waveguide: Optional["Waveguide"] = None
+    symmetric: bool = True
 
-    def __post_init__(self):
-        super(Box, self).__init__(box(-self.box_dim[0] / 2, -self.box_dim[1] / 2,
-                                      self.box_dim[0] / 2, self.box_dim[1] / 2),
-                                  decimal_places=self.decimal_places)
-
-    @classmethod
-    def bbox(cls, pattern: Pattern) -> Pattern:
-        """Bounding box for pattern
-
-        Args:
-            pattern: The pattern over which to take a bounding box
-
-        Returns:
-            A bounding box pattern of the same size as :code:`pattern`
-
-        """
-        return cls(pattern.size).align(pattern)
-
-    def expand(self, grow: float) -> Pattern:
-        """An aligned box that grows by amount :code:`grow`
-
-        Args:
-            grow: The amount to grow the box
-
-        Returns:
-            The box after the grow transformation
-
-        """
-        big_box_dim = (self.box_dim[0] + grow, self.box_dim[1] + grow)
-        return Box(big_box_dim).align(self)
-
-    def hollow(self, thickness: float) -> Pattern:
-        """A hollow box of thickness :code:`thickness` on all four sides.
-
-        Args:
-            thickness: Thickness of the box
-
-        Returns:
-
-        """
-        return Pattern(
-            self.difference(Box((self.box_dim[0] - 2 * thickness, self.box_dim[1])).align(self)),
-            self.difference(Box((self.box_dim[0], self.box_dim[1] - 2 * thickness)).align(self)),
-        )
-
-    def u(self, thickness: float) -> Pattern:
-        return Pattern(
-            self.difference(Box((self.box_dim[0] - 2 * thickness, self.box_dim[1])).align(self)),
-            self.difference(Box((self.box_dim[0], self.box_dim[1] - thickness)).align(self).valign(self)),
-        )
-
-    def striped(self, stripe_w: float, pitch: Optional[Size2] = None) -> Pattern:
-        pitch = (stripe_w * 2, stripe_w * 2) if pitch is None else pitch
-        patterns = [self.hollow(stripe_w)] if pitch[0] > 0 and pitch[1] > 0 else []
-        if pitch[0] > 0 and not 3 * pitch[1] >= self.size[0]:
-            # edges of etch holes are really thick
-            # TODO: make the edges lean toward large holes over small holes. currently attepting to subtract the last pitch
-            xs = np.mgrid[self.bounds[0] + pitch[0]:self.bounds[2]:pitch[0]]
-            patterns.append(
-                Pattern(*[Box((stripe_w, self.size[1])).halign(x) for x in xs], call_union=False).align(self.center))
-        if pitch[1] > 0 and not 3 * pitch[1] >= self.size[1]:
-            ys = np.mgrid[self.bounds[1] + pitch[1]:self.bounds[3]:pitch[1]]
-            patterns.append(
-                Pattern(*[Box((self.size[0], stripe_w)).valign(y) for y in ys], call_union=False).align(self.center))
-        return Pattern(*patterns, call_union=False)
-
-    def flexure(self, spring_dim: Size2, connector_dim: Size2 = None, symmetric_connector: bool = True,
-                stripe_w: float = 1) -> Pattern:
-        spring = Box(spring_dim).align(self)
-        connector = Box(connector_dim).align(self)
-        connectors = []
-        if symmetric_connector:
-            connectors += [connector.copy.halign(self), connector.copy.halign(self, left=False)]
+    def __post_init_post_parse__(self):
+        waveguide = GdspyPath(self.extent[0])
+        self.taper = [self.taper] if isinstance(self.taper, TaperSpec) \
+            else self.taper
+        taper_l = np.sum([t.length for t in self.taper])
+        for taper in self.taper:
+            waveguide.polynomial_taper(taper, taper.num_evaluations)
+        if self.symmetric:
+            if self.extent[1] < 2 * taper_l:
+                raise ValueError(
+                    f'Require waveguide_extent[1] >= 2 * taper_l but got {self.extent[1]} <= {2 * taper_l}')
+            if self.extent[1] != 2 * taper_l:
+                waveguide.segment(self.extent[1] - 2 * taper_l)
+            for taper in reversed(self.taper):
+                waveguide.polynomial_taper(taper, taper.num_evaluations, inverted=True)
         else:
-            connectors += [
-                connector.copy.valign(self).halign(self),
-                connector.copy.valign(self).halign(self, left=False)
-            ]
-        return Pattern(self.striped(stripe_w),
-                       spring.copy.valign(self), spring.copy.valign(self, bottom=False), *connectors, call_union=False)
+            if not self.extent[1] >= taper_l:
+                raise ValueError(f'Require length >= taper_l but got {self.extent[1]} < {taper_l}')
+            waveguide.segment(self.length - taper_l)
+        waveguide = Pattern(waveguide)
+        if self.subtract_waveguide is not None:
+            if self.subtract_waveguide.size[1] >= waveguide.size[1]:
+                raise ValueError(f'Require the y extent of this waveguide to be greater than that of '
+                                 f'`subtract_waveguide`, but got {waveguide.size[1]} <= {self.subtract_waveguide.size[1]}')
+            waveguide = Pattern(waveguide.shapely_union() - self.subtract_waveguide.shapely_union())
+        super(Waveguide, self).__init__(waveguide)
+        self.port['a0'] = Port(0, 0, -180, w=self.extent[0])
+        self.port['b0'] = Port(self.size[0], 0, w=waveguide.size[0])
+
+    @property
+    def wg_path(self) -> Pattern:
+        return self
 
 
-@dataclasses.dataclass
+Waveguide.__pydantic_model__.update_forward_refs()
+
+
+class AnnotatedPathOp(str, Enum):
+    segment = 'segment'
+    turn = 'turn'
+    sbend = 'sbend'
+    dc = 'dc'
+    polynomial_taper = 'polynomial_taper'
+
+
+@fix_dataclass_init_docs
+@dataclass
+class AnnotatedPath(Pattern):
+    """Annotated path (a schema-based path model)
+
+    Attributes:
+        operation:
+        params:
+        current_path:
+    """
+
+    init: Union["AnnotatedPath", float]
+    operation: Optional[AnnotatedPathOp] = None
+    kwargs: Optional[Dict[str, Union[float, List[float], TaperSpec]]] = None
+
+    def __post_init_post_parse__(self):
+        if isinstance(self.init, float):
+            self._path = GdspyPath(self.init)
+        else:
+            self._path = self.init._path
+            if self.operation and self.kwargs:
+                {
+                    AnnotatedPathOp.turn: self._path.turn,
+                    AnnotatedPathOp.sbend: self._path.sbend,
+                    AnnotatedPathOp.dc: self._path.dc,
+                    AnnotatedPathOp.polynomial_taper: self._path.polynomial_taper,
+                    AnnotatedPathOp.segment: self._path.segment
+                }[self.operation](**self.kwargs)
+        super(AnnotatedPath, self).__init__(self._path)
+
+    def turn(self, **kwargs):
+        return AnnotatedPath(self, AnnotatedPathOp.turn, kwargs)
+
+    def sbend(self, **kwargs):
+        return AnnotatedPath(self, AnnotatedPathOp.sbend, kwargs)
+
+    def dc(self, **kwargs):
+        return AnnotatedPath(self, AnnotatedPathOp.dc, kwargs)
+
+    def polynomial_taper(self, **kwargs):
+        return AnnotatedPath(self, AnnotatedPathOp.polynomial_taper, kwargs)
+
+AnnotatedPath.__pydantic_model__.update_forward_refs()
+
+
+@fix_dataclass_init_docs
+@dataclass
 class DC(Pattern):
     """Directional coupler
 
+    A directional coupler is a `symmetric` component (across x and y dimensions) that contains two waveguides that
+    interact and couple light by adiabatically bending the waveguides towards each other, interacting over some
+    interaction length :code:`interaction_l`, and then adiabatically bending out to the original interport distance.
+    An MMI can actually be created if the gap_w is set to be negative.
+
     Attributes:
-        bend_dim: if use_radius is True (bend_radius, bend_height), else (bend_width, bend_height)
+        waveguide_w: Waveguide width at the inputs and outputs.
+        bend_extent: If use_radius is True (bend_radius, bend_height), else (bend_width, bend_height).
             If a third dimension is specified then the width of the waveguide portion in the interaction
             region is specified, which may be useful for broadband coupling.
-        waveguide_w: waveguide width
-        gap_w: gap between the waveguides
-        interaction_l: interaction length
-        coupler_boundary_taper_ls: coupler boundary tapers length
-        coupler_boundary_taper: coupler boundary taper params
-        end_bend_dim: If specified, places an additional end bend
+        gap_w: Gap between the waveguides in the interaction region.
+        interaction_l: Interaction length for the interaction region.
+        coupling_waveguide: An optional coupling waveguide to replace
+        end_bend_extent: If specified, places an additional end bend
         use_radius: use radius to define bends
     """
 
-    bend_dim: Union[Size2, Size3]
     waveguide_w: float
+    bend_l: float
+    interport_distance: float
     gap_w: float
     interaction_l: float
-    coupler_boundary_taper_ls: Tuple[float, ...] = (0,)
-    coupler_boundary_taper: Optional[Tuple[Tuple[float, ...]]] = None
-    end_bend_dim: Optional[Size3] = None
+    end_l: float = 0
+    coupler_waveguide_w: Optional[float] = None
+    coupling_waveguide: Optional[Waveguide] = None
     use_radius: bool = False
 
-    def __post_init__(self):
-        interport_distance = self.waveguide_w + 2 * self.bend_dim[1] + self.gap_w
-        if len(self.bend_dim) == 3:
-            interport_distance += self.bend_dim[2] - self.waveguide_w
-        if self.end_bend_dim:
-            interport_distance += 2 * self.end_bend_dim[1]
+    def __post_init_post_parse__(self):
+        self.coupler_waveguide_w = self.waveguide_w if self.coupler_waveguide_w is None else self.coupler_waveguide_w
+        bend_extent = (self.bend_l, (self.interport_distance - self.gap_w - self.coupler_waveguide_w) / 2,
+                       self.coupler_waveguide_w)
 
-        lower_path = Path(self.waveguide_w).dc(self.bend_dim, self.interaction_l,
-                                               end_l=0, end_bend_dim=self.end_bend_dim,
-                                               use_radius=self.use_radius)
-        upper_path = Path(self.waveguide_w).dc(self.bend_dim, self.interaction_l, end_l=0,
-                                               end_bend_dim=self.end_bend_dim,
-                                               inverted=True, use_radius=self.use_radius)
-        upper_path.translate(dx=0, dy=interport_distance)
-
-        if self.coupler_boundary_taper is not None and np.sum(self.coupler_boundary_taper_ls) > 0:
-            current_dc = Pattern(upper_path, lower_path)
-            outer_boundary = Waveguide(waveguide_w=2 * self.waveguide_w + self.gap_w, length=self.interaction_l,
-                                       taper_params=self.coupler_boundary_taper,
-                                       taper_ls=self.coupler_boundary_taper_ls).align(current_dc)
-            center_wg = Box((self.interaction_l, self.waveguide_w)).align(current_dc.center)
-            dc_interaction = Pattern(center_wg.copy.translate(dy=-self.gap_w / 2 - self.waveguide_w / 2),
-                                     center_wg.copy.translate(dy=self.gap_w / 2 + self.waveguide_w / 2))
-            cuts = dc_interaction.shapely - outer_boundary.shapely
-            # hacky way to make sure polygons are completely separated
-            dc_without_interaction = current_dc.shapely - Box((dc_interaction.size[0],
-                                                               dc_interaction.size[1] * 2)).align(current_dc).shapely
-            paths = [dc_without_interaction, dc_interaction.shapely - cuts]
-        else:
-            paths = lower_path, upper_path
-        super(DC, self).__init__(*paths, call_union=True)
-        self.lower_path, self.upper_path = Pattern(lower_path, call_union=False), Pattern(upper_path, call_union=False)
+        lower_path = AnnotatedPath(self.waveguide_w).dc(bend_extent=bend_extent, interaction_l=self.interaction_l,
+                                                        end_l=self.end_l, use_radius=self.use_radius)
+        upper_path = AnnotatedPath(self.waveguide_w).dc(bend_extent=bend_extent, interaction_l=self.interaction_l,
+                                                        end_l=self.end_l, inverted=True, use_radius=self.use_radius)
+        upper_path.translate(dx=0, dy=self.interport_distance)
+        super(DC, self).__init__(lower_path, upper_path)
+        if self.coupling_waveguide is not None:
+            self.replace(self.coupling_waveguide)
+        self.lower_path, self.upper_path = lower_path, upper_path
         self.port['a0'] = Port(0, 0, -180, w=self.waveguide_w)
-        self.port['a1'] = Port(0, interport_distance, -180, w=self.waveguide_w)
+        self.port['a1'] = Port(0, self.interport_distance, -180, w=self.waveguide_w)
         self.port['b0'] = Port(self.size[0], 0, w=self.waveguide_w)
-        self.port['b1'] = Port(self.size[0], interport_distance, w=self.waveguide_w)
+        self.port['b1'] = Port(self.size[0], self.interport_distance, w=self.waveguide_w)
         self.lower_path.port = {'a0': self.port['a0'], 'b0': self.port['b0']}
         self.lower_path.wg_path = self.lower_path
         self.upper_path.port = {'a0': self.port['a1'], 'b0': self.port['b1']}
         self.upper_path.wg_path = self.upper_path
-        self.interport_distance = interport_distance
         self.reference_patterns.extend([self.lower_path, upper_path])
 
     @property
@@ -188,75 +205,52 @@ class DC(Pattern):
         return np.array([self.polys[:3], self.polys[3:]])
 
 
-@dataclasses.dataclass
-class MMI(Pattern):
-    box_dim: Size2
-    waveguide_w: float
-    interport_distance: float
-    taper_dim: Size2
-    end_l: float = 0
-    bend_dim: Optional[Size2] = None
-    use_radius: bool = False
-
-    def __post_init__(self):
-        if self.bend_dim:
-            center = (self.end_l + self.bend_dim[0] + self.taper_dim[0] + self.box_dim[0] / 2,
-                      self.interport_distance / 2 + self.bend_dim[1])
-            p_00 = Path(self.waveguide_w).segment(self.end_l) if self.end_l > 0 else Path(self.waveguide_w)
-            p_00.sbend(self.bend_dim, use_radius=self.use_radius).segment(self.taper_dim[0],
-                                                                          final_width=self.taper_dim[1])
-            p_01 = Path(self.waveguide_w, (0, self.interport_distance + 2 * self.bend_dim[1]))
-            p_01 = p_01.segment(self.end_l) if self.end_l > 0 else p_01
-            p_01.sbend(self.bend_dim, inverted=True, use_radius=self.use_radius).segment(self.taper_dim[0],
-                                                                                         final_width=self.taper_dim[1])
-        else:
-            center = (self.end_l + self.taper_dim[0] + self.box_dim[0] / 2, self.interport_distance / 2)
-            p_00 = Path(self.waveguide_w).segment(self.end_l) if self.end_l > 0 else Path(self.waveguide_w)
-            p_00.segment(self.taper_dim[0], final_width=self.taper_dim[1])
-            p_01 = copy(p_00).translate(dx=0, dy=self.interport_distance)
-        mmi_start = (center[0] - self.box_dim[0] / 2, center[1])
-        mmi = Path(self.box_dim[1], mmi_start).segment(self.box_dim[0])
-        p_10 = copy(p_01).rotate(np.pi, center)
-        p_11 = copy(p_00).rotate(np.pi, center)
-        super(MMI, self).__init__(mmi, p_00, p_01, p_10, p_11)
-        bend_y = 2 * self.bend_dim[1] if self.bend_dim else 0
-        self.port['a0'] = Port(0, 0, -180, self.waveguide_w)
-        self.port['a1'] = Port(0, self.interport_distance + bend_y, -180, self.waveguide_w)
-        self.port['b0'] = Port(self.size[0], 0, w=self.waveguide_w)
-        self.port['b1'] = Port(self.size[0], self.interport_distance + bend_y, w=self.waveguide_w)
-
-
-@dataclasses.dataclass
+@fix_dataclass_init_docs
+@dataclass
 class GratingPad(Pattern):
-    pad_dim: Size2
+    """Grating pad
+
+    Attributes:
+        pad_extent: Size2
+        taper: float
+        final_w: float
+        out: bool = False
+        end_l: Optional[float] = None
+        bend_extent: Optional[Size2] = None
+        layer: int = 0
+
+    """
+    pad_extent: Float2
     taper_l: float
     final_w: float
     out: bool = False
     end_l: Optional[float] = None
-    bend_dim: Optional[Size2] = None
+    bend_extent: Optional[Float2] = None
     layer: int = 0
 
-    def __post_init__(self):
+    def __post_init_post_parse__(self):
         self.end_l = self.taper_l if self.end_l is None else self.end_l
 
         if self.out:
-            path = Path(self.final_w)
+            path = GdspyPath(self.final_w)
             if self.end_l > 0:
                 path.segment(self.end_l)
-            if self.bend_dim:
-                path.sbend(self.bend_dim)
+            if self.bend_extent:
+                path.sbend(self.bend_extent)
             super(GratingPad, self).__init__(path.segment(self.taper_l,
-                                                          final_width=self.pad_dim[1]).segment(self.pad_dim[0]))
+                                                          final_width=self.pad_extent[1]).segment(self.pad_extent[0]))
         else:
-            path = Path(self.pad_dim[1]).segment(self.pad_dim[0]).segment(self.taper_l, final_width=self.final_w)
-            if self.bend_dim:
-                path.sbend(self.bend_dim, layer=self.layer)
+            path = GdspyPath(self.pad_extent[1]).segment(self.pad_extent[0]).segment(self.taper_l, final_width=self.final_w)
+            if self.bend_extent:
+                path.sbend(self.bend_extent, layer=self.layer)
             if self.end_l > 0:
                 path.segment(self.end_l, layer=self.layer)
             super(GratingPad, self).__init__(path)
         self.port['a0'] = Port(0, 0)
 
 
+@fix_dataclass_init_docs
+@dataclass
 class Interposer(Pattern):
     """Pitch-changing array of waveguides with path length correction.
 
@@ -267,7 +261,7 @@ class Interposer(Pattern):
         radius: The radius of bends for the interposer.
         trombone_radius: The trombone bend radius for path equalization.
         final_pitch: The final pitch (distance between successive waveguides) for the interposer.
-        self_coupling_extension_dim: The self coupling for alignment, which is useful since a major use case of
+        self_coupling_extension_extent: The self coupling for alignment, which is useful since a major use case of
             the interposer is for fiber array coupling.
         horiz_dist: The additional horizontal distance.
         num_trombones: The number of trombones for path equalization.
@@ -279,7 +273,7 @@ class Interposer(Pattern):
     radius: float
     trombone_radius: Optional[float] = None
     final_pitch: Optional[float] = None
-    self_coupling_extension_dim: Optional[Size2] = None
+    self_coupling_extension_extent: Optional[Float2] = None
     self_coupling_final: bool = True
     horiz_dist: float = 0
     num_trombones: int = 1
@@ -298,12 +292,13 @@ class Interposer(Pattern):
             angled_length = np.abs(pitch_diff / np.sin(angle_r))
             x_length = np.abs(pitch_diff / np.tan(angle_r))
             angle = angle_r
-            path = Path(self.waveguide_w).segment(length=0).translate(dx=0, dy=self.init_pitch * idx)
+            path = GdspyPath(self.waveguide_w).segment(length=0).translate(dx=0, dy=self.init_pitch * idx)
             mid = int(np.ceil(self.n / 2))
             max_length_diff = (angled_length - x_length) * (mid - 1)
             self.num_trombones = int(np.ceil(max_length_diff / 2 / (self.final_pitch - 3 * radius))) \
                 if not self.num_trombones else self.num_trombones
-            length_diff = (angled_length - x_length) * idx if idx < mid else (angled_length - x_length) * (self.n - 1 - idx)
+            length_diff = (angled_length - x_length) * idx if idx < mid else (angled_length - x_length) * (
+                    self.n - 1 - idx)
             if not self.trombone_at_end:
                 for _ in range(self.num_trombones):
                     path.trombone(length_diff / 2 / self.num_trombones, radius=self.trombone_radius)
@@ -325,7 +320,7 @@ class Interposer(Pattern):
             init_pos[idx] = np.asarray((0, self.init_pitch * idx))
             final_pos[idx] = np.asarray((path.x, path.y))
 
-        if self.self_coupling_extension_dim is not None:
+        if self.self_coupling_extension_extent is not None:
             if self.self_coupling_final:
                 dx, dy = final_pos[0, 0], final_pos[0, 1]
                 p = self.final_pitch
@@ -334,9 +329,9 @@ class Interposer(Pattern):
                 dx, dy = init_pos[0, 0], init_pos[0, 1]
                 p = self.init_pitch
                 s = -1
-            radius, grating_length = self.self_coupling_extension_dim
-            self_coupling_path = Path(width=self.waveguide_w).rotate(-np.pi * self.self_coupling_final).translate(dx=dx,
-                                                                                                        dy=dy - p)
+            radius, grating_length = self.self_coupling_extension_extent
+            self_coupling_path = GdspyPath(width=self.waveguide_w).rotate(-np.pi * self.self_coupling_final).translate(dx=dx,
+                                                                                                                       dy=dy - p)
             self_coupling_path.turn(radius, -np.pi * s, tolerance=0.001)
             self_coupling_path.segment(length=grating_length + 5)
             self_coupling_path.turn(radius=radius, angle=np.pi / 2 * s, tolerance=0.001)
@@ -346,8 +341,8 @@ class Interposer(Pattern):
             self_coupling_path.turn(radius=radius, angle=-np.pi * s, tolerance=0.001)
             paths.append(self_coupling_path)
 
-        super(Interposer, self).__init__(*paths, call_union=False)
-        self.self_coupling_path = None if self.self_coupling_extension_dim is None else paths[-1]
+        super(Interposer, self).__init__(*paths)
+        self.self_coupling_path = None if self.self_coupling_extension_extent is None else paths[-1]
         self.paths = paths
         self.init_pos = init_pos
         self.final_pos = final_pos
@@ -356,104 +351,57 @@ class Interposer(Pattern):
             self.port[f'b{idx}'] = Port(*final_pos[idx], w=self.waveguide_w)
 
 
-class Waveguide(Pattern):
-    def __init__(self, waveguide_w: float, length: float, taper_ls: Tuple[float, ...] = 0,
-                 taper_params: Tuple[Tuple[float, ...], ...] = None,
-                 slot_dim: Optional[Size2] = None, slot_taper_ls: Tuple[float, ...] = 0,
-                 slot_taper_params: Tuple[Tuple[float, ...]] = None,
-                 num_taper_evaluations: int = 100, symmetric: bool = True, rotate_angle: float = None):
-        """Waveguide class
-        Args:
-            waveguide_w: waveguide width at the input of the waveguide path
-            length: total length of the waveguide
-            taper_ls: a tuple of lengths for tapers starting from the left
-            taper_params: a tuple of taper params successively :code:`Path.polynomial_taper`
-            symmetric: a toggling variable to turn off the symmetric nature of the waveguide class.
-            slot_dim: initial slot length and width
-            slot_taper_ls: slot taper lengths (in style of waveguide class)
-            slot_taper_params: slot taper parameters
-            num_taper_evaluations: number of taper evaluations
-            symmetric: symmetric
-        """
-        self.length = length
-        self.waveguide_w = waveguide_w
-        self.taper_ls = taper_ls
-        self.taper_params = taper_params
-        self.slot_dim = slot_dim
-        self.slot_taper_ls = slot_taper_ls
-        self.slot_taper_params = slot_taper_params
+@fix_dataclass_init_docs
+@dataclass
+class Cross(Pattern):
+    """Cross
 
-        self.pads = []
+    Attributes:
+        waveguide: waveguide to form the crossing (used to implement tapering)
+    """
 
-        p = Path(waveguide_w)
+    waveguide: Waveguide
 
-        if taper_params is not None:
-            for taper_l, taper_param in zip(taper_ls, taper_params):
-                if taper_l > 0 and taper_param is not None:
-                    p.polynomial_taper(taper_l, taper_param, num_taper_evaluations)
-        if symmetric:
-            if not length > 2 * np.sum(taper_ls):
-                raise ValueError(
-                    f'Require length > 2 * np.sum(taper_ls) but got {length} <= {2 * np.sum(taper_ls)}')
-            if taper_params is not None:
-                p.segment(length - 2 * np.sum(taper_ls))
-                for taper_l, taper_param in zip(reversed(taper_ls), reversed(taper_params)):
-                    if taper_l > 0 and taper_param is not None:
-                        p.polynomial_taper(taper_l, taper_param, num_taper_evaluations, inverted=True)
-            else:
-                p.segment(length)
-        else:
-            if not length >= np.sum(taper_ls):
-                raise ValueError(f'Require length >= np.sum(taper_ls) but got {length} < {np.sum(taper_ls)}')
-            p.segment(length - np.sum(taper_ls))
-
-        if rotate_angle is not None:
-            p.rotate(rotate_angle)
-
-        if slot_taper_params:
-            center_x = length / 2
-            slot = self.__init__(slot_dim[1], slot_dim[0], slot_taper_ls, slot_taper_params).align((center_x, 0))
-            pattern = Pattern(p).shapely - slot.shapely
-            if isinstance(pattern, MultiPolygon):
-                slot_waveguide = [Pattern(poly) for poly in pattern]
-                super(Waveguide, self).__init__(*slot_waveguide)
-            else:
-                super(Waveguide, self).__init__(pattern)
-        else:
-            super(Waveguide, self).__init__(p)
-        self.port['a0'] = Port(0, 0, -180, w=waveguide_w)
-        self.port['b0'] = Port(self.size[0], 0, w=waveguide_w)
-
-    @property
-    def wg_path(self) -> Pattern:
-        return self
+    def __post_init_post_parse__(self):
+        horizontal = self.waveguide.align()
+        vertical = self.waveguide.align().copy.rotate(90)
+        super(Cross, self).__init__(horizontal, vertical)
+        self.port['a0'] = horizontal.port['a0']
+        self.port['a1'] = vertical.port['a0']
+        self.port['b0'] = horizontal.port['b0']
+        self.port['b1'] = vertical.port['b0']
 
 
-class AlignmentCross(Pattern):
-    def __init__(self, line_dim: Size2):
-        """Alignment cross
+@fix_dataclass_init_docs
+@dataclass
+class Array(Pattern):
+    """Array of boxes or ellipses for 2D photonic crystals.
 
-        Args:
-            line_dim: line dimension (length, thickness)
-        """
-        self.line_dim = line_dim
-        p = Path(line_dim[1], (0, 0)).segment(line_dim[0], "+y")
-        q = Path(line_dim[1], (-line_dim[0] / 2, line_dim[0] / 2)).segment(line_dim[0], "+x")
-        super(AlignmentCross, self).__init__(p, q)
+    This class can generate large circle arrays which may be used for photonic crystal designs or for slow
+    light applications.
+
+    Attributes:
+        unit: The box or ellipse to repeat in the array
+        grid_shape: Number of rows and columns
+        pitch: The distance between the circles in the Hole array
+        n_points: The number of points in the circle (it can save time to use fewer points).
+
+    """
+    unit: Union[Box, Ellipse]
+    grid_shape: Int2
+    # orientation: Union[float, np.ndarray]
+    pitch: Optional[Union[float, Float2]] = None
+
+    def __post_init_post_parse__(self):
+        self.pitch = (self.pitch, self.pitch) if isinstance(self.pitch, float) else self.pitch
+        super(Array, self).__init__(MultiPolygon([self.unit.copy.translate(i * self.pitch, j * self.pitch)
+                                                  for i in range(self.grid_shape[0])
+                                                  for j in range(self.grid_shape[1])
+                                                  ]))
 
 
-class HoleArray(Pattern):
-    def __init__(self, diameter: float, grid_shape: Tuple[int, int], pitch: Optional[float] = None, n_points: int = 8):
-        self.diameter = diameter
-        self.pitch = pitch
-        self.grid_shape = grid_shape
-        super(HoleArray, self).__init__(MultiPolygon([(circle(radius=0.5 * diameter, n=n_points,
-                                                              xy=(i * pitch, j * pitch)), [])
-                                                      for i in range(grid_shape[0]) for j in range(grid_shape[1])
-                                                      ]), call_union=False)
-
-
-@dataclasses.dataclass
+@fix_dataclass_init_docs
+@dataclass
 class DelayLine(Pattern):
     """Delay line for unbalanced MZIs.
 
@@ -462,6 +410,7 @@ class DelayLine(Pattern):
         delay_length: the delay line length increase over the straight length
         bend_radius: the bend radius of turns in the squiggle delay line
         straight_length: the comparative straight segment this matches
+        number_bend_pairs: the number of bend pairs
         flip: whether to flip the usual direction of the delay line
     """
     waveguide_w: float
@@ -471,21 +420,22 @@ class DelayLine(Pattern):
     number_bend_pairs: int = 1
     flip: bool = False
 
-    def __post_init__(self):
+    def __post_init_post_parse__(self):
 
         if ((2 * np.pi + 4) * self.number_bend_pairs + np.pi - 4) * self.bend_radius >= self.delay_length:
             raise ValueError(
                 f"Bends alone exceed the delay length {self.delay_length}"
                 f"reduce the bend radius or the number of bend pairs")
-        segment_length = (self.delay_length - ((2 * np.pi + 4) * self.number_bend_pairs + np.pi - 4) * self.bend_radius) / (
-                2 * self.number_bend_pairs)
+        segment_length = (self.delay_length - (
+                (2 * np.pi + 4) * self.number_bend_pairs + np.pi - 4) * self.bend_radius) / (
+                                 2 * self.number_bend_pairs)
         extra_length = self.straight_length - 4 * self.bend_radius - segment_length
         if extra_length <= 0:
             raise ValueError(
                 f"The delay line does not fit in the horizontal distance of"
                 f"{self.straight_length} increase the number of bend pairs")
         height = (4 * self.number_bend_pairs - 2) * self.bend_radius
-        p = Path(self.waveguide_w)
+        p = GdspyPath(self.waveguide_w)
         p.segment(length=self.bend_radius)
         p.segment(length=segment_length)
 
@@ -507,18 +457,19 @@ class DelayLine(Pattern):
         self.port['b0'] = Port(self.bounds[2], 0, w=self.waveguide_w)
 
 
-@dataclasses.dataclass
+@fix_dataclass_init_docs
+@dataclass
 class TapDC(Pattern):
     """Tap directional coupler
 
     Attributes:
-        dc: the directional coupler
+        dc: the directional coupler that acts as a tap coupler
         grating_pad: the grating pad for the tap
     """
     dc: DC
     grating_pad: GratingPad
 
-    def __init__(self):
+    def __post_init_post_parse__(self):
         in_grating = self.grating_pad.copy.to(self.dc.port['b1'])
         out_grating = self.grating_pad.copy.to(self.dc.port['a1'])
         super(TapDC, self).__init__(self.dc, in_grating, out_grating)
@@ -526,3 +477,29 @@ class TapDC(Pattern):
         self.port['b0'] = self.dc.port['b0']
         self.reference_patterns.append(self.dc)
         self.wg_path = self.dc.lower_path
+
+
+@fix_dataclass_init_docs
+@dataclass
+class RibWaveguide(Device):
+    """Rib waveguide
+
+    Attributes:
+        ridge_waveguide: The ridge waveguide (the thick section of the rib), represented as a :code:`Waveguide` object
+            to allow features such as tapering and coupling. Generally this should be smaller than
+            :code:`slab_waveguide`.
+        slab_waveguide: The slab waveguide (the thin section of the rib), represented as a :code:`Waveguide` object
+            to allow features such as tapering and coupling. Generally this should be larger than
+            :code:`ridge_waveguide`.
+        name: The device name.
+    """
+    ridge_waveguide: Waveguide
+    slab_waveguide: Waveguide
+    ridge: str = CommonLayer.RIDGE_SI
+    rib: str = CommonLayer.RIB_SI
+    name: str = "rib_wg"
+
+    def __post_init_post_parse__(self):
+        super(RibWaveguide, self).__init__(self.name, [(self.ridge_waveguide, self.ridge),
+                                                       (self.slab_waveguide, self.rib)])
+
