@@ -222,7 +222,7 @@ class Device:
         return copy(self)
 
     @property
-    def gdspy_cell(self) -> gy.Cell:
+    def gdspy_cell(self, foundry: Foundry = FABLESS) -> gy.Cell:
         """Turn this multilayer into a GDSPY cell.
 
         Returns:
@@ -232,7 +232,7 @@ class Device:
         cell = gy.Cell(self.name)
         for pattern, layer in self.pattern_to_layer:
             for poly in pattern.polys:
-                cell.add(gy.Polygon(np.asarray(poly.exterior.coords.xy).T, layer=layer))
+                cell.add(gy.Polygon(np.asarray(poly.exterior.coords.xy).T, layer=foundry.layer_to_gds_label[layer]))
         return cell
 
     @property
