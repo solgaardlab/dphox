@@ -1,8 +1,7 @@
-from typing import Tuple, Union
-
-import gdspy as gy
+from typing import Union, Tuple, List, Optional, Dict, Callable
 import numpy as np
-from shapely.geometry import MultiPolygon, Polygon
+from shapely.geometry import Polygon, MultiPolygon
+import gdspy as gy
 
 Int2 = Tuple[int, int]
 Shape3 = Tuple[int, int, int]
