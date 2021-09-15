@@ -172,7 +172,6 @@ class Foundry:
             step.start_height = start_height if step.start_height is None else step.start_height
             start_height = step.start_height + step.thickness if step.process_op == ProcessOp.GROW else step.start_height
 
-    @lru_cache()
     @property
     def layer_to_gds_label(self):
         return {step.layer: step.gds_label for step in self.stack}

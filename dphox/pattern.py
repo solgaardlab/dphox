@@ -133,9 +133,12 @@ class Port:
             raise TypeError(f'Input line must be LineString but got {type(line)}')
 
         center_point = line.centroid  # same as center for lines
-        x, y = center_point.xy
-        first, last = line.boundary
-        a = np.angle((last.x - first.x) + (last.y - first.y) * 1j) * 180 / np.pi
+        x, y = center_point.x, center_point.y
+        if len(line.boundary) == 0:
+            a = 0
+        else:
+            first, last = line.boundary
+            a = np.angle((last.x - first.x) + (last.y - first.y) * 1j) * 180 / np.pi
         return cls(x, y, a, line.length, z, h)
 
 
@@ -565,11 +568,11 @@ class Pattern:
         self.polys = [poly for poly in self.shapely]
         # any patterns in this pattern should also be rotated
         for pattern in self.reference_patterns:
-            pattern.skew(xfact, xfact, origin)
-        port_to_point = {name: scale(Point(*port.xy), xfact, yfact, origin)
-                         for name, port in self.port.items()}
-        self.port = {name: Port(float(point.x), float(point.y), self.port[name].a)
-                     for name, point in port_to_point.items()}
+            pattern.scale(xfact, xfact, self.center if origin is None else origin)
+        port_to_line = {name: scale(port.shapely, xfact, yfact, origin=self.center if origin is None else origin)
+                        for name, port in self.port.items()}
+        self.port = {name: Port.from_shapely(line)
+                     for name, line in port_to_line.items()}
         return self
 
     @property
@@ -807,10 +810,10 @@ class Box(Pattern):
                                   decimal_places=self.decimal_places)
         self.port = {
             'c': Port(*self.center),
-            'n': Port(self.center[0], self.bounds[3], 90),
-            'w': Port(self.bounds[0], self.center[1], -180),
-            'e': Port(self.bounds[2], self.center[1], 0),
-            's': Port(self.center[0], self.bounds[1], -90)
+            'n': Port(self.center[0], self.bounds[3], 90, self.extent[0]),
+            'w': Port(self.bounds[0], self.center[1], -180, self.extent[1]),
+            'e': Port(self.bounds[2], self.center[1], 0, self.extent[1]),
+            's': Port(self.center[0], self.bounds[1], -90, self.extent[0])
         }
 
     @classmethod
