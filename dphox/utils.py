@@ -1,9 +1,3 @@
-from pydantic.dataclasses import dataclass
-import numpy as np
-
-from .typing import Float3, Tuple, Optional
-
-
 def fix_dataclass_init_docs(cls):
     """Fix the ``__init__`` documentation for a :class:`dataclasses.dataclass`.
 
