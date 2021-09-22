@@ -6,7 +6,7 @@ conda:
 python:
   version: 3.8
   install:
-    - requirements: doc/requirements.txt
+    - requirements: doc/optional_requirements.txt
     - method: setuptools
       path: .
 
