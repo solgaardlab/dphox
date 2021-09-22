@@ -74,6 +74,10 @@ html_theme_options = {
 html_static_path = ['_static']
 html_logo = "https://user-images.githubusercontent.com/7623867/131265616-4e438679-f3b6-4a9f-b401-130a41cb8ab7.png"
 
+# Pydantic model settings
+autodoc_pydantic_model_show_json = True
+autodoc_pydantic_settings_show_json = False
+
 
 def setup(app):
     app.add_css_file('css/custom.css')
