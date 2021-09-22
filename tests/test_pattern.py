@@ -1,8 +1,9 @@
+from typing import List
+
 import numpy as np
 import pytest
-from typing import Optional, Tuple, List
 
-from dphox.pattern import Pattern, Box, Circle
+from dphox.pattern import Box, Circle, Pattern
 from dphox.utils import poly_points, split_holes
 
 UNIT_BOX = Box()
@@ -23,19 +24,19 @@ UNIT_BOX = Box()
                                  [0.4, 0.5, 0.5, 0.4, 0.4]]
                                 ]],
         # Demonstration of regular polygons of `resolution * 2` sides!
-        [Circle(resolution=2), [[[1., 0.70711, 0., -0.70711, -1., -0.70711, 0., 0.70711, 1.],
-                                 [0., -0.70711, -1., -0.70711, 0., 0.70711, 1., 0.70711, 0.]]]],
-        [Circle(resolution=4), [[[1., 0.92388, 0.70711, 0.38268, 0., -0.38268,
-                                  -0.70711, -0.92388, -1., -0.92388, -0.70711, -0.38268,
-                                  0., 0.38268, 0.70711, 0.92388, 1.],
-                                 [0., -0.38268, -0.70711, -0.92388, -1., -0.92388,
-                                  -0.70711, -0.38268, 0., 0.38268, 0.70711, 0.92388,
-                                  1., 0.92388, 0.70711, 0.38268, 0.]]]]
+        [Circle(resolution=2), [[[1, 7.07106781e-01, 0, -7.07106781e-01, -1, -7.07106781e-01, 0, 7.07106781e-01, 1],
+                                 [0, -7.07106781e-01, -1, -7.07106781e-01, 0, 7.07106781e-01, 1, 7.07106781e-01, 0]]]],
+        [Circle(resolution=4), [[[1, 9.23879533e-01, 7.07106781e-01, 3.82683432e-01, 0, -3.82683432e-01,
+                                  -7.07106781e-01, -9.23879533e-01, -1, -9.23879533e-01, -7.07106781e-01,
+                                  -3.82683432e-01, 0, 3.82683432e-01, 7.07106781e-01, 9.23879533e-01, 1],
+                                 [0, -3.82683432e-01, -7.07106781e-01, -9.23879533e-01, -1, -9.23879533e-01,
+                                  -7.07106781e-01, -3.82683432e-01, 0, 3.82683432e-01, 7.07106781e-01,
+                                  9.23879533e-01, 1, 9.23879533e-01, 7.07106781e-01, 3.82683432e-01, 0]]]]
     ],
 )
 def test_poly(pattern: Pattern, poly_list: List[np.ndarray]):
     for i, poly in enumerate(pattern.polys):
-        np.testing.assert_allclose(poly_points(poly).T, poly_list[i])
+        np.testing.assert_allclose(poly_points(poly).T, poly_list[i], atol=1e-9)
 
 
 @pytest.mark.parametrize(
@@ -64,4 +65,4 @@ def test_poly(pattern: Pattern, poly_list: List[np.ndarray]):
 )
 def test_poly_with_hole(pattern: Pattern, poly_list: List[np.ndarray]):
     for i, poly in enumerate(split_holes(pattern.shapely_union())):
-        np.testing.assert_allclose(poly_points(poly).T, poly_list[i], atol=1e-10)
+        np.testing.assert_allclose(poly_points(poly).T, poly_list[i], atol=1e-9)

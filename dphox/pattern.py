@@ -138,7 +138,7 @@ class Port:
 
         points = poly_points(triangle)
         first, second, port_point, _ = points
-        x, y = port_point.x, port_point.y
+        x, y = port_point
         c = (second[1] - first[1]) + (second[0] - first[0]) * 1j
         a = np.angle(c) * 180 / np.pi
         return cls(x, y, a, np.abs(c), z, h)
