@@ -3,10 +3,11 @@ channels:
   - conda-forge
   - anaconda
 dependencies:
-  - python=3.7
+  - python=3.9
   - trimesh
   - shapely
   - pydantic
   - sphinx-autodoc-typehints
   - xarray
   - matplotlib
+  - myst-parser

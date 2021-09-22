@@ -1,17 +1,23 @@
+import datetime
 from collections import defaultdict
 from copy import deepcopy as copy
+from typing import BinaryIO
 
 import gdspy as gy
+import klamath
+import matplotlib.pyplot as plt
 import numpy as np
 from descartes import PolygonPatch
+from klamath.library import FileHeader
 from pydantic.dataclasses import dataclass
 from shapely.affinity import rotate
 from shapely.geometry import MultiPolygon, Point, Polygon
+from shapely.ops import unary_union
 
-from .foundry import Foundry, fabricate, CommonLayer, FABLESS, ProcessOp
+from .foundry import CommonLayer, FABLESS, fabricate, Foundry
 from .pattern import Box, Pattern, Port
-from .typing import Dict, List, Optional, Int2, Float2, Float3, Float4, Tuple, Union
-from .utils import fix_dataclass_init_docs
+from .typing import Dict, Float2, Float4, Int2, List, Optional, Tuple, Union
+from .utils import fix_dataclass_init_docs, poly_points, PORT_LABEL_LAYER, PORT_LAYER, split_holes
 
 try:
     import plotly.graph_objects as go
@@ -27,6 +33,18 @@ try:
     import nazca as nd
 except ImportError:
     NAZCA_IMPORTED = False
+
+try:
+    HOLOVIEWS_IMPORTED = True
+    import holoviews as hv
+    from holoviews.streams import Pipe
+    from holoviews import opts
+    import panel as pn
+    from bokeh.models import Range1d, LinearAxis
+    from bokeh.models.renderers import GlyphRenderer
+    from bokeh.plotting.figure import Figure
+except ImportError:
+    HOLOVIEWS_IMPORTED = False
 
 
 class Device:
@@ -105,10 +123,10 @@ class Device:
 
     @property
     def bounds(self) -> Float4:
-        """Bounding box
+        """Bounding box of the form (minx, maxx, miny, maxy)
 
         Returns:
-            Bounding box for the component of the form (minx, maxx, miny, maxy)
+            Bounding box tuple.
 
         """
         bound_list = np.array([p.bounds for p, _ in self.pattern_to_layer]).T
@@ -116,28 +134,64 @@ class Device:
 
     @property
     def center(self) -> Float2:
-        """
+        """Center (x, y) for the device.
 
         Returns:
-            Center for the component
+            Center for the component.
 
         """
         b = self.bounds  # (minx, miny, maxx, maxy)
         return (b[2] + b[0]) / 2, (b[3] + b[1]) / 2  # (avgx, avgy)
 
-    def align(self, c: Union["Pattern", Float2]) -> "Device":
+    def align(self, c: Union[Pattern, "Device", Float2]) -> "Device":
         """Align center of pattern
 
         Args:
-            c: A pattern (align to the pattern's center) or a center point for alignment
+            c: A pattern (align to the pattern's center) or a center point for alignment.
 
         Returns:
             Aligned pattern
 
         """
         old_x, old_y = self.center
-        center = c if isinstance(c, tuple) else c.center
+        center = c.center if isinstance(c, Device) or isinstance(c, Pattern) else c
         self.translate(center[0] - old_x, center[1] - old_y)
+        return self
+
+    def halign(self, c: Union[Pattern, "Device", float], left: bool = True, opposite: bool = False) -> "Device":
+        """Horizontal alignment of device
+
+        Args:
+            c: A device (horizontal align to the device's boundary) or a center x for alignment.
+            left: (if :code:`c` is pattern) Align to left boundary of component, otherwise right boundary.
+            opposite: (if :code:`c` is pattern) Align opposite faces (left-right, right-left).
+
+        Returns:
+            Horizontally aligned device
+
+        """
+        x = self.bounds[0] if left else self.bounds[2]
+        p = c if isinstance(c, float) or isinstance(c, int) \
+            else (c.bounds[0] if left and not opposite or opposite and not left else c.bounds[2])
+        self.translate(dx=p - x)
+        return self
+
+    def valign(self, c: Union[Pattern, "Device", float], bottom: bool = True, opposite: bool = False) -> "Device":
+        """Vertical alignment of devie
+
+        Args:
+            c: A pattern (vertical align to the pattern's boundary) or a center y for alignment.
+            bottom: (if :code:`c` is pattern) Align to upper boundary of component, otherwise lower boundary.
+            opposite: (if :code:`c` is pattern) Align opposite faces (upper-lower, lower-upper).
+
+        Returns:
+            Vertically aligned device
+
+        """
+        y = self.bounds[1] if bottom else self.bounds[3]
+        p = c if isinstance(c, float) or isinstance(c, int) \
+            else (c.bounds[1] if bottom and not opposite or opposite and not bottom else c.bounds[3])
+        self.translate(dy=p - y)
         return self
 
     def translate(self, dx: float = 0, dy: float = 0) -> "Device":
@@ -155,7 +209,7 @@ class Device:
             pattern.translate(dx, dy)
         self.layer_to_geoms, _ = self._init_multilayer()
         for name, port in self.port.items():
-            self.port[name] = Port(port.x + dx, port.y + dy, port.a)
+            self.port[name] = Port(port.x + dx, port.y + dy, port.a, port.w)
         return self
 
     def rotate(self, angle: float, origin: Float2 = (0, 0)) -> "Device":
@@ -173,7 +227,7 @@ class Device:
             pattern.rotate(angle, origin)
         self.layer_to_geoms, _ = self._init_multilayer()
         port_to_point = {name: rotate(Point(*port.xy), angle, origin) for name, port in self.port.items()}
-        self.port = {name: Port(float(point.x), float(point.y), self.port[name].a + angle)
+        self.port = {name: Port(float(point.x), float(point.y), np.mod(self.port[name].a + angle, 360))
                      for name, point in port_to_point.items()}
         return self
 
@@ -181,8 +235,8 @@ class Device:
         """Reflected the multilayer about center (vertical, or about x-axis, by default)
 
         Args:
-            center: center about which to reflect
-            horiz: reflect horizontally instead of vertically
+            center: center about which to reflect.
+            horiz: reflect horizontally instead of vertically.
 
         Returns:
             Reflected pattern.
@@ -193,37 +247,40 @@ class Device:
         self.layer_to_geoms, _ = self._init_multilayer()
         return self
 
-    def to(self, port: Port, port_name: Optional[str] = None):
-        """Translate the device so the origin (or port :code:`port_name`) is matched with that of :code:`port`.
+    def to(self, port: Port, from_port: Optional[str] = None):
+        """Lego-connect this device's :code:`from_port` (origin if not specified) to another device's port.
 
         Args:
-            port: The port to which the device should be moved
-            port_name: The port name corresponding to this device's port that should be connected to :code:`port`.
+            port: The port to which the device should be connected.
+            from_port: The port name corresponding to this device's port that should be connected to :code:`port`.
 
         Returns:
-            The resultant device.
+            This device, translated and rotated after connection.
 
         """
-        if port_name is None:
+        if from_port is None:
             return self.rotate(port.a).translate(port.x, port.y)
         else:
-            return self.rotate(port.a - self.port[port_name].a + 180, origin=self.port[port_name].xy).translate(
-                port.x - self.port[port_name].x, port.y - self.port[port_name].y
+            return self.rotate(port.a - self.port[from_port].a + 180, origin=self.port[from_port].xy).translate(
+                port.x - self.port[from_port].x, port.y - self.port[from_port].y
             )
 
     @property
     def copy(self) -> "Device":
-        """Return a copy of this layer for repeated use
+        """Return a copy of this device for repeated use
 
         Returns:
-            A deep copy of this layer
+            A deep copy of this device.
 
         """
         return copy(self)
 
     @property
     def gdspy_cell(self, foundry: Foundry = FABLESS) -> gy.Cell:
-        """Turn this multilayer into a GDSPY cell.
+        """Turn this multilayer into a gdspy cell.
+
+        Args:
+            Foundry for creating the gdspy cell (provide the layer map).
 
         Returns:
             A GDSPY cell.
@@ -232,26 +289,30 @@ class Device:
         cell = gy.Cell(self.name)
         for pattern, layer in self.pattern_to_layer:
             for poly in pattern.polys:
-                cell.add(gy.Polygon(np.asarray(poly.exterior.coords.xy).T, layer=foundry.layer_to_gds_label[layer]))
+                cell.add(
+                    gy.Polygon(poly_points(poly),
+                               layer=foundry.layer_to_gds_label[layer][0],
+                               datatype=foundry.layer_to_gds_label[layer][1])
+                )
         return cell
 
-    @property
-    def nazca_cell(self) -> "nd.Cell":
-        """Turn this multilayer into a Nazca cell
+    def nazca_cell(self, foundry: Foundry = FABLESS) -> "nd.Cell":
+        """Turn this multilayer into a nazca cell (need to install nazca for this to work).
 
         Args:
-            callback: Callback function to call using Nazca (adding pins, other structures)
+            Foundry for creating the nazca cell (provide the layer map).
 
         Returns:
-            A Nazca cell
+            A Nazca cell.
+
         """
         if not NAZCA_IMPORTED:
             raise ImportError('Nazca not installed! Please install nazca prior to running nazca_cell().')
         with nd.Cell(self.name) as cell:
             for pattern, layer in self.pattern_to_layer:
                 for poly in pattern.polys:
-                    nd.Polygon(points=list(np.around(np.asarray(poly.exterior.coords.xy).T, decimals=3)),
-                               layer=layer).put()
+                    nd.Polygon(points=list(np.around(poly_points(poly), decimals=3)),
+                               layer=foundry.layer_to_gds_label[layer]).put()
             for name, port in self.port.items():
                 nd.Pin(name).put(*port.xya)
             nd.put_stub()
@@ -261,8 +322,8 @@ class Device:
         """Add pattern, layer to Multilayer
 
         Args:
-            pattern: :code:`Pattern` to add
-            layer: Layer to incorporate :code:`Pattern`
+            pattern: :code:`Pattern` to add.
+            layer: Layer to incorporate :code:`Pattern`.
 
         Returns:
 
@@ -270,73 +331,233 @@ class Device:
         self.pattern_to_layer.append((pattern, layer))
         self.layer_to_geoms, self.port = self._init_multilayer()
 
-    def plot(self, ax, foundry: Foundry = FABLESS, alpha: float = 0.5):
+    def plot(self, ax: Optional = None, foundry: Foundry = FABLESS,
+             exclude_layer: Optional[List[CommonLayer]] = None, alpha: float = 0.5):
         """Plot this device on a matplotlib plot.
 
         Args:
             ax: Matplotlib axis handle to plot the device.
+            foundry: :code:`Foundry` object for matplotlib plotting.
+            exclude_layer: Exclude all layers in this list when plotting.
             alpha: The transparency factor for the plot (to see overlay of structures from many layers).
 
         Returns:
 
         """
+        ax = plt.gca() if ax is None else ax
         for layer, pattern in self.layer_to_geoms.items():
-            color = None
-            for step in foundry.stack:
-                if step.layer == layer:
-                    color = step.mat.color
-                    break
+            if layer in exclude_layer:
+                continue
+            color = foundry.color(layer)
             if color is None:
-                raise ValueError("The layer does not exist in the foundry stack, so could not find a color.")
-            ax.add_patch(PolygonPatch(pattern, facecolor=color, edgecolor='none', alpha=alpha))
+                raise ValueError(f"The layer {layer} does not exist in the foundry stack, so could not find a color.")
+            ax.add_patch(PolygonPatch(unary_union(pattern.geoms),  # union avoids some weird plotting with alpha < 1
+                                      facecolor=color, edgecolor='none', alpha=alpha))
+            for name, port in self.port.items():
+                port_xy = port.xy - port.normal(port.w)
+                ax.add_patch(PolygonPatch(port.shapely,
+                                          facecolor='red', edgecolor='none', alpha=alpha))
+                ax.text(*port_xy, name)
         b = self.bounds
         ax.set_xlim((b[0], b[2]))
         ax.set_ylim((b[1], b[3]))
+        ax.set_xlabel(r'$x$ ($\mu$m)')
+        ax.set_ylabel(r'$y$ ($\mu$m)')
         ax.set_aspect('equal')
+
+    def hvplot(self, foundry: Foundry = FABLESS, exclude_layer: Optional[List[CommonLayer]] = None, alpha: float = 0.5):
+        """Plot this device on a matplotlib plot.
+
+        Args:
+            foundry: :code:`Foundry` object for holoviews plotting.
+            exclude_layer: Exclude all layers in this list when plotting.
+            alpha: The transparency factor for the plot (to see overlay of structures from many layers).
+
+        Returns:
+            The holoviews Overlay for displaying all of the polygons.
+
+        """
+        if not HOLOVIEWS_IMPORTED:
+            raise ImportError('Holoviews, Panel, and/or Bokeh not yet installed. Check your installation...')
+        plots_to_overlay = []
+        exclude_layer = [] if exclude_layer is None else exclude_layer
+        b = self.bounds
+        for layer, pattern in self.layer_to_geoms.items():
+            if layer in exclude_layer:
+                continue
+            geom = unary_union(pattern.geoms)
+
+            def _holoviews_poly(shapely_poly):
+                x, y = poly_points(shapely_poly).T
+                holes = [[np.array(hole.coords.xy).T for hole in shapely_poly.interiors]]
+                return {'x': x, 'y': y, 'holes': holes}
+
+            polys = [_holoviews_poly(poly) for poly in geom] if isinstance(geom, MultiPolygon) else [
+                _holoviews_poly(geom)]
+            color = foundry.color(layer)
+            if color is None:
+                raise ValueError(f"The layer {layer} does not exist in the foundry stack, so could not find a color.")
+            plots_to_overlay.append(
+                hv.Polygons(polys, name=layer).opts(data_aspect=1, frame_height=200, fill_alpha=alpha,
+                                                    ylim=(b[1], b[3]), xlim=(b[0], b[2]),
+                                                    color=color, line_alpha=0))
+        for name, port in self.port.items():
+            x, y = port.shapely.exterior.coords.xy
+            port_xy = port.xy - port.normal(port.w)
+            plots_to_overlay.append(
+                hv.Polygons([{'x': x, 'y': y}]).opts(
+                    data_aspect=1, frame_height=200, ylim=(b[1], b[3]), xlim=(b[0], b[2]), color='red', line_alpha=0
+                ) * hv.Text(*port_xy, name)
+            )
+        return hv.Overlay(plots_to_overlay).opts(show_legend=True)
 
     @property
     def size(self) -> Float2:
-        """Size of the pattern
+        """Size of the pattern.
 
         Returns:
-            Tuple of the form :code:`(sizex, sizey)`
+            Tuple of the form :code:`(sizex, sizey)`.
 
         """
         b = self.bounds  # (minx, miny, maxx, maxy)
         return b[2] - b[0], b[3] - b[1]  # (maxx - minx, maxy - miny)
 
     def trimesh(self, foundry: Foundry = FABLESS, exclude_layer: Optional[List[CommonLayer]] = None):
+        """Fabricate this device based on a :code:`Foundry`.
+
+        This method is fairly rudimentary and will not implement things like conformal deposition. At the moment,
+        you can implement things like rib etches which can be determined using 2d shape operations. Depositions in
+        layers above etched layers will just start from the maximum z extent of the previous layer. This is specified
+        by the :code:`Foundry` stack.
+
+        Args:
+            foundry: The foundry for each layer.
+            exclude_layer: Exclude all layers in this list.
+
+        Returns:
+            The device :code:`Scene` to visualize.
+
+        """
         return fabricate(self.layer_to_geoms, foundry, exclude_layer=exclude_layer)
 
     @classmethod
     def aggregate(cls, devices: List["Device"], name: Optional[str] = None):
+        """Aggregate many devices in the list into a single device (non-annotated)
+
+        Args:
+            devices: List of devices.
+            name: Name of the new aggregated device.
+
+        Returns:
+            The aggregated :code:`Device`.
+
+        """
         name = '|'.join([m.name for m in devices]) if name is None else name
         return cls(name, sum([m.pattern_to_layer for m in devices], []))
 
+    @classmethod
+    def from_gds(cls, filepath: str, foundry: Foundry = FABLESS) -> List["Device"]:
+        """Generate non-annotated device from GDS file based on the provided layer map in :code:`foundry`.
 
-@fix_dataclass_init_docs
-@dataclass
-class Grating(Device):
-    """Grating with partial etch.
+        Args:
+            filepath: The filepath to read the GDS device.
+            foundry: The foundry to get the device.
 
-    extent: Dimension of the extent of the grating
-    pitch: float
-    duty_cycle: The fill factor for the grating
+        Returns:
+            The non-annotated Device generated from reading a GDS file.
 
-    """
-    extent: Float2
-    pitch: float
-    duty_cycle: float
-    name: str = 'grating'
+        """
+        with open(filepath, 'rb') as stream:
+            header = klamath.library.FileHeader.read(stream)
+            structs = {}
+            struct = klamath.library.try_read_struct(stream)
+            while struct is not None:
+                name, elements = struct
+                structs[name] = elements
+                struct = klamath.library.try_read_struct(stream)
+            devices = []
+            for key in structs.keys():
+                pattern_to_layer = []
+                port = {}
+                for obj in structs[key]:
+                    if isinstance(obj, klamath.elements.Boundary):
+                        if obj.layer in foundry.gds_label_to_layer:
+                            layer = foundry.gds_label_to_layer[obj.layer]  # klamath layer is gds_label in dphox
+                            pattern = Pattern(header.user_units_per_db_unit * obj.xy)
+                            pattern_to_layer.append((pattern, layer))
+                device = cls(str(key), pattern_to_layer)
+                device.port = port
+                devices.append(device)
+        return devices
 
-    def __post_init__(self):
-        self.stripe_w = self.pitch * self.duty_cycle
-        self.pitch = self.pitch
-        self.duty_cycle = self.duty_cycle
+    def gds_elements(self, foundry: Foundry = FABLESS, user_units_per_db_unit: float = 0.001):
+        """Use `klamath <https://mpxd.net/code/jan/klamath/src/branch/master/klamath>`_ to convert to GDS elements
+        using a foundry object and user units.
 
-        super(Grating, self).__init__(self.name,
-                                      [(Box(self.extent), CommonLayer.RIB_SI),
-                                       (Box(self.extent).striped(self.stripe_w, (self.pitch, 0)), CommonLayer.RIDGE_SI)])
+        Args:
+            foundry: The foundry used for the layer map.
+            user_units_per_db_unit: User units per unit (to convert from nm to um, need to use 0.001 to convert).
+
+        Returns:
+            The `klamath` GDS elements for the device.
+        """
+        elements = []
+        for layer, geom in self.layer_to_geoms.items():
+            elements += [
+                klamath.elements.Boundary(
+                    layer=foundry.layer_to_gds_label[layer],
+                    xy=(poly_points(poly) / user_units_per_db_unit).astype(np.int32),
+                    properties={})
+                for poly in split_holes(geom)
+            ]
+        for name, port in self.port.items():
+            elements += [
+                klamath.elements.Text(layer=(PORT_LABEL_LAYER, 0),
+                                      xy=(port.xy - port.normal(port.w)) / user_units_per_db_unit,
+                                      string=name.encode('utf-8'), properties={},
+                                      presentation=0, angle_deg=0, invert_y=False, width=0, path_type=0, mag=1),
+                klamath.elements.Boundary(
+                    layer=(PORT_LAYER, 0),
+                    xy=(poly_points(port.shapely) / user_units_per_db_unit).astype(np.int32),
+                    properties={})
+            ]
+        return elements
+
+    def to_gds_stream(self, stream: BinaryIO, foundry: Foundry = FABLESS, user_units_per_db_unit: float = 0.001):
+        """Use `klamath <https://mpxd.net/code/jan/klamath/src/branch/master/klamath>`_ to add device struct to GDS.
+
+        Args:
+            stream: Stream for a GDS file.
+            foundry: The foundry used for the layer map.
+            user_units_per_db_unit: User units per unit (to convert from nm to um, need to use 0.001 to convert).
+
+        Returns:
+
+        """
+        klamath.library.write_struct(stream, self.name.encode('utf-8'),
+                                     self.gds_elements(foundry, user_units_per_db_unit))
+
+    def to_gds(self, filepath: str, foundry: Foundry = FABLESS, user_units_per_db_unit: float = 0.001,
+               meters_per_db_unit: float = 1e-9):
+        """Use `klamath <https://mpxd.net/code/jan/klamath/src/branch/master/klamath>`_ to convert to GDS
+        using a foundry object and a provided :code:`filepath`.
+
+        Args:
+            filepath: The filepath to output the GDS.
+            foundry: The foundry used for the layer map.
+            user_units_per_db_unit: User units per unit (to convert from nm to um, need to use 0.001 to convert).
+            meters_per_db_unit: Meters per unit (usually nanometers, hence 1e-9).
+
+        Returns:
+
+        """
+        with open(filepath, 'wb') as stream:
+            header = FileHeader(name=b'dphox', user_units_per_db_unit=user_units_per_db_unit,
+                                meters_per_db_unit=meters_per_db_unit,
+                                mod_time=datetime.datetime.now(), acc_time=datetime.datetime.now())
+            header.write(stream)
+            self.to_gds_stream(stream, foundry, user_units_per_db_unit)
+            klamath.records.ENDLIB.write(stream, None)
 
 
 @fix_dataclass_init_docs
@@ -347,11 +568,11 @@ class Via(Device):
     Attributes:
         via_extent: Dimensions of the via (or each via in via array).
         boundary_grow: Boundary growth around the via or via array.
-        metal: Metal layer labels for the via (the thin metal layers)
-        via: Via layer labels for the via (the actual tall vias)
-        pitch: Pitch of the vias (center to center)
-        shape: Shape of the array (rows, cols)
-        name: Name of the via
+        metal: Metal layer labels for the via (the thin metal layers).
+        via: Via layer labels for the via (the actual tall vias).
+        pitch: Pitch of the vias (center to center).
+        shape: Shape of the array (rows, cols).
+        name: Name of the via.
     """
 
     via_extent: Float2
@@ -364,7 +585,7 @@ class Via(Device):
 
     def __post_init_post_parse__(self):
         self.metal = (self.metal,) if isinstance(self.metal, str) else self.metal
-        self.boundary_grow = self.boundary_grow if isinstance(self.boundary_grow, tuple)\
+        self.boundary_grow = self.boundary_grow if isinstance(self.boundary_grow, tuple) \
             else tuple([self.boundary_grow] * len(self.metal))
 
         max_boundary_grow = max(self.boundary_grow)
@@ -392,3 +613,4 @@ class Via(Device):
         self.port['s'] = Port(0, self.bounds[1], -90)
         self.port['n'] = Port(0, self.bounds[3], 90)
         self.port['c'] = Port(0, 0)
+

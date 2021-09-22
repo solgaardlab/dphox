@@ -1,13 +1,18 @@
 from enum import Enum
-from functools import lru_cache
 
 import numpy as np
-import trimesh
 from pydantic.dataclasses import dataclass
-from shapely.geometry import box, MultiPolygon, GeometryCollection
-from trimesh.creation import extrude_polygon
-from trimesh.scene import Scene
-from shapely.ops import cascaded_union
+from shapely.geometry import box, MultiPolygon, Polygon
+
+TRIMESH_IMPORTED = True
+
+try:
+    import trimesh
+    import triangle
+    from trimesh.creation import extrude_polygon
+    from trimesh.scene import Scene
+except:
+    TRIMESH_IMPORTED = False
 
 from .typing import Dict, Float3, LayerLabel, List, Optional
 from .utils import fix_dataclass_init_docs
@@ -159,7 +164,8 @@ class Foundry:
 
     Attributes:
         stack: List of process steps that when applied sequentially lead to a full foundry stack
-        cladding: The cladding material used by the foundry (usually OXIDE)
+        cladding: The cladding material used by the foundry (usually OXIDE). This material will more-or-less
+            cover the entire
 
     """
     stack: List[ProcessStep]
@@ -176,6 +182,15 @@ class Foundry:
     def layer_to_gds_label(self):
         return {step.layer: step.gds_label for step in self.stack}
 
+    @property
+    def gds_label_to_layer(self):
+        return {step.gds_label: step.layer for step in self.stack}
+
+    def color(self, layer: str):
+        for step in self.stack:
+            if step.layer == layer:
+                return step.mat.color
+
 
 def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_device: Optional[Scene] = None,
               exclude_layer: Optional[List[CommonLayer]] = None) -> Scene:
@@ -190,12 +205,14 @@ def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_dev
         layer_to_geom: A dictionary mapping each layer to the `full` Shapely geometry for that layer.
         foundry: The foundry for each layer
         init_device: The initial device on which to start fabrication  (useful for post-processing simulations).
-        exclude_process_op: Exclude all process ops in this list.
+        exclude_layer: Exclude all layers in this list.
 
     Returns:
         The device :code:`Scene` to visualize.
 
     """
+    if not TRIMESH_IMPORTED:
+        raise ImportError('Trimesh or Triangle library not imported.')
     device = Scene() if init_device is None else init_device
     prev_mat: Optional[Material] = None
     bound_list = np.array([p.bounds for _, p in layer_to_geom.items()]).T
@@ -219,7 +236,7 @@ def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_dev
             geom = layer_to_geom[layer]
             mesh_name = f"{step.mat.name}_{layer}" if step.mat.name in {SILICON.name, ALUMINUM.name} else layer
             if step.process_op == ProcessOp.GROW:
-                mesh = _shapely_to_mesh(layer_to_geom[layer], meshes, step)
+                mesh = _shapely_to_mesh_from_step(layer_to_geom[layer], meshes, step)
                 device.add_geometry(mesh.apply_translation((0, 0, dz)), geom_name=mesh_name)
             elif step.process_op == ProcessOp.DRI_ETCH:
                 # Directly etch device
@@ -229,14 +246,14 @@ def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_dev
                 # only support to dope silicon at the moment
                 if prev_mat != SILICON:
                     raise ValueError("The previous material must be crystalline silicon for dopant implantation.")
-                mesh = _shapely_to_mesh(MultiPolygon([poly.intersection(poly_si) for poly_si in prev_si_geom
-                                                      for poly in geom]), meshes, step)
+                mesh = _shapely_to_mesh_from_step(MultiPolygon([poly.intersection(poly_si) for poly_si in prev_si_geom
+                                                                for poly in geom]), meshes, step)
                 device.add_geometry(mesh.apply_translation((0, 0, dz - step.thickness)), geom_name=mesh_name)
             elif step.process_op == ProcessOp.SAC_ETCH:
                 if 'clad' not in device.geometry:
                     raise ValueError("The cladding is not in the device geometry / not spec'd by the foundry object.")
                 clad_geometry -= geom
-                clad_geometry = clad_geometry if isinstance(clad_geometry, MultiPolygon) else MultiPolygon([clad_geometry])
+                clad_geometry = MultiPolygon([clad_geometry]) if isinstance(clad_geometry, Polygon) else clad_geometry
                 for poly in clad_geometry:
                     meshes.append(extrude_polygon(poly, height=step.thickness))
                 device.geometry['clad'] = trimesh.util.concatenate(meshes)
@@ -257,34 +274,34 @@ def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_dev
 FABLESS = Foundry(
     stack=[
         # 1. First define the photonic stack
-        ProcessStep(ProcessOp.GROW, 0.2, SILICON, CommonLayer.RIDGE_SI, (1, 0), 2),
-        ProcessStep(ProcessOp.DOPE, 0.1, P_SILICON, CommonLayer.P_SI, (10, 0)),
-        ProcessStep(ProcessOp.DOPE, 0.1, N_SILICON, CommonLayer.N_SI, (11, 0)),
-        ProcessStep(ProcessOp.DOPE, 0.1, PP_SILICON, CommonLayer.PP_SI, (10, 0)),
-        ProcessStep(ProcessOp.DOPE, 0.1, NN_SILICON, CommonLayer.NN_SI, (11, 0)),
-        ProcessStep(ProcessOp.DOPE, 0.1, PPP_SILICON, CommonLayer.PPP_SI, (10, 0)),
-        ProcessStep(ProcessOp.DOPE, 0.1, NNN_SILICON, CommonLayer.NNN_SI, (11, 0)),
-        ProcessStep(ProcessOp.GROW, 0.1, SILICON, CommonLayer.RIB_SI, (2, 0), 2),
-        ProcessStep(ProcessOp.GROW, 0.2, NITRIDE, CommonLayer.RIDGE_SIN, (3, 0), 2.5),
-        ProcessStep(ProcessOp.GROW, 0.1, ALUMINA, CommonLayer.ALUMINA, (3, 0), 2.5),
+        ProcessStep(ProcessOp.GROW, 0.2, SILICON, CommonLayer.RIDGE_SI, (100, 0), 2),
+        ProcessStep(ProcessOp.DOPE, 0.1, P_SILICON, CommonLayer.P_SI, (400, 0)),
+        ProcessStep(ProcessOp.DOPE, 0.1, N_SILICON, CommonLayer.N_SI, (401, 0)),
+        ProcessStep(ProcessOp.DOPE, 0.1, PP_SILICON, CommonLayer.PP_SI, (402, 0)),
+        ProcessStep(ProcessOp.DOPE, 0.1, NN_SILICON, CommonLayer.NN_SI, (403, 0)),
+        ProcessStep(ProcessOp.DOPE, 0.1, PPP_SILICON, CommonLayer.PPP_SI, (404, 0)),
+        ProcessStep(ProcessOp.DOPE, 0.1, NNN_SILICON, CommonLayer.NNN_SI, (405, 0)),
+        ProcessStep(ProcessOp.GROW, 0.1, SILICON, CommonLayer.RIB_SI, (101, 0), 2),
+        ProcessStep(ProcessOp.GROW, 0.2, NITRIDE, CommonLayer.RIDGE_SIN, (300, 0), 2.5),
+        ProcessStep(ProcessOp.GROW, 0.1, ALUMINA, CommonLayer.ALUMINA, (200, 0), 2.5),
         # 2. Then define the metal connections (zranges).
-        ProcessStep(ProcessOp.GROW, 1, ALUMINUM, CommonLayer.VIA_SI_1, (3, 0), 2.2),
-        ProcessStep(ProcessOp.GROW, 0.2, ALUMINUM, CommonLayer.METAL_1, (4, 0)),
-        ProcessStep(ProcessOp.GROW, 0.5, ALUMINUM, CommonLayer.VIA_1_2, (5, 0)),
-        ProcessStep(ProcessOp.GROW, 0.2, ALUMINUM, CommonLayer.METAL_2, (6, 0)),
-        ProcessStep(ProcessOp.GROW, 0.5, ALUMINUM, CommonLayer.VIA_2_PAD, (7, 0)),
+        ProcessStep(ProcessOp.GROW, 1, ALUMINUM, CommonLayer.VIA_SI_1, (500, 0), 2.2),
+        ProcessStep(ProcessOp.GROW, 0.2, ALUMINUM, CommonLayer.METAL_1, (501, 0)),
+        ProcessStep(ProcessOp.GROW, 0.5, ALUMINUM, CommonLayer.VIA_1_2, (502, 0)),
+        ProcessStep(ProcessOp.GROW, 0.2, ALUMINUM, CommonLayer.METAL_2, (503, 0)),
+        ProcessStep(ProcessOp.GROW, 0.5, ALUMINUM, CommonLayer.VIA_2_PAD, (504, 0)),
         # Note: negative means grow downwards (below the ceiling of the device).
-        ProcessStep(ProcessOp.GROW, -0.3, ALUMINUM, CommonLayer.METAL_PAD, (8, 0), 4),
-        ProcessStep(ProcessOp.GROW, 0.2, HEATER, CommonLayer.HEATER, (12, 0), 3.2),
-        ProcessStep(ProcessOp.GROW, 0.5, ALUMINUM, CommonLayer.VIA_HEATER_2, (13, 0)),
+        ProcessStep(ProcessOp.GROW, -0.3, ALUMINUM, CommonLayer.METAL_PAD, (600, 0), 4),
+        ProcessStep(ProcessOp.GROW, 0.2, HEATER, CommonLayer.HEATER, (700, 0), 3.2),
+        ProcessStep(ProcessOp.GROW, 0.5, ALUMINUM, CommonLayer.VIA_HEATER_2, (505, 0)),
         # 3. Finally specify the clearout (needed for MEMS).
-        ProcessStep(ProcessOp.SAC_ETCH, 4, ETCH, CommonLayer.CLEAROUT, (9, 0)),
+        ProcessStep(ProcessOp.SAC_ETCH, 4, ETCH, CommonLayer.CLEAROUT, (800, 0)),
     ],
-    height=4
+    height=5
 )
 
 
-def _shapely_to_mesh(geom: MultiPolygon, meshes: List[trimesh.Trimesh], step: ProcessStep):
+def _shapely_to_mesh_from_step(geom: MultiPolygon, meshes: List[trimesh.Trimesh], step: ProcessStep):
     for poly in geom:
         meshes.append(extrude_polygon(poly, height=step.thickness))
     mesh = trimesh.util.concatenate(meshes)

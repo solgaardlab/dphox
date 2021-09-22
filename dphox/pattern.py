@@ -1,18 +1,19 @@
-from pydantic.dataclasses import dataclass
 from copy import deepcopy as copy
-import numpy as np
-import trimesh
-from descartes import PolygonPatch
-from shapely.affinity import translate, rotate, scale, skew
-from shapely.geometry import GeometryCollection, Point, box, LineString
-from shapely.ops import cascaded_union
-import shapely.wkt as swkt
-from trimesh import creation
-import gdspy as gy
+from enum import Enum
 
-from .typing import Float2, Float3, Float4, Optional, Union, Polygon, PolygonLike, MultiPolygon, \
-    List, Tuple, Dict, Shape, Spacing
-from .utils import fix_dataclass_init_docs
+import gdspy as gy
+import matplotlib.pyplot as plt
+import numpy as np
+import shapely.wkt as swkt
+from descartes import PolygonPatch
+from pydantic.dataclasses import dataclass
+from shapely.affinity import rotate, scale, skew, translate
+from shapely.geometry import box, GeometryCollection, LineString, Point
+from shapely.ops import split, unary_union
+
+from .typing import Dict, Float2, Float3, Float4, List, MultiPolygon, Optional, Polygon, PolygonLike, Shape, Spacing, \
+    Union
+from .utils import fix_dataclass_init_docs, poly_points
 
 NAZCA_IMPORTED = True
 PLOTLY_IMPORTED = True
@@ -46,15 +47,15 @@ class TaperSpec:
     """
     length: float
     params: List[float]
-    num_evaluations: int = 20
+    num_evaluations: int = 100
 
     @classmethod
-    def linear(cls, length: float, change_w: float, num_evaluations: int = 20):
+    def linear(cls, length: float, change_w: float, num_evaluations: int = 100):
         params = [0., change_w]
         return cls(length, params, num_evaluations)
 
     @classmethod
-    def cubic(cls, length: float, change_w: float, num_evaluations: int = 20):
+    def cubic(cls, length: float, change_w: float, num_evaluations: int = 100):
         params = [0., 0., 3 * change_w, -2 * change_w]
         return cls(length, params, num_evaluations)
 
@@ -64,26 +65,27 @@ class TaperSpec:
 class Port:
     """Port used in components in DPhox
 
-    A port defines the center and angle/orientation of a port in a design.
+    A port defines the center, width and angle/orientation of a port in a design. Note that ports always are considered
+    to have a width, and if a width is not provided the width is assumed to be 1 in the units of the file.
 
     Attributes:
         x: x position of the port.
         y: y position of the port.
-        z: z position of the port (optional).
-        a: angle (orientation) of the port (in degrees).
-        w: the width of the port (optional, specified in design, mostly used for simulation).
+        w: width of the port
+        a: Angle (orientation) of the port (in degrees).
+        z: z position of the port (optional, not specified in design, mostly used for simulation).
         h: the height / thickness of the port (optional, not specified in design, mostly used for simulation).
     """
     x: float
     y: float
     a: float = 0
-    w: float = 0
+    w: float = 1
     z: float = 0
     h: float = 0
 
     def __post_init_post_parse__(self):
-        self.xy = (self.x, self.y)
-        self.xya = (self.x, self.y, self.a)
+        self.xy = np.array((self.x, self.y))
+        self.xya = np.array((self.x, self.y, self.a))
         self.center = np.array((self.x, self.y, self.z))
 
     @property
@@ -99,59 +101,72 @@ class Port:
         return np.array((self.w, 0, self.h)) if np.mod(self.a, 180) != 0 else np.array((0, self.w, self.h))
 
     @property
-    def shapely(self) -> LineString:
-        """Return the :code:`LineString` corresponding to the :code:`Port`
+    def shapely(self) -> Polygon:
+        """Return the :code:`Polygon` triangle corresponding to the :code:`Port`.
 
-        Based on center and orientation of the :code:`Port`, return the corresponding Shapely object.
+        Based on center and orientation of the :code:`Port`, return the corresponding Shapely triangle.
         This is effectively the inverse of the :code:`from_shapely` classmethod of this class.
 
         Returns:
-            The shapely :code:`LineString` object represented by the Port
+            The shapely :code:`Polygon` triangle represented by the :code:`Port`.
 
         """
-        dx, dy = np.cos(self.a) * self.w / 2, np.sin(self.a) * self.w / 2
-        return LineString([(self.x - dx, self.y - dy), (self.x + dx, self.y + dy)])
+        dx, dy = np.sin(self.a * np.pi / 180) * self.w / 2, np.cos(self.a * np.pi / 180) * self.w / 2
+        return Polygon(
+            [(self.x - dx - dy * 0.75, self.y - dy - dx * 0.75), (self.x + dx - dy * 0.75, self.y + dy - dx * 0.75),
+             (self.x, self.y)])
 
     @classmethod
-    def from_shapely(cls, line: LineString, z: float = 0, h: float = 0) -> "Port":
+    def from_shapely(cls, triangle: Polygon, z: float = 0, h: float = 0) -> "Port":
         """Initialize a :code:`Port` using a :code:`LineString` in Shapely.
 
-        The port can be unambiguously defined using a line. The Shapely :code:`LineString` defines the
-        center :math:`x, y` of the line as well as the width :math:`w` of the line. This is effectively the
+        The port can be unambiguously defined using a line. The Shapely :code:`Polygon` triangle defines the
+        center :math:`x, y` of the line as well as the width :math:`w` of the port. This is effectively the
         inverse of the :code:`shapely` property of this class.
 
         Args:
-            line: Line length of the component.
+            triangle: Triangle representing the port.
             z: The z position of the port.
             h: The height / thickness of the port.
 
         Returns:
-            The :code:`Port` definition corresponding to
+            The :code:`Port` represented by the shapely :code:`Polygon` triangle.
 
         """
-        if not isinstance(line, LineString):
-            raise TypeError(f'Input line must be LineString but got {type(line)}')
+        if not isinstance(triangle, Polygon):
+            raise TypeError(f'Input line must be a shapely Polygon but got {type(triangle)}')
 
-        center_point = line.centroid  # same as center for lines
-        x, y = center_point.x, center_point.y
-        if len(line.boundary) == 0:
-            a = 0
-        else:
-            first, last = line.boundary
-            a = np.angle((last.x - first.x) + (last.y - first.y) * 1j) * 180 / np.pi
-        return cls(x, y, a, line.length, z, h)
+        points = poly_points(triangle)
+        first, second, port_point, _ = points
+        x, y = port_point.x, port_point.y
+        c = (second[1] - first[1]) + (second[0] - first[0]) * 1j
+        a = np.angle(c) * 180 / np.pi
+        return cls(x, y, a, np.abs(c), z, h)
+
+    def normal(self, scale: float = 1):
+        return np.array([np.cos(self.a * np.pi / 180), np.sin(self.a * np.pi / 180)]) * scale
+
+    @property
+    def copy(self) -> "Port":
+        """Return a copy of this port for repeated use.
+
+        Returns:
+            A deep copy of this port.
+
+        """
+        return copy(self)
 
 
 class GdspyPath(gy.Path):
-    """This is just :code:`gdspy.Path` with some added sugar for tapering, bending, and more.
+    """This is just :code:`gdspy.Path` with some added sugar for tapering, bending, and more. The eventual plan is to
+    deprecate this class in favor of an independent Shapely-based path solution.
 
     See Also:
         https://gdspy.readthedocs.io/en/stable/gettingstarted.html#paths
 
     """
 
-    def polynomial_taper(self, taper_spec: TaperSpec,
-                         num_taper_evaluations: int = 100, layer: int = 0, inverted: bool = False):
+    def polynomial_taper(self, taper_spec: TaperSpec, layer: int = 0, inverted: bool = False):
         """Polynomial taper for a GDSPY path.
 
         Args:
@@ -181,10 +196,11 @@ class GdspyPath(gy.Path):
                         final_width=lambda u: curr_width - np.sum(taper_params) + np.sum(
                             taper_params * (1 - u) ** np.arange(taper_params.size, dtype=float)) if inverted
                         else curr_width + np.sum(taper_params * u ** np.arange(taper_params.size, dtype=float)),
-                        number_of_evaluations=num_taper_evaluations, layer=layer)
+                        number_of_evaluations=taper_spec.num_evaluations, layer=layer)
         return self
 
-    def sbend(self, bend_extent: Union[Float2, Float3], layer: int = 0, inverted: bool = False, use_radius: bool = False):
+    def sbend(self, bend_extent: Union[Float2, Float3], layer: int = 0, inverted: bool = False,
+              use_radius: bool = False):
         """S bend using a bend dimension.
 
         Args:
@@ -274,7 +290,7 @@ class GdspyPath(gy.Path):
         """Connect the path to a port
 
         Args:
-            port:
+            port: Port.
 
         Returns:
             The current path extended to connect to the port
@@ -288,8 +304,8 @@ class Pattern:
 
     A :code:`Pattern` is a core object in DPhox, which enables composition of multiple polygons or
     patterns into a single Pattern. It allows for composition of a myriad of different objects such as
-    GDSPY Polygons and Shapely polygons into a single pattern. Since it is based on Shapely, this allows
-    :code:`Pattern` to interface with other libraries such as :code:`Trimesh` and simulators codes such as
+    GDSPY Polygons and Shapely polygons into a single pattern. Since :code:`Pattern` is a simple wrapper around Shapely's
+    MultiPolygon, this class interfaces easily with other libraries such as :code:`Trimesh` and simulators codes such as
     MEEP and simphox for simulating the generated designs straightforwardly.
 
     Attributes:
@@ -298,7 +314,7 @@ class Pattern:
         decimal_places: decimal places for rounding (in case of tiny errors in polygons)
     """
 
-    def __init__(self, *patterns: Union["Pattern", GdspyPath, PolygonLike], decimal_places: int = 3):
+    def __init__(self, *patterns: Union["Pattern", GdspyPath, PolygonLike], decimal_places: int = 5):
         self.config = copy(self.__dict__)
         self.polys = []
         self.decimal_places = decimal_places
@@ -329,7 +345,7 @@ class Pattern:
         self.reference_patterns: List[Pattern] = []
 
     @classmethod
-    def from_shapely(cls, shapely_pattern: Union[Polygon, GeometryCollection]) -> "Pattern":
+    def from_shapely(cls, shapely_pattern: Union[Polygon, MultiPolygon, GeometryCollection]) -> "Pattern":
         """Instantiate a pattern from a shapely pattern
 
         Args:
@@ -338,16 +354,16 @@ class Pattern:
         Returns:
 
         """
-        try:
-            collection = shapely_pattern if isinstance(shapely_pattern, Polygon) \
-                else MultiPolygon([g for g in shapely_pattern.geoms if isinstance(g, Polygon)])
-        except AttributeError:
-            raise AttributeError(f'`shapely_pattern` is not a Polygon or a GeometryCollection'
-                                 f'it is a {type(shapely_pattern)}, so it will be replaced with an empty MultiPolygon')
-        return cls(collection)
+        if isinstance(shapely_pattern, Polygon) or isinstance(shapely_pattern, MultiPolygon):
+            return cls(shapely_pattern)
+        elif isinstance(shapely_pattern, GeometryCollection):
+            return cls(MultiPolygon([g for g in shapely_pattern.geoms if isinstance(g, Polygon)]))
+        else:
+            raise AttributeError(f'`shapely_pattern` is not a Polygon, GeometryCollection, or MultiPolygon,'
+                                 f'it is a {type(shapely_pattern)}.')
 
     def shapely_union(self) -> MultiPolygon:
-        pattern = cascaded_union(self.polys)
+        pattern = unary_union(self.polys)
         return pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern])
 
     def mask(self, shape: Shape, spacing: Spacing) -> np.ndarray:
@@ -434,8 +450,8 @@ class Pattern:
         if other is None:
             old_x, old_y = self.center
         else:
-            old_x, old_y = other if isinstance(other, tuple) else other.center
-        center = pattern_or_center if isinstance(pattern_or_center, tuple) else pattern_or_center.center
+            old_x, old_y = other.center if isinstance(other, Pattern) else other
+        center = pattern_or_center.center if isinstance(pattern_or_center, Pattern) else pattern_or_center
         self.translate(center[0] - old_x, center[1] - old_y)
         return self
 
@@ -493,8 +509,9 @@ class Pattern:
 
         """
         new_polys = []
+
         for poly in self.polys:
-            points = np.asarray(poly.exterior.coords.xy)
+            points = poly_points(poly).T
             new_points = np.stack((-points[0] + 2 * center[0], points[1])) if horiz \
                 else np.stack((points[0], -points[1] + 2 * center[1]))
             new_polys.append(Polygon(new_points.T))
@@ -503,11 +520,11 @@ class Pattern:
         # any patterns in this pattern should also be flipped
         for pattern in self.reference_patterns:
             pattern.reflect(center, horiz)
-        self.port = {name: Port(-port.x + 2 * center[0], port.y, -port.a) if horiz else
-        Port(port.x, -port.y + 2 * center[1], -port.a) for name, port in self.port.items()}
+        self.port = {name: Port(-port.x + 2 * center[0], port.y, -port.a, port.w) \
+            if horiz else Port(port.x, -port.y + 2 * center[1], -port.a, port.w) for name, port in self.port.items()}
         return self
 
-    def rotate(self, angle: float, origin: Float2 = (0, 0)) -> "Pattern":
+    def rotate(self, angle: float, origin: Union[Float2, np.ndarray] = (0, 0)) -> "Pattern":
         """Runs Shapely's rotate operation on the geometry about :code:`origin`.
 
         Args:
@@ -675,33 +692,8 @@ class Pattern:
             The GDSPY cell corresponding to the :code:`Pattern`
 
         """
-        for path in self.polys:
-            cell.add(gy.Polygon(np.asarray(path.exterior.coords.xy).T)) if isinstance(path, Polygon) else cell.add(path)
-
-    def to_trimesh(self, thickness: float, start_height: float = 0) -> trimesh.Trimesh:
-        """Convert to 3D representation in trimesh by providing thickness and starting height for polygon extrusion.
-
-        Args:
-            thickness: Extrude height or thickness of the extrusion
-            start_height: Start height for the extrusion
-
-        Returns:
-            The trimesh object corresponding to the device.
-
-        """
-        meshes = [trimesh.creation.extrude_polygon(poly, height=thickness).apply_translation((0, 0, start_height))
-                  for poly in self.shapely_union().geoms]
-        return trimesh.util.concatenate(meshes)
-
-    def to_stl(self, filename: str, extrude_height: float):
-        """Convert the pattern to an STL file saved to :code:`filename`.
-
-        Args:
-            filename: The filename to export the STL
-            extrude_height: The extrusion height for the pattern.
-
-        """
-        self.to_trimesh(extrude_height).export(filename)
+        for poly in self.polys:
+            cell.add(gy.Polygon(poly_points(poly)) if isinstance(poly, Polygon) else cell.add(poly))
 
     def replace(self, pattern: "Pattern", center: Optional[Float2] = None, raise_port: bool = True):
         pattern_bbox = Pattern(GdspyPath(pattern.size[1]).segment(pattern.size[0]))
@@ -712,7 +704,8 @@ class Pattern:
             new_pattern.port = self.port
         return new_pattern
 
-    def plot(self, ax, color):
+    def plot(self, ax: Optional, color: str = 'black'):
+        ax = plt.gca() if ax is None else ax
         ax.add_patch(PolygonPatch(self.shapely_union(), facecolor=color, edgecolor='none'))
         b = self.bounds
         ax.set_xlim((b[0], b[2]))
@@ -728,32 +721,11 @@ class Pattern:
             raise ImportError('Nazca not installed! Please install nazca prior to running nazca_cell().')
         with nd.Cell(cell_name) as cell:
             for poly in self.polys:
-                nd.Polygon(points=np.around(np.asarray(poly.exterior.coords.xy).T, decimals=3), layer=layer).put()
+                nd.Polygon(points=poly_points(poly, self.decimal_places), layer=layer).put()
             for name, port in self.port.items():
                 nd.Pin(name).put(*port.xya)
             nd.put_stub()
         return cell
-
-    def metal_contact(self, metal_layers: Tuple[str, ...], via_sizes: Tuple[float, ...] = (0.4, 0.4, 3.6)):
-        patterns = []
-        for i, metal_layer in enumerate(metal_layers):
-            if i % 2 == 0:
-                pattern = Pattern(GdspyPath(via_sizes[i // 2]).segment(via_sizes[i // 2])).align(self)
-            else:
-                pattern = copy(self)
-            patterns.append((pattern.align(self), metal_layer))
-        return [(pattern, metal_layer) for pattern, metal_layer in patterns]
-
-    def dope(self, dope_layer: str, dope_grow: float = 0.1):
-        return self.copy.offset(dope_grow), dope_layer
-
-    def clearout_box(self, clearout_layer: str, clearout_etch_stop_layer: str,
-                     dim: Float2, clearout_etch_stop_grow: float = 0.5,
-                     center: Float2 = None):
-        center = center if center is not None else self.center
-        box = Pattern(GdspyPath(dim[1]).segment(dim[0]).translate(dx=0, dy=dim[1] / 2)).align(center)
-        box_grow = box.offset(clearout_etch_stop_grow)
-        return [(box, clearout_layer), (box_grow, clearout_etch_stop_layer)]
 
     def to(self, port: Port, from_port: Optional[str] = None):
         if from_port is None:
@@ -947,27 +919,58 @@ class Box(Pattern):
 @fix_dataclass_init_docs
 @dataclass
 class Ellipse(Pattern):
+    """Ellipse with default center at origin.
 
-    extent: Float2 = (1, 1)
+    Attributes:
+        radius_extent: Dimension (ellipse x radius, ellipse y radius).
+        resolution: Resolution is (number of points on circle) / 2.
+    """
 
-    def __post_init__(self):
-        super(Ellipse, self).__init__(Point(0, 0).buffer(1))
-        self.scale(*self.extent)
+    radius_extent: Float2 = (1, 1)
+    resolution: int = 16
 
-    def hollow(self, thickness: float) -> Pattern:
-        """A hollow box of thickness :code:`thickness` on all four sides.
+    def __post_init_post_parse__(self):
+        super(Ellipse, self).__init__(Point(0, 0).buffer(1, resolution=self.resolution))
+        self.scale(*self.radius_extent)
 
-        Args:
-            thickness: Thickness of the box
 
-        Returns:
-            A box of specified :code:`thickness` with no filling inside.
+@fix_dataclass_init_docs
+@dataclass
+class Circle(Pattern):
+    """Ellipse with default center at origin.
 
-        """
-        return Pattern(
-            self.difference(Ellipse((self.extent[0] - 2 * thickness, self.extent[1])).align(self)),
-            self.difference(Ellipse((self.extent[0], self.extent[1] - 2 * thickness)).align(self)),
-        )
+    Attributes:
+        diameter: diameter of the circle.
+        resolution: Resolution is (number of points on circle) / 2.
+    """
+
+    radius: float = 1
+    resolution: int = 16
+
+    def __post_init_post_parse__(self):
+        super(Circle, self).__init__(Point(0, 0).buffer(self.radius, resolution=self.resolution))
+
+
+@fix_dataclass_init_docs
+@dataclass
+class Sector(Pattern):
+    """Sector of a circle with center at origin.
+
+    Attributes:
+        radius: radius of the circle boundary of the sector.
+        angle: angle of the sector.
+        resolution: Resolution is (number of points on circle) / 2.
+    """
+
+    radius: float = 1
+    angle: float = 180
+    resolution: int = 16
+
+    def __post_init_post_parse__(self):
+        circle = Point(0, 0).buffer(self.radius, resolution=self.resolution)
+        top_splitter = rotate(LineString([(0, self.radius), (0, 0)]), angle=self.angle / 2, origin=(0, 0))
+        bottom_splitter = rotate(LineString([(0, 0), (0, self.radius)]), angle=-self.angle / 2, origin=(0, 0))
+        super(Sector, self).__init__(split(circle, LineString([*top_splitter.coords, *bottom_splitter.coords]))[1])
 
 
 @fix_dataclass_init_docs
@@ -996,3 +999,92 @@ class MEMSFlexure(Pattern):
                                                                    self.stripe_w, self.spring_center))
         self.box = Box(self.extent)
         self.reference_patterns.append(self.box)
+
+
+class AnnotatedPathOp(str, Enum):
+    """Annotated path operation
+
+    This is simply an enum for the AnnotatedPath object. This is temporary until Waveguide/Path functionality is merged.
+
+    """
+    segment = 'segment'
+    turn = 'turn'
+    sbend = 'sbend'
+    dc = 'dc'
+    polynomial_taper = 'polynomial_taper'
+
+
+@fix_dataclass_init_docs
+@dataclass
+class AnnotatedPath(Pattern):
+    """Annotated path (a schema-based path model).
+
+    This method is a wrapper class around GDSPY's :code:`Path` functionality.
+    TODO: This will be independent of GDSPY in future.
+
+    Attributes:
+        current_path: The current path.
+        operation: Operation on the path specified by :code:`GdspyPath`.
+        kwargs: The keyword arguments to call for the path :code:`operation()`.
+    """
+
+    current_path: Union["AnnotatedPath", float]
+    operation: Optional[AnnotatedPathOp] = None
+    kwargs: Optional[Dict[str, Union[float, List[float], TaperSpec]]] = None
+
+    def __post_init_post_parse__(self):
+        if isinstance(self.current_path, float):
+            self._path = GdspyPath(self.current_path)
+        else:
+            self._path = self.current_path._path
+            if self.operation and self.kwargs:
+                {
+                    AnnotatedPathOp.turn: self._path.turn,
+                    AnnotatedPathOp.sbend: self._path.sbend,
+                    AnnotatedPathOp.dc: self._path.dc,
+                    AnnotatedPathOp.polynomial_taper: self._path.polynomial_taper,
+                    AnnotatedPathOp.segment: self._path.segment
+                }[self.operation](**self.kwargs)
+        super(AnnotatedPath, self).__init__(self._path)
+
+    def segment(self, **kwargs):
+        return AnnotatedPath(self, AnnotatedPathOp.segment, kwargs)
+
+    def turn(self, **kwargs):
+        return AnnotatedPath(self, AnnotatedPathOp.turn, kwargs)
+
+    def sbend(self, **kwargs):
+        return AnnotatedPath(self, AnnotatedPathOp.sbend, kwargs)
+
+    def dc(self, bend_extent: Union[Float2, Float3], interaction_l: float, end_l: float = 0,
+           inverted: bool = False, use_radius: bool = False):
+        """Directional coupler waveguide path
+
+        This includes the top or bottom path, end stub lengths, interaction length, additional end bends if necessary.
+
+        Args:
+            bend_extent: Bend dimension of the form :code:`(length, height, final_width)` or :code:`(length, height)`,
+                where the latter is provided when the sbend is supposed to maintain the same final width throughout.
+            interaction_l: Interaction length (length of the middle straight section of the directional coupler).
+            end_l: End length
+            inverted: Bend down instead of bending up.
+            use_radius: Use a radius/turn instead of bezier curve.
+
+        Returns:
+            The current path with the dc path added (see GDSPY chaining).
+
+        """
+        kwargs = {
+            'bend_extent': bend_extent,
+            'interaction_l': interaction_l,
+            'end_l': end_l,
+            'inverted': inverted,
+            'use_radius': use_radius
+        }
+        return AnnotatedPath(self, AnnotatedPathOp.dc, kwargs)
+
+    def polynomial_taper(self, taper_spec: TaperSpec):
+        return AnnotatedPath(self, AnnotatedPathOp.polynomial_taper, {'taper_spec': taper_spec})
+
+
+AnnotatedPath.__pydantic_model__.update_forward_refs()

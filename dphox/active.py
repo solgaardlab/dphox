@@ -1,21 +1,22 @@
 from typing import Tuple
-
-from .foundry import CommonLayer
-from .device import Device, Via
-from .passive import DC, Waveguide, TapDC, RibWaveguide, AnnotatedPath
-from .pattern import Port, Pattern, Box, MEMSFlexure
-from .typing import List, Union, Float2, Optional
-from .utils import fix_dataclass_init_docs
-from pydantic.dataclasses import dataclass
-from pydantic import Field
+from copy import deepcopy as copy
 
 import numpy as np
+from pydantic import Field
+from pydantic.dataclasses import dataclass
+
+from .device import Device, Via
+from .foundry import CommonLayer
+from .passive import AnnotatedPath, DC, WaveguideDevice, TapDC, Waveguide
+from .pattern import Box, MEMSFlexure, Pattern, Port
+from .typing import List, Optional, Union
+from .utils import fix_dataclass_init_docs
 
 
 @fix_dataclass_init_docs
 @dataclass
 class ThermalPS(Device):
-    """Thermal phase shifter (e.g. TiN phase shifter)
+    """Thermal phase shifter (e.g. TiN phase shifter).
 
     Attributes:
         waveguide: Waveguide
@@ -150,7 +151,7 @@ class GndAnchorWaveguide(Device):
         gnd_pad_dope: Electrode dope setting
 
     """
-    rib_waveguide: RibWaveguide
+    rib_waveguide: WaveguideDevice
     gnd_pad: Box
     gnd_connector: Box
     via: Via
@@ -181,15 +182,18 @@ class GndAnchorWaveguide(Device):
         super(GndAnchorWaveguide, self).__init__(
             self.name, pattern_to_layer + dopes + vias + self.rib_waveguide.pattern_to_layer
         )
-        self.port['e0'] = gnd_pads[0].port['e']
-        self.port['e1'] = gnd_pads[1].port['e']
-        self.port['w0'] = gnd_pads[0].port['w']
-        self.port['w1'] = gnd_pads[1].port['w']
-        self.port['n0'] = gnd_pads[0].port['n']
-        self.port['n1'] = gnd_pads[1].port['n']
-        self.port['s0'] = gnd_pads[0].port['s']
-        self.port['s1'] = gnd_pads[1].port['s']
-
+        self.port = {
+            'e0': gnd_pads[0].port['e'],
+            'e1': gnd_pads[1].port['e'],
+            'w0': gnd_pads[0].port['w'],
+            'w1': gnd_pads[1].port['w'],
+            'n0': gnd_pads[0].port['n'],
+            'n1': gnd_pads[1].port['n'],
+            's0': gnd_pads[0].port['s'],
+            's1': gnd_pads[1].port['s'],
+            'a0': self.rib_waveguide.port['a0'],
+            'b0': self.rib_waveguide.port['b0']
+        }
 
 @fix_dataclass_init_docs
 @dataclass
@@ -263,7 +267,11 @@ class LateralNemsPS(Device):
                                             + bottom_actuator.pattern_to_layer + clearout.pattern_to_layer
                                             + left_gnd_waveguide.pattern_to_layer
                                             + right_gnd_waveguide.pattern_to_layer)
-        self.port = psw.port
+        self.port = {
+            'a0': left_gnd_waveguide.port['b0'],
+            'b0': right_gnd_waveguide.port['b0']
+        }
+        self.wg_path = self.phase_shifter_waveguide
 
 
 PathComponent = Union[DC, TapDC, Waveguide, ThermalPS, LateralNemsPS, AnnotatedPath, "MultilayerPath", float]
@@ -345,23 +353,23 @@ class MZI(Device):
 
     def __post_init_post_parse__(self):
         patterns = [self.coupler]
-        port = self.coupler.port
+        port = copy(self.coupler.port)
         if self.top_external:
             top_input = MultilayerPath(self.coupler.waveguide_w, self.top_external, self.ridge)
             top_input.to(self.coupler.port['a1'], 'b0')
-            port['a1'] = top_input.port['a0']
+            port['a1'] = top_input.port['a0'].copy
             patterns.append(top_input)
         if self.bottom_external:
             bottom_input = MultilayerPath(self.coupler.waveguide_w, self.bottom_external, self.ridge)
             bottom_input.to(self.coupler.port['a0'], 'b0')
-            port['a0'] = bottom_input.port['a0']
+            port['a0'] = bottom_input.port['a0'].copy
             patterns.append(bottom_input)
         if self.top_internal:
             top_arm = MultilayerPath(self.coupler.waveguide_w, self.top_internal, self.ridge).to(port['b1'])
-            port['b1'] = top_arm.port['b0']
+            port['b1'] = top_arm.port['b0'].copy
         if self.bottom_internal:
             bottom_arm = MultilayerPath(self.coupler.waveguide_w, self.bottom_internal, self.ridge).to(port['b0'])
-            port['b0'] = bottom_arm.port['b0']
+            port['b0'] = bottom_arm.port['b0'].copy
 
         arm_length_diff = port['b1'].x - port['b0'].x
 
@@ -370,17 +378,19 @@ class MZI(Device):
                 bottom_arm.append(arm_length_diff)
             else:
                 bottom_arm = Waveguide((self.coupler.waveguide_w, arm_length_diff)).to(port['b0'])
-            port['b0'] = bottom_arm.port['b0']
+            port['b0'] = bottom_arm.port['b0'].copy
         elif arm_length_diff < 0:
             if self.top_internal:
                 top_arm.append(arm_length_diff)
             else:
                 top_arm = Waveguide((self.coupler.waveguide_w, arm_length_diff)).to(port['b0'])
-            port['b1'] = top_arm.port['b1']
+            port['b1'] = top_arm.port['b1'].copy
 
         patterns.extend([top_arm, bottom_arm])
 
         final_coupler = self.coupler.copy.to(port['b0'])
+        port['b0'] = final_coupler.port['b0'].copy
+        port['b1'] = final_coupler.port['b1'].copy
         patterns.append(final_coupler)
 
         pattern_to_layer = sum([[(p, self.ridge)]

@@ -1,0 +1,4 @@
+bokeh==2.2.3
+holoviews==1.14.6
+trimesh==3.9.30
+triangle==20200424

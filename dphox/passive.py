@@ -1,15 +1,16 @@
-from enum import Enum
+from copy import deepcopy
 
 import numpy as np
 from pydantic import Field
 from pydantic.dataclasses import dataclass
-from shapely.geometry import MultiPolygon
+from shapely.geometry import MultiPolygon, LinearRing, Point
+from shapely.ops import unary_union
 
 from .device import Device
-from .pattern import Box, Ellipse, GdspyPath, Pattern, Port, TaperSpec
-from .typing import Float2, Int2, Optional, Tuple, Union, List, Dict
-from .utils import fix_dataclass_init_docs
 from .foundry import CommonLayer
+from .pattern import AnnotatedPath, Box, Ellipse, GdspyPath, Pattern, Port, TaperSpec, Sector
+from .typing import Float2, Int2, List, Optional, Union
+from .utils import fix_dataclass_init_docs
 
 try:
     import plotly.graph_objects as go
@@ -28,9 +29,9 @@ class Waveguide(Pattern):
     This enables the :code:`Waveguide` class to be used in a variety of contexts including multimode interference.
 
     Attributes:
-        waveguide_extent: Tuple of waveguide width, length at the input of the waveguide path. Note that the taper
+        extent: Tuple of waveguide width, length at the input of the waveguide path. Note that the taper
             can extend to be wider than the original extent width.
-        waveguide_taper: A :code:`TaperSpec` or list of :code:`TaperSpec`'s that sequentially taper the waveguide width
+        taper: A :code:`TaperSpec` or list of :code:`TaperSpec`'s that sequentially taper the waveguide width
             according to a :code:`Path.polynomial_taper` specification.
         subtract_waveguide: A waveguide to subtract from the current waveguide. This is recursively defined, allowing
             for the definition of highly complex waveguiding structures.
@@ -64,7 +65,8 @@ class Waveguide(Pattern):
         else:
             if not self.extent[1] >= taper_l:
                 raise ValueError(f'Require length >= taper_l but got {self.extent[1]} < {taper_l}')
-            waveguide.segment(self.length - taper_l)
+            waveguide.segment(self.extent[1] - taper_l)
+        self.final_width = waveguide.w
         waveguide = Pattern(waveguide)
         if self.subtract_waveguide is not None:
             if self.subtract_waveguide.size[1] >= waveguide.size[1]:
@@ -73,7 +75,7 @@ class Waveguide(Pattern):
             waveguide = Pattern(waveguide.shapely_union() - self.subtract_waveguide.shapely_union())
         super(Waveguide, self).__init__(waveguide)
         self.port['a0'] = Port(0, 0, -180, w=self.extent[0])
-        self.port['b0'] = Port(self.size[0], 0, w=waveguide.size[0])
+        self.port['b0'] = Port(self.size[0], 0, w=self.final_width)
 
     @property
     def wg_path(self) -> Pattern:
@@ -81,59 +83,6 @@ class Waveguide(Pattern):
 
 
 Waveguide.__pydantic_model__.update_forward_refs()
-
-
-class AnnotatedPathOp(str, Enum):
-    segment = 'segment'
-    turn = 'turn'
-    sbend = 'sbend'
-    dc = 'dc'
-    polynomial_taper = 'polynomial_taper'
-
-
-@fix_dataclass_init_docs
-@dataclass
-class AnnotatedPath(Pattern):
-    """Annotated path (a schema-based path model)
-
-    Attributes:
-        operation:
-        params:
-        current_path:
-    """
-
-    init: Union["AnnotatedPath", float]
-    operation: Optional[AnnotatedPathOp] = None
-    kwargs: Optional[Dict[str, Union[float, List[float], TaperSpec]]] = None
-
-    def __post_init_post_parse__(self):
-        if isinstance(self.init, float):
-            self._path = GdspyPath(self.init)
-        else:
-            self._path = self.init._path
-            if self.operation and self.kwargs:
-                {
-                    AnnotatedPathOp.turn: self._path.turn,
-                    AnnotatedPathOp.sbend: self._path.sbend,
-                    AnnotatedPathOp.dc: self._path.dc,
-                    AnnotatedPathOp.polynomial_taper: self._path.polynomial_taper,
-                    AnnotatedPathOp.segment: self._path.segment
-                }[self.operation](**self.kwargs)
-        super(AnnotatedPath, self).__init__(self._path)
-
-    def turn(self, **kwargs):
-        return AnnotatedPath(self, AnnotatedPathOp.turn, kwargs)
-
-    def sbend(self, **kwargs):
-        return AnnotatedPath(self, AnnotatedPathOp.sbend, kwargs)
-
-    def dc(self, **kwargs):
-        return AnnotatedPath(self, AnnotatedPathOp.dc, kwargs)
-
-    def polynomial_taper(self, **kwargs):
-        return AnnotatedPath(self, AnnotatedPathOp.polynomial_taper, kwargs)
-
-AnnotatedPath.__pydantic_model__.update_forward_refs()
 
 
 @fix_dataclass_init_docs
@@ -203,50 +152,6 @@ class DC(Pattern):
     @property
     def path_array(self):
         return np.array([self.polys[:3], self.polys[3:]])
-
-
-@fix_dataclass_init_docs
-@dataclass
-class GratingPad(Pattern):
-    """Grating pad
-
-    Attributes:
-        pad_extent: Size2
-        taper: float
-        final_w: float
-        out: bool = False
-        end_l: Optional[float] = None
-        bend_extent: Optional[Size2] = None
-        layer: int = 0
-
-    """
-    pad_extent: Float2
-    taper_l: float
-    final_w: float
-    out: bool = False
-    end_l: Optional[float] = None
-    bend_extent: Optional[Float2] = None
-    layer: int = 0
-
-    def __post_init_post_parse__(self):
-        self.end_l = self.taper_l if self.end_l is None else self.end_l
-
-        if self.out:
-            path = GdspyPath(self.final_w)
-            if self.end_l > 0:
-                path.segment(self.end_l)
-            if self.bend_extent:
-                path.sbend(self.bend_extent)
-            super(GratingPad, self).__init__(path.segment(self.taper_l,
-                                                          final_width=self.pad_extent[1]).segment(self.pad_extent[0]))
-        else:
-            path = GdspyPath(self.pad_extent[1]).segment(self.pad_extent[0]).segment(self.taper_l, final_width=self.final_w)
-            if self.bend_extent:
-                path.sbend(self.bend_extent, layer=self.layer)
-            if self.end_l > 0:
-                path.segment(self.end_l, layer=self.layer)
-            super(GratingPad, self).__init__(path)
-        self.port['a0'] = Port(0, 0)
 
 
 @fix_dataclass_init_docs
@@ -330,8 +235,9 @@ class Interposer(Pattern):
                 p = self.init_pitch
                 s = -1
             radius, grating_length = self.self_coupling_extension_extent
-            self_coupling_path = GdspyPath(width=self.waveguide_w).rotate(-np.pi * self.self_coupling_final).translate(dx=dx,
-                                                                                                                       dy=dy - p)
+            self_coupling_path = GdspyPath(width=self.waveguide_w).rotate(-np.pi * self.self_coupling_final).translate(
+                dx=dx,
+                dy=dy - p)
             self_coupling_path.turn(radius, -np.pi * s, tolerance=0.001)
             self_coupling_path.segment(length=grating_length + 5)
             self_coupling_path.turn(radius=radius, angle=np.pi / 2 * s, tolerance=0.001)
@@ -459,29 +365,7 @@ class DelayLine(Pattern):
 
 @fix_dataclass_init_docs
 @dataclass
-class TapDC(Pattern):
-    """Tap directional coupler
-
-    Attributes:
-        dc: the directional coupler that acts as a tap coupler
-        grating_pad: the grating pad for the tap
-    """
-    dc: DC
-    grating_pad: GratingPad
-
-    def __post_init_post_parse__(self):
-        in_grating = self.grating_pad.copy.to(self.dc.port['b1'])
-        out_grating = self.grating_pad.copy.to(self.dc.port['a1'])
-        super(TapDC, self).__init__(self.dc, in_grating, out_grating)
-        self.port['a0'] = self.dc.port['a0']
-        self.port['b0'] = self.dc.port['b0']
-        self.reference_patterns.append(self.dc)
-        self.wg_path = self.dc.lower_path
-
-
-@fix_dataclass_init_docs
-@dataclass
-class RibWaveguide(Device):
+class WaveguideDevice(Device):
     """Rib waveguide
 
     Attributes:
@@ -500,6 +384,117 @@ class RibWaveguide(Device):
     name: str = "rib_wg"
 
     def __post_init_post_parse__(self):
-        super(RibWaveguide, self).__init__(self.name, [(self.ridge_waveguide, self.ridge),
-                                                       (self.slab_waveguide, self.rib)])
+        super(WaveguideDevice, self).__init__(self.name, [(self.ridge_waveguide, self.ridge),
+                                                          (self.slab_waveguide, self.rib)])
+        self.port = self.ridge_waveguide.port
 
+
+@fix_dataclass_init_docs
+@dataclass
+class StraightGrating(Device):
+    """Straight (non-focusing) grating with partial etch.
+
+    Attributes:
+        extent: Dimension of the extent of the grating.
+        waveguide: The waveguide to connect to the grating structure (can be tapered if desired)
+        pitch: The pitch between the grating teeth.
+        duty_cycle: The fill factor for the grating.
+        rib_grow: Offset the rib / slab layer in size (usually positive).
+        n_teeth: The number of teeth (uses maximum given extent and pitch if not specified).
+        name: Name of the device.
+        ridge: The ridge layer for the partial etch.
+        slab: The slab layer for the partial etch.
+
+    """
+    extent: Float2
+    waveguide: Waveguide
+    pitch: float
+    duty_cycle: float = 0.5
+    rib_grow: float = 0
+    n_teeth: Optional[int] = None
+    name: str = 'straight_grating'
+    ridge: CommonLayer = CommonLayer.RIDGE_SI
+    slab: CommonLayer = CommonLayer.RIB_SI
+
+    def __post_init_post_parse__(self):
+        self.stripe_w = self.pitch * (1 - self.duty_cycle)
+        slab = (Box(self.extent).hstack(self.waveguide).offset(self.rib_grow), self.slab)
+        grating = (Box(self.extent).hstack(self.waveguide).striped(self.stripe_w, (self.pitch, 0)), self.ridge)
+        super(StraightGrating, self).__init__(self.name, [slab, grating, (self.waveguide, self.ridge)])
+        self.port['a0'] = self.waveguide.port['a0']
+
+
+@fix_dataclass_init_docs
+@dataclass
+class FocusingGrating(Device):
+    """Focusing grating with partial etch.
+
+    Attributes:
+        radius: The radius of the focusing grating structure
+        angle: The opening angle for the focusing grating.
+        waveguide: The waveguide for the focusing grating.
+        pitch: The pitch between the grating teeth.
+        duty_cycle: The fill factor for the grating.
+        grating_frac: The fraction of the distance radiating from the center occupied by the grating (otherwise ridge).
+        resolution: Number of evaluations for the arcs.
+        rib_grow: Offset the rib / slab layer in size (usually positive).
+        name: Name of the device.
+        ridge: The ridge layer for the partial etch.
+        slab: The slab layer for the partial etch.
+
+    """
+    radius: float
+    angle: float
+    waveguide: Waveguide
+    pitch: float
+    duty_cycle: float = 0.5
+    grating_frac: float = 1
+    resolution: int = 16
+    rib_grow: float = 0
+    name: str = 'focusing_grating'
+    ridge: CommonLayer = CommonLayer.RIDGE_SI
+    slab: CommonLayer = CommonLayer.RIB_SI
+
+    def __post_init_post_parse__(self):
+        self.stripe_w = self.pitch * (1 - self.duty_cycle)
+        grating = Sector(self.radius, self.angle, self.resolution).shapely
+        n_periods = int(self.radius * self.grating_frac / self.pitch) - 1
+        for n in range(n_periods):
+            circle = LinearRing(Point(0, 0).buffer(
+                self.radius - self.pitch * (n + 1) + self.stripe_w / 2).exterior.coords).buffer(self.stripe_w / 2)
+            grating -= circle
+        grating = Pattern(grating).rotate(90).translate(
+            np.abs(self.waveguide.final_width / np.tan(self.angle / 360 * np.pi))
+        )
+        if n_periods <= 0:
+            raise ValueError(f'Calculated {n_periods} which is <= 0.'
+                             f'Make sure that the pitch is not too big and grating_frac not'
+                             f'too small compared to radius.')
+        super(FocusingGrating, self).__init__(self.name,
+                                              [(Box(grating.size).offset(self.rib_grow).align(grating), self.slab),
+                                               (grating, self.ridge),
+                                               (self.waveguide, self.ridge)])
+        self.port['a0'] = self.waveguide.port['b0']
+        self.rotate(180).halign(0)
+
+
+@fix_dataclass_init_docs
+@dataclass
+class TapDC(Pattern):
+    """Tap directional coupler
+
+    Attributes:
+        dc: the directional coupler that acts as a tap coupler
+        grating_pad: the grating pad for the tap
+    """
+    dc: DC
+    grating: Union[StraightGrating, FocusingGrating]
+
+    def __post_init_post_parse__(self):
+        in_grating = self.grating_pad.copy.to(self.dc.port['b1'])
+        out_grating = self.grating_pad.copy.to(self.dc.port['a1'])
+        super(TapDC, self).__init__(self.dc, in_grating, out_grating)
+        self.port['a0'] = self.dc.port['a0']
+        self.port['b0'] = self.dc.port['b0']
+        self.reference_patterns.append(self.dc)
+        self.wg_path = self.dc.lower_path

@@ -1,7 +1,6 @@
 sudo: false
 language: python
 python:
-  - 3.7
   - 3.8
   - 3.9
 
@@ -39,6 +38,5 @@ deploy:
     branch: master
     tags: true
     python:
-      - 3.7
       - 3.8
       - 3.9
