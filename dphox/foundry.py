@@ -193,7 +193,7 @@ class Foundry:
 
 
 def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_device: Optional["Scene"] = None,
-              exclude_layer: Optional[List[CommonLayer]] = None) -> Scene:
+              exclude_layer: Optional[List[CommonLayer]] = None) -> "Scene":
     """Fabricate a device based on a layer-to-geometry dict, :code:`Foundry`, and initial device (type :code:`Scene`).
 
     This method is fairly rudimentary and will not implement things like conformal deposition. At the moment,
@@ -301,7 +301,7 @@ FABLESS = Foundry(
 )
 
 
-def _shapely_to_mesh_from_step(geom: MultiPolygon, meshes: List[trimesh.Trimesh], step: ProcessStep):
+def _shapely_to_mesh_from_step(geom: MultiPolygon, meshes: List["trimesh.Trimesh"], step: ProcessStep):
     for poly in geom:
         meshes.append(extrude_polygon(poly, height=step.thickness))
     mesh = trimesh.util.concatenate(meshes)
