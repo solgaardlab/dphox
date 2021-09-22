@@ -11,4 +11,3 @@ dependencies:
   - xarray
   - matplotlib
   - myst-parser
-  - autodoc-pydantic
