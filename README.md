@@ -12,7 +12,9 @@ The `dphox` module is a Python 3-based design tool for automating photonic devic
 **Note**: This is a work in progress. Expect features in the code to be unstable until
 version `0.1.0`. Note the low test coverage, which will be improved in coming weeks.
 
-![Demo](https://user-images.githubusercontent.com/7623867/134393668-d65ebbed-ca79-4e4f-8d21-ea9ee80a158f.mp4)
+
+https://user-images.githubusercontent.com/7623867/134403597-b7c0dd8f-81d0-4b7b-9da4-34b362442486.mp4
+
 
 ## Installation
 
