@@ -18,7 +18,7 @@ before_install: &before_install
   - source activate test-environment
   - conda install numpy matplotlib
   - conda install -c anaconda xarray
-  - pip install pydantic gdspy trimesh
+  - pip install pydantic gdspy trimesh klamath
   - conda install shapely descartes
 
 install:
