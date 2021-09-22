@@ -192,7 +192,7 @@ class Foundry:
                 return step.mat.color
 
 
-def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_device: Optional[Scene] = None,
+def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_device: Optional["Scene"] = None,
               exclude_layer: Optional[List[CommonLayer]] = None) -> Scene:
     """Fabricate a device based on a layer-to-geometry dict, :code:`Foundry`, and initial device (type :code:`Scene`).
 
