@@ -3381,7 +3381,7 @@ a .fa, a .wy-menu-vertical li span.toctree-expand, .wy-menu-vertical li a span.t
 }
 
 .wy-alert.wy-alert-neutral a, .rst-content .wy-alert-neutral.note a, .rst-content .wy-alert-neutral.attention a, .rst-content .wy-alert-neutral.caution a, .rst-content .wy-alert-neutral.danger a, .rst-content .wy-alert-neutral.error a, .rst-content .wy-alert-neutral.hint a, .rst-content .wy-alert-neutral.important a, .rst-content .wy-alert-neutral.tip a, .rst-content .wy-alert-neutral.warning a, .rst-content .wy-alert-neutral.seealso a, .rst-content .wy-alert-neutral.admonition-todo a, .rst-content .wy-alert-neutral.admonition a {
-    color: #020090
+    color: #009000
 }
 
 .wy-alert p:last-child, .rst-content .note p:last-child, .rst-content .attention p:last-child, .rst-content .caution p:last-child, .rst-content .danger p:last-child, .rst-content .error p:last-child, .rst-content .hint p:last-child, .rst-content .important p:last-child, .rst-content .tip p:last-child, .rst-content .warning p:last-child, .rst-content .seealso p:last-child, .rst-content .admonition-todo p:last-child, .rst-content .admonition p:last-child {
@@ -3418,7 +3418,7 @@ a .fa, a .wy-menu-vertical li span.toctree-expand, .wy-menu-vertical li a span.t
 }
 
 .wy-tray-container li.wy-tray-item-info {
-    background: #020090
+    background: #009000
 }
 
 .wy-tray-container li.wy-tray-item-warning {
@@ -3557,7 +3557,7 @@ button[disabled] {
 }
 
 .btn-info {
-    background-color: #020090 !important
+    background-color: #009000 !important
 }
 
 .btn-info:hover {
@@ -3612,7 +3612,7 @@ button[disabled] {
 
 .btn-link {
     background-color: transparent !important;
-    color: #020090;
+    color: #009000;
     box-shadow: none;
     border-color: transparent !important
 }
@@ -3685,7 +3685,7 @@ button[disabled] {
 }
 
 .wy-dropdown-menu > dd > a:hover {
-    background: #020090;
+    background: #009000;
     color: #fff
 }
 
@@ -3734,7 +3734,7 @@ button[disabled] {
 }
 
 .wy-dropdown.wy-dropdown-bubble .wy-dropdown-menu a:hover {
-    background: #020090;
+    background: #009000;
     color: #fff
 }
 
@@ -4224,7 +4224,7 @@ input[type="radio"][disabled], input[type="checkbox"][disabled] {
 }
 
 .wy-inline-validate.wy-inline-validate-info .wy-input-context {
-    color: #020090
+    color: #009000
 }
 
 .rotate-90 {
@@ -4474,7 +4474,7 @@ input[type="radio"][disabled], input[type="checkbox"][disabled] {
 }
 
 a {
-    color: #020090;
+    color: #009000;
     text-decoration: none;
     cursor: pointer
 }
@@ -4538,7 +4538,7 @@ a.wy-text-warning:hover {
 }
 
 .wy-text-info {
-    color: #020090 !important
+    color: #009000 !important
 }
 
 a.wy-text-info:hover {
@@ -4623,7 +4623,7 @@ code, .rst-content tt, .rst-content code {
     font-size: 75%;
     padding: 0 5px;
     font-family: "Roboto Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", Courier, monospace;
-    color: #020090;
+    color: #009000;
     overflow-x: auto
 }
 
@@ -4976,7 +4976,7 @@ code.code-large, .rst-content tt.code-large {
 }
 
 .wy-menu-vertical a:active {
-    background-color: #020090;
+    background-color: #009000;
     cursor: pointer;
     color: #fff
 }
@@ -5011,7 +5011,7 @@ code.code-large, .rst-content tt.code-large {
     margin: auto auto .809em auto;
     height: 45px;
     width: 45px;
-    background-color: #020090;
+    background-color: #009000;
     padding: 5px;
     border-radius: 100%
 }
@@ -5051,7 +5051,7 @@ code.code-large, .rst-content tt.code-large {
 }
 
 .wy-nav .wy-menu-vertical header {
-    color: #020090
+    color: #009000
 }
 
 .wy-nav .wy-menu-vertical a {
@@ -5059,7 +5059,7 @@ code.code-large, .rst-content tt.code-large {
 }
 
 .wy-nav .wy-menu-vertical a:hover {
-    background-color: #020090;
+    background-color: #009000;
     color: #fff
 }
 
@@ -5126,7 +5126,7 @@ code.code-large, .rst-content tt.code-large {
 
 .wy-nav-top {
     display: none;
-    background: #020090;
+    background: #009000;
     color: #fff;
     padding: .4045em .809em;
     position: relative;
@@ -5154,7 +5154,7 @@ code.code-large, .rst-content tt.code-large {
     margin-right: 12px;
     height: 45px;
     width: 45px;
-    background-color: #020090;
+    background-color: #009000;
     padding: 5px;
     border-radius: 100%
 }
@@ -5343,7 +5343,7 @@ footer span.commit code, footer span.commit .rst-content tt, .rst-content footer
 }
 
 .rst-versions a {
-    color: #020090;
+    color: #009000;
     text-decoration: none
 }
 
@@ -5808,7 +5808,7 @@ footer span.commit code, footer span.commit .rst-content tt, .rst-content footer
 }
 
 .rst-content a tt, .rst-content a tt, .rst-content a code {
-    color: #020090
+    color: #009000
 }
 
 .rst-content dl {
@@ -5839,7 +5839,7 @@ footer span.commit code, footer span.commit .rst-content tt, .rst-content footer
     font-size: 90%;
     line-height: normal;
     background: #ffeeee;
-    color: #020090;
+    color: #009000;
     border-top: solid 3px #cc0000;
     padding: 6px;
     position: relative

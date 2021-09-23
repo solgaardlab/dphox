@@ -72,7 +72,7 @@ html_theme_options = {
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
-html_logo = "https://user-images.githubusercontent.com/7623867/131265616-4e438679-f3b6-4a9f-b401-130a41cb8ab7.png"
+html_logo = "https://user-images.githubusercontent.com/7623867/134089718-b4de5f82-adfb-4b20-9b98-b230748a73f9.png"
 
 # Pydantic model settings
 autodoc_pydantic_model_show_json = True
