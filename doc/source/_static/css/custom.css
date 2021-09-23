@@ -331,6 +331,19 @@ big, small {
     }
 }
 
+html.writer-html4 .rst-content dl:not(.docutils)>dt,
+html.writer-html5 .rst-content dl[class]:not(.option-list):not(.field-list):not(.footnote):not(.glossary):not(.simple)>dt {
+ display:table;
+ margin:6px 0;
+ font-size:90%;
+ line-height:normal;
+ background: #eef6ee;
+ color: #016206;
+ border-top:3px solid #86de90;
+ padding:6px;
+ position:relative
+}
+
 .fa:before, .wy-menu-vertical li span.toctree-expand:before, .wy-menu-vertical li.on a span.toctree-expand:before, .wy-menu-vertical li.current > a span.toctree-expand:before, .rst-content .admonition-title:before, .rst-content h1 .headerlink:before, .rst-content h2 .headerlink:before, .rst-content h3 .headerlink:before, .rst-content h4 .headerlink:before, .rst-content h5 .headerlink:before, .rst-content h6 .headerlink:before, .rst-content dl dt .headerlink:before, .rst-content p.caption .headerlink:before, .rst-content table > caption .headerlink:before, .rst-content tt.download span:first-child:before, .rst-content code.download span:first-child:before, .icon:before, .wy-dropdown .caret:before, .wy-inline-validate.wy-inline-validate-success .wy-input-context:before, .wy-inline-validate.wy-inline-validate-danger .wy-input-context:before, .wy-inline-validate.wy-inline-validate-warning .wy-input-context:before, .wy-inline-validate.wy-inline-validate-info .wy-input-context:before, .wy-alert, .rst-content .note, .rst-content .attention, .rst-content .caution, .rst-content .danger, .rst-content .error, .rst-content .hint, .rst-content .important, .rst-content .tip, .rst-content .warning, .rst-content .seealso, .rst-content .admonition-todo, .rst-content .admonition, .btn, input[type="text"], input[type="password"], input[type="email"], input[type="url"], input[type="date"], input[type="month"], input[type="time"], input[type="datetime"], input[type="datetime-local"], input[type="week"], input[type="number"], input[type="search"], input[type="tel"], input[type="color"], select, textarea, .wy-menu-vertical li.on a, .wy-menu-vertical li.current > a, .wy-side-nav-search > a, .wy-side-nav-search .wy-dropdown > a, .wy-nav-top a {
     -webkit-font-smoothing: antialiased
 }
@@ -3619,13 +3632,13 @@ button[disabled] {
 
 .btn-link:hover {
     background-color: transparent !important;
-    color: #409ad5 !important;
+    color: #03d575 !important;
     box-shadow: none
 }
 
 .btn-link:active {
     background-color: transparent !important;
-    color: #409ad5 !important;
+    color: #03d575 !important;
     box-shadow: none
 }
 
@@ -4480,11 +4493,11 @@ a {
 }
 
 a:hover {
-    color: #0091d1
+    color: #009000
 }
 
 a:visited {
-    color: #000048
+    color: #01480a
 }
 
 html {
@@ -4542,7 +4555,7 @@ a.wy-text-warning:hover {
 }
 
 a.wy-text-info:hover {
-    color: #409ad5 !important
+    color: #36d278 !important
 }
 
 .wy-text-success {
@@ -5795,7 +5808,7 @@ footer span.commit code, footer span.commit .rst-content tt, .rst-content footer
 }
 
 .rst-content tt.literal, .rst-content tt.literal, .rst-content code.literal {
-    color: #E74C3C
+    color: #01ad08
 }
 
 .rst-content tt.xref, a .rst-content tt, .rst-content tt.xref, .rst-content code.xref, a .rst-content tt, a .rst-content code {
