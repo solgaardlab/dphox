@@ -1,4 +1,6 @@
-![dphox](https://user-images.githubusercontent.com/7623867/134089718-b4de5f82-adfb-4b20-9b98-b230748a73f9.png)
+<p align="center">
+<img src="https://user-images.githubusercontent.com/7623867/134089718-b4de5f82-adfb-4b20-9b98-b230748a73f9.png" height=50% alt="dphox">
+</p>
 
 # 
 ![Build Status](https://img.shields.io/travis/solgaardlab/dphox/main.svg?style=for-the-badge)
