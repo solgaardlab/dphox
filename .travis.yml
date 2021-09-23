@@ -1,41 +1,35 @@
 sudo: false
 language: python
 python:
-  - 3.8
-  - 3.9
-
-before_install: &before_install
-  - sudo apt-get update
-  - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
-  - bash miniconda.sh -b -p $HOME/miniconda
-  - export PATH="$HOME/miniconda/bin:$PATH"
-  - hash -r
-  - conda config --set always_yes yes --set changeps1 no
-  - conda update -q conda
-  # Useful for debugging any issues with conda
-  - conda info -a
-  - conda create -q -n test-environment
-  - source activate test-environment
-  - conda install numpy matplotlib
-  - conda install -c anaconda xarray
-  - pip install pydantic gdspy trimesh klamath
-  - conda install shapely descartes
-
-install:
-  pip install codecov && pip install pytest
-
-script:
-  coverage run -m pytest tests
+- 3.8
+- 3.9
+before_install:
+- sudo apt-get update
+- wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
+- bash miniconda.sh -b -p $HOME/miniconda
+- export PATH="$HOME/miniconda/bin:$PATH"
+- hash -r
+- conda config --set always_yes yes --set changeps1 no
+- conda update -q conda
+- conda info -a
+- conda create -q -n test-environment
+- source activate test-environment
+- conda install numpy matplotlib
+- conda install -c anaconda xarray
+- pip install pydantic gdspy trimesh klamath
+- conda install shapely descartes
+install: pip install codecov && pip install pytest
+script: coverage run -m pytest tests
 after_success:
-  - codecov
-
+- codecov
 deploy:
   provider: pypi
-  user: '__token__'
-  password: 'pypi-AgEIcHlwaS5vcmcCJDQxNzRmOWYxLThkY2ItNGFlNC04YjAwLTQ0YjQ3NzIxMWU0YwACJXsicGVybWlzc2lvbnMiOiAidXNlciIsICJ2ZXJzaW9uIjogMX0AAAYgFmQ2Qvr1GtGvdpuMPxsndt-7VjgSpTmXt_f4_0W_Dcc'
+  user: __token__
+  password:
+    secure: oH+hJm1purtGTJWT/JL/9X/CBWaprRZh8/gBpfDIFeh8i+o9msnPsxfz1pKBD2xfnZTbW5CG0vwwKcwbQlEF1Aof8Cn4pBzHispe6GIluc993nf+FaPUCoHnQXnSusrUmDslzj5kIAmtxQWeV5J/h2+7rDBvR+4TWVciTCxC/XrWJaj7CbNmoWrREmmDrGzzfoSVQgj9P5kNx8ZlB0RKE61PjkC/sPqIt3nU+UEIsEB8X/iXheFpjUqiUeOEWZyJm7wxknvXM5NaLPSBC04uljOf5kvO22l0N0WMN4ELgoDtEm9ORB1Y2PtJ9K6RKXfMgsxN6NSyvZGdXM1fupHSs+swFsNUJSPq3EqDUZ/rj/Q/QUFq15BSsOcksbRH676wgtgwNB39+I3Jh9Aw4qe3ks2o/1eUOnolbEegqAUwzP/kYObO2K1ZS9x+BkwwFCYhAwHUPKOa7+nLz1aN4Kcmu3pHBzRNraqpMLv0N7S2inSK7Tkrx5+FiThh0OaUymuk0am14cnr5HxMlUU4BcfOcdCT2/duHswFxCwS3cq6caIfr7tfHv18Dkf59COzGMgbh4vc7BQIR+VR/We32f7wS+aWhc0LnJmaZ99udMAz5+tjaxDUxIgnwudf8un5GqywYMMS9GLMMwtPizYAzzCzZ54X3Xmz7h2UD2ycUZdaET0=
   on:
     branch: main
     tags: true
     python:
-      - 3.8
-      - 3.9
+    - 3.8
+    - 3.9
