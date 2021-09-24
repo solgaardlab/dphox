@@ -11,9 +11,9 @@ mzi = MZI(dc, top_internal=[ps], bottom_internal=[ps.copy], top_external=[ps.cop
 
 # mesh = Mesh(mzi, 6)
 
-def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_sep=5, via_extent=(0.5, 0.5),
+def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_height=12, via_extent=(0.5, 0.5),
                     flexure_box_w=30, nominal_gap=0.201, waveguide_w=0.5,
-                    nanofin_w=0.15, taper_l=10, pull_in=False, trace_w=1):
+                    nanofin_w=0.2, taper_l=10, pull_in=False, trace_w=1):
     psw = Waveguide(
         extent=(waveguide_w + 2 * nominal_gap + 2 * nanofin_w, ps_l),
         subtract_waveguide=Waveguide(
@@ -39,12 +39,12 @@ def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_sep=5, via_extent=(0.5, 
 
     gaw = GndAnchorWaveguide(
         rib_waveguide=WaveguideDevice(
-            ridge_waveguide=Waveguide((1.2, anchor_length),
-                                      taper=TaperSpec.cubic(1.5, 1),
+            ridge_waveguide=Waveguide((waveguide_w + 2 * nominal_gap + 2 * nanofin_w + 0.1, anchor_length),
+                                      taper=TaperSpec.cubic(1.4, 1),
                                       symmetric=False,
                                       subtract_waveguide=Waveguide(
-                                          extent=(0.9, anchor_length),
-                                          taper=TaperSpec.cubic(1.5, 1),
+                                          extent=(waveguide_w + 2 * nominal_gap, anchor_length),
+                                          taper=TaperSpec.cubic(1.4, 1),
                                           symmetric=False,
                                           subtract_waveguide=Waveguide(
                                               (0.5, anchor_length),
@@ -52,16 +52,14 @@ def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_sep=5, via_extent=(0.5, 
             slab_waveguide=Waveguide((0.5, anchor_length),
                                      TaperSpec.cubic(1.5, 1))),
         gnd_pad=Box((1, 3)),
-        gnd_connector=Box((0.1, 2)),
+        gnd_connector=Box((0.5, 2)),
         via=via_high,
-        offset_into_rib=0.1,
-        dope_expand_tuple=(0.1, 0.2)
+        offset_into_rib=0.1
     )
 
     pina = PullInNemsActuator(
         pos_pad=Box((ps_l, 2)),
-        connector=Box((0.1, 0.3)),
-        dope_expand_tuple=(0.1, 0.2),
+        connector=Box((0.3, 0.3)),
         via=via_low
     )
 
@@ -73,12 +71,11 @@ def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_sep=5, via_extent=(0.5, 
                             stripe_w=0.5,
                             pitch=0.5,
                             spring_extent=(ps_l + anchor_length * 2, 0.2)),
-        dope_expand_tuple=(0.1, 0.2),
         via=via_low
     )
 
     clr = Clearout(
-        clearout_etch=Box((ps_l, clearout_sep * 2)),
+        clearout_etch=Box((ps_l, clearout_height)),
         clearout_etch_stop_grow=0.5
     )
 

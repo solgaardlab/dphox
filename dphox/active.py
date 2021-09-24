@@ -70,8 +70,8 @@ class PullOutNemsActuator(Device):
     pad_sep: float
     flexure: MEMSFlexure
     connector: Box
-    dope_expand_tuple: Tuple[float, float]
     via: Via
+    dope_expand_tuple: Tuple[float, float] = (0, 0)
     ridge: str = CommonLayer.RIDGE_SI
     actuator_dope: str = CommonLayer.P_SI
     pos_pad_dope: str = CommonLayer.PPP_SI
@@ -115,7 +115,7 @@ class PullInNemsActuator(Device):
     pos_pad: Box
     connector: Box
     via: Via
-    dope_expand_tuple: Tuple[float, float]
+    dope_expand_tuple: Tuple[float, float] = (0, 0)
     ridge: str = CommonLayer.RIDGE_SI
     dopes: str = CommonLayer.PPP_SI
     name: str = "pull_in_actuator"
@@ -156,7 +156,7 @@ class GndAnchorWaveguide(Device):
     gnd_connector: Box
     via: Via
     offset_into_rib: float
-    dope_expand_tuple: Tuple[float, float]
+    dope_expand_tuple: Tuple[float, float] = (0, 0)
     ridge: str = CommonLayer.RIDGE_SI
     gnd_pad_dope: str = CommonLayer.PPP_SI
     name: str = "gnd_anchor_waveguide"

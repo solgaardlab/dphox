@@ -885,7 +885,7 @@ class Box(Pattern):
         return Pattern(*patterns)
 
     def flexure(self, spring_extent: Float2, connector_extent: Float2 = None,
-                stripe_w: float = 1, symmetric: bool = True, spring_center: bool = True) -> Pattern:
+                stripe_w: float = 1, symmetric: bool = True, spring_center: bool = False) -> Pattern:
         """A crab-leg flexure (useful for MEMS actuation).
 
         Args:
@@ -992,7 +992,7 @@ class MEMSFlexure(Pattern):
     pitch: Union[float, Float2]
     spring_extent: Float2
     connector_extent: Float2 = None
-    spring_center: bool = True
+    spring_center: bool = False
 
     def __post_init_post_parse__(self):
         super(MEMSFlexure, self).__init__(Box(self.extent).flexure(self.spring_extent, self.connector_extent,
