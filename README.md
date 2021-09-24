@@ -26,6 +26,11 @@ You may use `pip` to install `dphox` the usual way:
 pip install dphox
 ```
 
+To install all of the dependencies for visualizations as in the above demo, instead run:
+```
+pip install dphox[all]
+```
+
 ### Development
 
 When developing, install in your python environment using:
