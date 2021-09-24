@@ -1,5 +1,5 @@
 
-# Dphox 
+# Introduction
 ![Build Status](https://img.shields.io/travis/solgaardlab/dphox/main.svg?style=for-the-badge)
 ![Docs](https://readthedocs.org/projects/dphox/badge/?style=for-the-badge)
 ![PiPy](https://img.shields.io/pypi/v/dphox.svg?style=for-the-badge)

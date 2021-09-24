@@ -7,11 +7,12 @@ from .pattern import Box
 ps = ThermalPS(Waveguide((1, 10)), ps_w=2, via=Via((0.4, 0.4), 0.1))
 dc = DC(waveguide_w=1, interaction_l=2, bend_l=5, interport_distance=10, gap_w=0.5)
 mzi = MZI(dc, top_internal=[ps], bottom_internal=[ps.copy], top_external=[ps.copy], bottom_external=[ps.copy])
+
+
 # mesh = Mesh(mzi, 6)
 
-
-def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_sep=5,
-                    flexure_box_w=30, nominal_gap=0.2, waveguide_w=0.5,
+def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_sep=5, via_extent=(0.5, 0.5),
+                    flexure_box_w=30, nominal_gap=0.201, waveguide_w=0.5,
                     nanofin_w=0.15, taper_l=10, pull_in=False, trace_w=1):
     psw = Waveguide(
         extent=(waveguide_w + 2 * nominal_gap + 2 * nanofin_w, ps_l),
@@ -25,30 +26,31 @@ def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_sep=5,
         )
     )
 
-    via_low = Via(via_extent=(0.5, 0.5),
+    via_low = Via(via_extent=via_extent,
                   boundary_grow=0.25,
                   metal=[CommonLayer.METAL_1],
                   via=[CommonLayer.VIA_SI_1]
                   )
-    via_high = Via(via_extent=(0.5, 0.5),
+    via_high = Via(via_extent=via_extent,
                    boundary_grow=0.25,
                    metal=[CommonLayer.METAL_1, CommonLayer.METAL_2],
                    via=[CommonLayer.VIA_SI_1, CommonLayer.VIA_1_2]
                    )
 
     gaw = GndAnchorWaveguide(
-        rib_waveguide=WaveguideDevice(ridge_waveguide=Waveguide((1.2, anchor_length),
-                                                                taper=TaperSpec.cubic(1.5, 1),
-                                                                symmetric=False,
-                                                                subtract_waveguide=Waveguide(
-                                                                    extent=(0.9, anchor_length),
-                                                                    taper=TaperSpec.cubic(1.5, 1),
-                                                                    symmetric=False,
-                                                                    subtract_waveguide=Waveguide(
-                                                                        (0.5, anchor_length),
-                                                                    ))),
-                                      slab_waveguide=Waveguide((0.5, anchor_length),
-                                                               TaperSpec.cubic(1.5, 1))),
+        rib_waveguide=WaveguideDevice(
+            ridge_waveguide=Waveguide((1.2, anchor_length),
+                                      taper=TaperSpec.cubic(1.5, 1),
+                                      symmetric=False,
+                                      subtract_waveguide=Waveguide(
+                                          extent=(0.9, anchor_length),
+                                          taper=TaperSpec.cubic(1.5, 1),
+                                          symmetric=False,
+                                          subtract_waveguide=Waveguide(
+                                              (0.5, anchor_length),
+                                          ))),
+            slab_waveguide=Waveguide((0.5, anchor_length),
+                                     TaperSpec.cubic(1.5, 1))),
         gnd_pad=Box((1, 3)),
         gnd_connector=Box((0.1, 2)),
         via=via_high,
@@ -76,7 +78,7 @@ def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_sep=5,
     )
 
     clr = Clearout(
-        clearout_etch=Box((ps_l, 11)),
+        clearout_etch=Box((ps_l, clearout_sep * 2)),
         clearout_etch_stop_grow=0.5
     )
 

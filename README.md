@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://user-images.githubusercontent.com/7623867/134089718-b4de5f82-adfb-4b20-9b98-b230748a73f9.png" height=50% alt="dphox">
+<img src="https://user-images.githubusercontent.com/7623867/134089718-b4de5f82-adfb-4b20-9b98-b230748a73f9.png" width=50% height=50% alt="dphox">
 </p>
 
 # 
@@ -8,6 +8,7 @@
 ![PiPy](https://img.shields.io/pypi/v/dphox.svg?style=for-the-badge)
 ![CodeCov](https://img.shields.io/codecov/c/github/solgaardlab/dphox/main.svg?style=for-the-badge)
 
+[Documentation](https://dphox.readthedocs.io/en/latest/)
 
 The `dphox` module is a Python 3-based design tool for automating photonic device development. 
 
