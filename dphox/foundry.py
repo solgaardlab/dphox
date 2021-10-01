@@ -246,8 +246,13 @@ def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_dev
                 # only support to dope silicon at the moment
                 if prev_mat != SILICON:
                     raise ValueError("The previous material must be crystalline silicon for dopant implantation.")
-                mesh = _shapely_to_mesh_from_step(MultiPolygon([poly.intersection(poly_si) for poly_si in prev_si_geom
-                                                                for poly in geom]), meshes, step)
+                geoms = []
+                for poly_si in prev_si_geom:
+                    for poly in geom:
+                        mat = poly.intersection(poly_si)
+                        if isinstance(mat, Polygon) or isinstance(mat, MultiPolygon):
+                            geoms.append(mat)
+                mesh = _shapely_to_mesh_from_step(MultiPolygon(geoms), meshes, step)
                 device.add_geometry(mesh.apply_translation((0, 0, dz - step.thickness)), geom_name=mesh_name)
             elif step.process_op == ProcessOp.SAC_ETCH:
                 if 'clad' not in device.geometry:
