@@ -418,7 +418,7 @@ class StraightGrating(Device):
 
     def __post_init_post_parse__(self):
         self.stripe_w = self.pitch * (1 - self.duty_cycle)
-        slab = (Box(self.extent).hstack(self.waveguide).offset(self.rib_grow), self.slab)
+        slab = (Box(self.extent).hstack(self.waveguide).buffer(self.rib_grow), self.slab)
         grating = (Box(self.extent).hstack(self.waveguide).striped(self.stripe_w, (self.pitch, 0)), self.ridge)
         super(StraightGrating, self).__init__(self.name, [slab, grating, (self.waveguide, self.ridge)])
         self.port['a0'] = self.waveguide.port['a0']
@@ -471,7 +471,7 @@ class FocusingGrating(Device):
                              f'Make sure that the pitch is not too big and grating_frac not'
                              f'too small compared to radius.')
         super(FocusingGrating, self).__init__(self.name,
-                                              [(Box(grating.size).offset(self.rib_grow).align(grating), self.slab),
+                                              [(Box(grating.size).buffer(self.rib_grow).align(grating), self.slab),
                                                (grating, self.ridge),
                                                (self.waveguide, self.ridge)])
         self.port['a0'] = self.waveguide.port['b0']

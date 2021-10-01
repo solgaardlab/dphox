@@ -85,8 +85,8 @@ class PullOutNemsActuator(Device):
             (self.connector.copy.vstack(self.flexure).halign(self.flexure.box, left=False), self.ridge)
         ]
         dopes = [
-            (pos_pad.copy.expand(self.dope_expand_tuple[0]).offset(self.dope_expand_tuple[1]), self.pos_pad_dope),
-            (self.flexure.copy.offset(dope_total_offset), self.actuator_dope),
+            (pos_pad.copy.expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.pos_pad_dope),
+            (self.flexure.copy.buffer(dope_total_offset), self.actuator_dope),
         ]
         via = self.via.copy.align(pos_pad.center)
         super(PullOutNemsActuator, self).__init__(
@@ -129,7 +129,7 @@ class PullInNemsActuator(Device):
              self.ridge)
         ]
         dopes = [
-            (self.pos_pad.copy.expand(self.dope_expand_tuple[0]).offset(self.dope_expand_tuple[1]), self.dopes)
+            (self.pos_pad.copy.expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.dopes)
         ]
         super(PullInNemsActuator, self).__init__(
             self.name, connectors + dopes + [(self.pos_pad, self.ridge)] + via.pattern_to_layer
@@ -173,10 +173,10 @@ class GndAnchorWaveguide(Device):
         ]
         vias = self.via.copy.align(gnd_pads[0]).pattern_to_layer + self.via.copy.align(gnd_pads[1]).pattern_to_layer
         dopes = [
-            (gnd_pads[0].expand(self.dope_expand_tuple[0]).offset(self.dope_expand_tuple[1]), self.gnd_pad_dope),
-            (gnd_pads[1].expand(self.dope_expand_tuple[0]).offset(self.dope_expand_tuple[1]), self.gnd_pad_dope),
-            (gnd_connectors[0].expand(self.dope_expand_tuple[0]).offset(self.dope_expand_tuple[1]), self.gnd_pad_dope),
-            (gnd_connectors[1].expand(self.dope_expand_tuple[0]).offset(self.dope_expand_tuple[1]), self.gnd_pad_dope),
+            (gnd_pads[0].expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.gnd_pad_dope),
+            (gnd_pads[1].expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.gnd_pad_dope),
+            (gnd_connectors[0].expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.gnd_pad_dope),
+            (gnd_connectors[1].expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.gnd_pad_dope),
         ]
         pattern_to_layer = [(p, self.ridge) for p in gnd_connectors + gnd_pads]
         super(GndAnchorWaveguide, self).__init__(
@@ -194,6 +194,7 @@ class GndAnchorWaveguide(Device):
             'a0': self.rib_waveguide.port['a0'],
             'b0': self.rib_waveguide.port['b0']
         }
+
 
 @fix_dataclass_init_docs
 @dataclass
@@ -215,7 +216,7 @@ class Clearout(Device):
 
     def __post_init_post_parse__(self):
         super(Clearout, self).__init__("clearout", [(self.clearout_etch, self.clearout_layer),
-                                                    (self.clearout_etch.offset(self.clearout_etch_stop_grow),
+                                                    (self.clearout_etch.buffer(self.clearout_etch_stop_grow),
                                                      self.clearout_etch_stop_layer)])
 
 
@@ -267,6 +268,7 @@ class LateralNemsPS(Device):
                                             + bottom_actuator.pattern_to_layer + clearout.pattern_to_layer
                                             + left_gnd_waveguide.pattern_to_layer
                                             + right_gnd_waveguide.pattern_to_layer)
+        self.merge_patterns()
         self.port = {
             'a0': left_gnd_waveguide.port['b0'],
             'b0': right_gnd_waveguide.port['b0']

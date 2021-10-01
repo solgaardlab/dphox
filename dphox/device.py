@@ -77,6 +77,10 @@ class Device:
         port = dict(sum([list(pattern.port.items()) for pattern, _ in self.pattern_to_layer], []))
         return pattern_dict, port
 
+    def merge_patterns(self):
+        self.pattern_to_layer = [(Pattern(self.layer_to_geoms[layer]), layer) for layer in self.layer_to_geoms]
+        return self
+
     @classmethod
     def from_pattern(cls, pattern: Pattern, name: str, layer: str):
         """A class method to convert a :code:`Pattern` into a :code:`Device`.
@@ -454,6 +458,23 @@ class Device:
         """
         name = '|'.join([m.name for m in devices]) if name is None else name
         return cls(name, sum([m.pattern_to_layer for m in devices], []))
+
+    def smooth_layer(self, distance: float, layer: str):
+        """
+
+        Args:
+            distance: Smooth the device by some distance.
+            layer: Layer to smooth
+
+        Returns:
+
+        """
+        for pattern, _layer in self.pattern_to_layer:
+            if _layer == layer:
+                pattern.smooth(distance)
+        self.layer_to_geoms, _ = self._init_multilayer()
+        return self
+
 
     @classmethod
     def from_gds(cls, filepath: str, foundry: Foundry = FABLESS) -> List["Device"]:

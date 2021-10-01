@@ -8,7 +8,7 @@ import shapely.wkt as swkt
 from descartes import PolygonPatch
 from pydantic.dataclasses import dataclass
 from shapely.affinity import rotate, scale, skew, translate
-from shapely.geometry import box, GeometryCollection, LineString, Point
+from shapely.geometry import box, GeometryCollection, LineString, Point, JOIN_STYLE, CAP_STYLE
 from shapely.ops import split, unary_union
 
 from .typing import Dict, Float2, Float3, Float4, List, MultiPolygon, Optional, Polygon, PolygonLike, Shape, Spacing, \
@@ -366,12 +366,14 @@ class Pattern:
         pattern = unary_union(self.polys)
         return pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern])
 
-    def mask(self, shape: Shape, spacing: Spacing) -> np.ndarray:
+    def mask(self, shape: Shape, spacing: Spacing, smooth_feature: float = 0) -> np.ndarray:
         """Pixelized mask used for simulating this component
 
         Args:
             shape: Shape of the mask
             spacing: The grid spacing resolution to use for the pixelated mask
+            smooth_feature: The shapely smooth feature factor, which erodes, dilates twice, then erodes the geometry
+                by :code:`smooth_feature` units.
 
         Returns:
             An array of indicators of whether a volumetric image contains the mask
@@ -380,7 +382,15 @@ class Pattern:
         if not SHAPELYVEC_IMPORTED:
             raise NotImplementedError('shapely.vectorized is not imported, but this relies on its contains method.')
         x_, y_ = np.mgrid[0:spacing[0] * shape[0]:spacing[0], 0:spacing[1] * shape[1]:spacing[1]]
-        return contains(self.shapely, x_, y_)
+        geom = self.shapely_union()
+        if smooth_feature:
+            # erode
+            geom = geom.buffer(-smooth_feature, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.flat)
+            # dilate twice
+            geom = geom.buffer(2 * smooth_feature, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.flat)
+            # erode
+            geom = geom.buffer(-smooth_feature, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.flat)
+        return contains(geom, x_, y_)  # need to use union!
 
     @property
     def bounds(self) -> Float4:
@@ -712,9 +722,13 @@ class Pattern:
         ax.set_ylim((b[1], b[3]))
         ax.set_aspect('equal')
 
-    def offset(self, grow_d: float) -> "Pattern":
-        pattern = self.shapely_union().buffer(grow_d)
+    def buffer(self, distance: float, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.flat) -> "Pattern":
+        pattern = self.shapely_union().buffer(distance, join_style=join_style, cap_style=cap_style)
         return Pattern(pattern if isinstance(pattern, MultiPolygon) else pattern)
+
+    def smooth(self, distance: float, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.flat) -> "Pattern":
+        self.polys = self.buffer(distance, join_style=join_style, cap_style=cap_style).buffer(-distance, join_style=join_style, cap_style=cap_style).polys
+        return self
 
     def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> "nd.Cell":
         if not NAZCA_IMPORTED:
