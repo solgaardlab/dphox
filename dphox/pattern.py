@@ -385,11 +385,11 @@ class Pattern:
         geom = self.shapely_union()
         if smooth_feature:
             # erode
-            geom = geom.buffer(-smooth_feature, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.flat)
+            geom = geom.buffer(-smooth_feature, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.square)
             # dilate twice
-            geom = geom.buffer(2 * smooth_feature, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.flat)
+            geom = geom.buffer(2 * smooth_feature, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.square)
             # erode
-            geom = geom.buffer(-smooth_feature, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.flat)
+            geom = geom.buffer(-smooth_feature, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.square)
         return contains(geom, x_, y_)  # need to use union!
 
     @property
@@ -722,12 +722,17 @@ class Pattern:
         ax.set_ylim((b[1], b[3]))
         ax.set_aspect('equal')
 
-    def buffer(self, distance: float, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.flat) -> "Pattern":
+    def buffer(self, distance: float, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.square) -> "Pattern":
         pattern = self.shapely_union().buffer(distance, join_style=join_style, cap_style=cap_style)
         return Pattern(pattern if isinstance(pattern, MultiPolygon) else pattern)
 
-    def smooth(self, distance: float, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.flat) -> "Pattern":
-        self.polys = self.buffer(distance, join_style=join_style, cap_style=cap_style).buffer(-distance, join_style=join_style, cap_style=cap_style).polys
+    def smooth(self, distance: float, min_area: float = None,
+               join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.square) -> "Pattern":
+        smoothed = self.buffer(distance, join_style=join_style, cap_style=cap_style).buffer(-distance, join_style=join_style, cap_style=cap_style)
+        smoothed_exclude = Pattern(smoothed.shapely_union().union(self.shapely_union()).difference(
+            self.shapely_union()))
+        min_area = distance ** 2 / 4 if min_area is None else min_area
+        self.polys = self.polys + [p for p in smoothed_exclude.shapely if Polygon(p).area > min_area]
         return self
 
     def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> "nd.Cell":

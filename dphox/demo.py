@@ -1,4 +1,4 @@
-from .active import Clearout, GndAnchorWaveguide, LateralNemsPS, MEMSFlexure, Mesh, MZI, PullInNemsActuator, \
+from .active import Clearout, GndAnchorWaveguide, LateralNemsPS, MEMSFlexure, LocalMesh, MZI, PullInNemsActuator, \
     PullOutNemsActuator, ThermalPS, Via
 from .foundry import CommonLayer
 from .passive import DC, TaperSpec, Waveguide, WaveguideDevice
@@ -12,7 +12,7 @@ mzi = MZI(dc, top_internal=[ps], bottom_internal=[ps.copy], top_external=[ps.cop
 # mesh = Mesh(mzi, 6)
 
 def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_height=12, via_extent=(0.5, 0.5),
-                    flexure_box_w=30, nominal_gap=0.201, waveguide_w=0.5,
+                    flexure_box_w=31, nominal_gap=0.201, waveguide_w=0.5,
                     nanofin_w=0.2, taper_l=10, pull_in=False, trace_w=1):
     psw = Waveguide(
         extent=(waveguide_w + 2 * nominal_gap + 2 * nanofin_w, ps_l),
@@ -87,4 +87,4 @@ def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_height=12, via_extent=(0
         trace_w=trace_w,
         clearout_pos_sep=10,
         clearout_gnd_sep=2
-    )
+    ).smooth_layer(0.19, CommonLayer.RIDGE_SI)

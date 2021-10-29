@@ -460,13 +460,14 @@ class Device:
         return cls(name, sum([m.pattern_to_layer for m in devices], []))
 
     def smooth_layer(self, distance: float, layer: str):
-        """
+        """Smooth a layer in the device (useful for sharp corners that may appear)
 
         Args:
             distance: Smooth the device by some distance.
             layer: Layer to smooth
 
         Returns:
+            Device with smoothed layer.
 
         """
         for pattern, _layer in self.pattern_to_layer:
@@ -634,4 +635,3 @@ class Via(Device):
         self.port['s'] = Port(0, self.bounds[1], -90)
         self.port['n'] = Port(0, self.bounds[3], 90)
         self.port['c'] = Port(0, 0)
-

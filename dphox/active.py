@@ -30,8 +30,8 @@ class ThermalPS(Device):
     ps_w: float
     via: Via
     ps_l: Optional[float] = None
-    ridge: CommonLayer = CommonLayer.RIDGE_SI
-    heater: CommonLayer = CommonLayer.HEATER
+    ridge: str = CommonLayer.RIDGE_SI
+    heater: str = CommonLayer.HEATER
     name: str = "thermal_ps"
 
     def __post_init_post_parse__(self):
@@ -48,7 +48,7 @@ class ThermalPS(Device):
         self.ps = ps
         self.port['gnd'] = Port(self.bounds[0], 0, -180)
         self.port['pos'] = Port(self.bounds[1], 0)
-        self.wg_path = self.waveguide
+        self.wg_path = self.layer_to_geoms[self.ridge]
 
 
 @fix_dataclass_init_docs
@@ -314,13 +314,9 @@ class MultilayerPath(Device):
             [[(p, self.path_layer)] if isinstance(p, Pattern) else p.pattern_to_layer for p in waveguided_patterns],
             [])
         super(MultilayerPath, self).__init__(self.name, pattern_to_layer)
-        self.waveguided_patterns = waveguided_patterns
+        self.wg_path = self.layer_to_geoms[self.path_layer]
         self.port['a0'] = Port(0, 0, -180)
         self.port['b0'] = port
-
-    @property
-    def wg_path(self):
-        return Pattern(*[p.wg_path for p in self.waveguided_patterns])
 
     def append(self, element: PathComponent):
         self.sequence += element
@@ -411,8 +407,8 @@ class MZI(Device):
         self.waveguide_w = self.coupler.waveguide_w
 
     def path(self, flip: bool = False):
-        first = self.init_coupler.lower_path.reflect() if flip else self.init_coupler.lower_path
-        second = self.final_coupler.lower_path.reflect() if flip else self.final_coupler.lower_path
+        first = self.init_coupler.lower_path.copy.reflect() if flip else self.init_coupler.lower_path
+        second = self.final_coupler.lower_path.copy.reflect() if flip else self.final_coupler.lower_path
         return MultilayerPath(
             waveguide_w=self.init_coupler.waveguide_w,
             sequence=[self.bottom_input.copy, first.copy, self.bottom_arm.copy, second.copy],
@@ -422,8 +418,8 @@ class MZI(Device):
 
 @fix_dataclass_init_docs
 @dataclass
-class Mesh(Device):
-    """Default rectangular mesh, or triangular mesh if specified
+class LocalMesh(Device):
+    """A locally interacting rectangular mesh, or triangular mesh if specified.
     Note: triangular meshes can self-configure, but rectangular meshes cannot.
 
     Attributes:
@@ -458,7 +454,7 @@ class Mesh(Device):
             paths.append(MultilayerPath(self.mzi.waveguide_w, cols, self.mzi.ridge).to(ports[idx], 'a0'))
 
         pattern_to_layer = sum([path.pattern_to_layer for path in paths], [])
-        super(Mesh, self).__init__(self.name, pattern_to_layer)
+        super(LocalMesh, self).__init__(self.name, pattern_to_layer)
         self.port = {
             **{f'a{i}': Port(0, i * mzi.interport_distance, -180) for i in range(n)},
             **{f'b{i}': Port(self.size[0], i * mzi.interport_distance) for i in range(n)}
@@ -468,10 +464,8 @@ class Mesh(Device):
         # number of straight waveguide in the column
         self.num_straight = num_straight
         self.paths = paths
-        self.num_dummy_polys = (len(self.paths[0].wg_path.polys) - 6 * n_layers) / (2 * n_layers + 1)
         self.num_taps = 2 * n_layers + 1
         self.n_layers = n_layers
-        self.num_poly_per_col = self.num_dummy_polys * 2 + 6
 
     @property
     def path_array(self) -> np.ndarray:
@@ -481,12 +475,14 @@ class Mesh(Device):
             A numpy array consisting of polygons (note: NOT numbers), which works for either the
             path-matched triangular mesh or the rectangular mesh (which is inherently path matched).
         """
-        sizes = [0, self.num_dummy_polys + 2] + [self.num_dummy_polys + 3] * (2 * self.n_layers - 1) + [
-            self.num_dummy_polys + 2]
+
+        num_polys_per_row = len(self.layer_to_geoms[self.mzi.ridge]) // self.n
+        sizes = [0, 3] + [6] * (2 * self.n_layers - 1) + [3]
         slices = np.cumsum(sizes, dtype=int)
+        geoms = self.layer_to_geoms[self.mzi.ridge].geoms
         return np.array(
-            [[path.wg_path.polys[slices[s]:slices[s + 1]]
-              for s in range(len(slices) - 1)] for path in self.paths]
+            [[geoms[num_polys_per_row * i + slices[s]:num_polys_per_row * i + slices[s + 1]]
+              for s in range(len(slices) - 1)] for i in range(self.n)]
         )
 
     def phase_shifter_array(self, ps_layer: str):
