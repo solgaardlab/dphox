@@ -1,12 +1,12 @@
 #!/usr/bin/env python
-from setuptools import setup
+from setuptools import setup, find_packages
 
 project_name = "dphox"
 
 setup(
     name=project_name,
-    version="0.0.1a3-1",
-    packages=[project_name],
+    version="0.0.1a4",
+    packages=find_packages(),
     install_requires=[
         'pydantic==1.8.2',
         'numpy>=1.19',

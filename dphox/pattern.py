@@ -1020,7 +1020,7 @@ class MEMSFlexure(Pattern):
         self.reference_patterns.append(self.box)
 
 
-class AnnotatedPathOp(str, Enum):
+class PathOp(str, Enum):
     """Annotated path operation
 
     This is simply an enum for the AnnotatedPath object. This is temporary until Waveguide/Path functionality is merged.
@@ -1031,6 +1031,29 @@ class AnnotatedPathOp(str, Enum):
     sbend = 'sbend'
     dc = 'dc'
     polynomial_taper = 'polynomial_taper'
+
+
+@fix_dataclass_init_docs
+@dataclass
+class Path(Pattern):
+    current_path: Union["Path", float]
+    operation: Optional[PathOp] = None
+    kwargs: Optional[Dict[str, Union[float, List[float], TaperSpec]]] = None
+
+    def __post_init_post_parse__(self):
+        # if isinstance(self.current_path, float):
+        #     self._path = GdspyPath(self.current_path)
+        # else:
+        #     self._path = self.current_path._path
+        #     if self.operation and self.kwargs:
+        #         {
+        #             PathOp.turn: self._path.turn,
+        #             PathOp.sbend: self._path.sbend,
+        #             PathOp.dc: self._path.dc,
+        #             PathOp.polynomial_taper: self._path.polynomial_taper,
+        #             PathOp.segment: self._path.segment
+        #         }[self.operation](**self.kwargs)
+        super(Path, self).__init__(self._path)
 
 
 @fix_dataclass_init_docs
@@ -1048,7 +1071,7 @@ class AnnotatedPath(Pattern):
     """
 
     current_path: Union["AnnotatedPath", float]
-    operation: Optional[AnnotatedPathOp] = None
+    operation: Optional[PathOp] = None
     kwargs: Optional[Dict[str, Union[float, List[float], TaperSpec]]] = None
 
     def __post_init_post_parse__(self):
@@ -1058,22 +1081,22 @@ class AnnotatedPath(Pattern):
             self._path = self.current_path._path
             if self.operation and self.kwargs:
                 {
-                    AnnotatedPathOp.turn: self._path.turn,
-                    AnnotatedPathOp.sbend: self._path.sbend,
-                    AnnotatedPathOp.dc: self._path.dc,
-                    AnnotatedPathOp.polynomial_taper: self._path.polynomial_taper,
-                    AnnotatedPathOp.segment: self._path.segment
+                    PathOp.turn: self._path.turn,
+                    PathOp.sbend: self._path.sbend,
+                    PathOp.dc: self._path.dc,
+                    PathOp.polynomial_taper: self._path.polynomial_taper,
+                    PathOp.segment: self._path.segment
                 }[self.operation](**self.kwargs)
         super(AnnotatedPath, self).__init__(self._path)
 
     def segment(self, **kwargs):
-        return AnnotatedPath(self, AnnotatedPathOp.segment, kwargs)
+        return AnnotatedPath(self, PathOp.segment, kwargs)
 
     def turn(self, **kwargs):
-        return AnnotatedPath(self, AnnotatedPathOp.turn, kwargs)
+        return AnnotatedPath(self, PathOp.turn, kwargs)
 
     def sbend(self, **kwargs):
-        return AnnotatedPath(self, AnnotatedPathOp.sbend, kwargs)
+        return AnnotatedPath(self, PathOp.sbend, kwargs)
 
     def dc(self, bend_extent: Union[Float2, Float3], interaction_l: float, end_l: float = 0,
            inverted: bool = False, use_radius: bool = False):
@@ -1100,10 +1123,10 @@ class AnnotatedPath(Pattern):
             'inverted': inverted,
             'use_radius': use_radius
         }
-        return AnnotatedPath(self, AnnotatedPathOp.dc, kwargs)
+        return AnnotatedPath(self, PathOp.dc, kwargs)
 
     def polynomial_taper(self, taper_spec: TaperSpec):
-        return AnnotatedPath(self, AnnotatedPathOp.polynomial_taper, {'taper_spec': taper_spec})
+        return AnnotatedPath(self, PathOp.polynomial_taper, {'taper_spec': taper_spec})
 
 
 AnnotatedPath.__pydantic_model__.update_forward_refs()
