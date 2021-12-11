@@ -16,7 +16,8 @@ from shapely.ops import unary_union
 
 from .foundry import CommonLayer, FABLESS, fabricate, Foundry
 from .pattern import Box, Pattern, Port
-from .typing import Dict, Float2, Float4, Int2, List, Optional, Tuple, Union
+from .transform import GDSTransform
+from .typing import Dict, Float2, Float3, Float4, Int2, List, Optional, Tuple, Union
 from .utils import fix_dataclass_init_docs, poly_points, PORT_LABEL_LAYER, PORT_LAYER, split_holes
 
 try:
@@ -37,14 +38,13 @@ except ImportError:
 try:
     HOLOVIEWS_IMPORTED = True
     import holoviews as hv
-    from holoviews.streams import Pipe
     from holoviews import opts
     import panel as pn
-    from bokeh.models import Range1d, LinearAxis
-    from bokeh.models.renderers import GlyphRenderer
-    from bokeh.plotting.figure import Figure
 except ImportError:
     HOLOVIEWS_IMPORTED = False
+
+
+GDSTransformOrTuple = Union[GDSTransform, Tuple, np.ndarray]
 
 
 class Device:
@@ -60,25 +60,29 @@ class Device:
             any previously defined :code:`Device`.
         pattern_to_layer: A list of tuples, each consisting of a :code:`Pattern` or :code:`PolygonLike` followed by
             a layer label (integer or string).
+        transform: The transforms
+        children: The child devices in the hierarchy, which should be packaged along with all the relevant
+        transforms.
     """
 
-    def __init__(self, name: str, pattern_to_layer: List[Tuple[Pattern, Union[int, str]]] = None):
+    def __init__(self, name: str, pattern_to_layer: List[Tuple[Pattern, Union[int, str]]] = None,
+                 transform: Optional[GDSTransformOrTuple] = None, children: Optional[List["Device"]] = None):
         self.name = name
         self.pattern_to_layer = [] if pattern_to_layer is None else pattern_to_layer
-        self.pattern_to_layer = [(Pattern(comp), layer) for comp, layer in self.pattern_to_layer]
-        self.layer_to_geoms, self.port = self._init_multilayer()
+        self.layer_to_polys, self.port = self._init_multilayer()
+        self.children = [] if children is None else children
+        self.transform, self.gds_transforms = GDSTransform.from_array(transform)
 
-    def _init_multilayer(self) -> Tuple[Dict[Union[int, str], MultiPolygon], Dict[str, Port]]:
+    def _init_multilayer(self) -> Tuple[Dict[Union[int, str], List[np.ndarray]], Dict[str, Port]]:
         layer_to_polys = defaultdict(list)
-        for component, layer in self.pattern_to_layer:
-            layer_to_polys[layer].extend(component.polys)
-        pattern_dict = {layer: MultiPolygon(polys) for layer, polys in layer_to_polys.items()}
+        for pattern, layer in self.pattern_to_layer:
+            layer_to_polys[layer].extend(pattern.polygons)
         # TODO: temporary way to assign ports
         port = dict(sum([list(pattern.port.items()) for pattern, _ in self.pattern_to_layer], []))
-        return pattern_dict, port
+        return layer_to_polys, port
 
     def merge_patterns(self):
-        self.pattern_to_layer = [(Pattern(self.layer_to_geoms[layer]), layer) for layer in self.layer_to_geoms]
+        self.pattern_to_layer = [(Pattern(*self.layer_to_polys[layer]), layer) for layer in self.layer_to_polys]
         return self
 
     @classmethod
@@ -110,8 +114,6 @@ class Device:
             The :code:`Device` with the :code:`nazca` cell.
 
         """
-        # a glimpse into cell_iter()
-        # code from
         multilayers = defaultdict(list)
         for named_tuple in nd.cell_iter(cell, flat=True):
             if named_tuple.cell_start:
@@ -121,8 +123,7 @@ class Device:
                         continue
                     # fixing point definitions from mask to 1nm precision,
                     # kinda hacky but is physical and prevents false polygons
-                    points = np.around(points, decimals=3)
-                    multilayers[polygon.layer].append(Pattern(Polygon(points)))
+                    multilayers[polygon.layer].append(Pattern(Polygon(np.around(points, decimals=3))))
         return cls(cell.name, [(Pattern(*pattern_list), layer) for layer, pattern_list in multilayers.items()])
 
     @property
@@ -211,7 +212,7 @@ class Device:
         """
         for pattern, _ in self.pattern_to_layer:
             pattern.translate(dx, dy)
-        self.layer_to_geoms, _ = self._init_multilayer()
+        self.layer_to_polys, _ = self._init_multilayer()
         for name, port in self.port.items():
             self.port[name] = Port(port.x + dx, port.y + dy, port.a, port.w)
         return self
@@ -227,12 +228,13 @@ class Device:
             The rotated device.
 
         """
-        for pattern, _ in self.pattern_to_layer:
-            pattern.rotate(angle, origin)
-        self.layer_to_geoms, _ = self._init_multilayer()
-        port_to_point = {name: rotate(Point(*port.xy), angle, origin) for name, port in self.port.items()}
-        self.port = {name: Port(float(point.x), float(point.y), np.mod(self.port[name].a + angle, 360))
-                     for name, point in port_to_point.items()}
+        if angle % 360 != 0:  # to save time, only rotate if the angle is nonzero
+            for pattern, _ in self.pattern_to_layer:
+                pattern.rotate(angle, origin)
+            self.layer_to_polys, _ = self._init_multilayer()
+            port_to_point = {name: rotate(Point(*port.xy), angle, origin) for name, port in self.port.items()}
+            self.port = {name: Port(float(point.x), float(point.y), np.mod(self.port[name].a + angle, 360))
+                         for name, point in port_to_point.items()}
         return self
 
     def reflect(self, center: Float2 = (0, 0), horiz: bool = False) -> "Device":
@@ -248,10 +250,10 @@ class Device:
         """
         for pattern, _ in self.pattern_to_layer:
             pattern.reflect(center, horiz)
-        self.layer_to_geoms, _ = self._init_multilayer()
+        self.layer_to_polys, _ = self._init_multilayer()
         return self
 
-    def to(self, port: Port, from_port: Optional[str] = None):
+    def put(self, port: Port, from_port: Optional[str] = None):
         """Lego-connect this device's :code:`from_port` (origin if not specified) to another device's port.
 
         Args:
@@ -292,9 +294,9 @@ class Device:
         """
         cell = gy.Cell(self.name)
         for pattern, layer in self.pattern_to_layer:
-            for poly in pattern.polys:
+            for poly in self.polygons:
                 cell.add(
-                    gy.Polygon(poly_points(poly),
+                    gy.Polygon(poly,
                                layer=foundry.layer_to_gds_label[layer][0],
                                datatype=foundry.layer_to_gds_label[layer][1])
                 )
@@ -314,8 +316,8 @@ class Device:
             raise ImportError('Nazca not installed! Please install nazca prior to running nazca_cell().')
         with nd.Cell(self.name) as cell:
             for pattern, layer in self.pattern_to_layer:
-                for poly in pattern.polys:
-                    nd.Polygon(points=list(np.around(poly_points(poly), decimals=3)),
+                for poly in pattern.polygons:
+                    nd.Polygon(points=poly,
                                layer=foundry.layer_to_gds_label[layer]).put()
             for name, port in self.port.items():
                 nd.Pin(name).put(*port.xya)
@@ -333,7 +335,7 @@ class Device:
 
         """
         self.pattern_to_layer.append((pattern, layer))
-        self.layer_to_geoms, self.port = self._init_multilayer()
+        self.layer_to_polys, self.port = self._init_multilayer()
 
     def plot(self, ax: Optional = None, foundry: Foundry = FABLESS,
              exclude_layer: Optional[List[CommonLayer]] = None, alpha: float = 0.5):
@@ -349,13 +351,13 @@ class Device:
 
         """
         ax = plt.gca() if ax is None else ax
-        for layer, pattern in self.layer_to_geoms.items():
+        for layer, pattern in self.layer_to_polys.items():
             if layer in exclude_layer:
                 continue
             color = foundry.color(layer)
             if color is None:
                 raise ValueError(f"The layer {layer} does not exist in the foundry stack, so could not find a color.")
-            ax.add_patch(PolygonPatch(unary_union(pattern.geoms),  # union avoids some weird plotting with alpha < 1
+            ax.add_patch(PolygonPatch(unary_union(MultiPolygon(pattern)),  # union avoids some weird plotting with alpha < 1
                                       facecolor=color, edgecolor='none', alpha=alpha))
             for name, port in self.port.items():
                 port_xy = port.xy - port.normal(port.w)
@@ -385,34 +387,15 @@ class Device:
             raise ImportError('Holoviews, Panel, and/or Bokeh not yet installed. Check your installation...')
         plots_to_overlay = []
         exclude_layer = [] if exclude_layer is None else exclude_layer
-        b = self.bounds
-        for layer, pattern in self.layer_to_geoms.items():
+        for layer, multipoly in self.layer_to_polys.items():
             if layer in exclude_layer:
                 continue
-            geom = unary_union(pattern.geoms)
-
-            def _holoviews_poly(shapely_poly):
-                x, y = poly_points(shapely_poly).T
-                holes = [[np.array(hole.coords.xy).T for hole in shapely_poly.interiors]]
-                return {'x': x, 'y': y, 'holes': holes}
-
-            polys = [_holoviews_poly(poly) for poly in geom] if isinstance(geom, MultiPolygon) else [
-                _holoviews_poly(geom)]
             color = foundry.color(layer)
             if color is None:
                 raise ValueError(f"The layer {layer} does not exist in the foundry stack, so could not find a color.")
-            plots_to_overlay.append(
-                hv.Polygons(polys, name=layer).opts(data_aspect=1, frame_height=200, fill_alpha=alpha,
-                                                    ylim=(b[1], b[3]), xlim=(b[0], b[2]),
-                                                    color=color, line_alpha=0))
+            plots_to_overlay.append(Pattern(*multipoly).hvplot(color, layer, alpha, self.bounds, plot_ports=False))
         for name, port in self.port.items():
-            x, y = port.shapely.exterior.coords.xy
-            port_xy = port.xy - port.normal(port.w)
-            plots_to_overlay.append(
-                hv.Polygons([{'x': x, 'y': y}]).opts(
-                    data_aspect=1, frame_height=200, ylim=(b[1], b[3]), xlim=(b[0], b[2]), color='red', line_alpha=0
-                ) * hv.Text(*port_xy, name)
-            )
+            plots_to_overlay.append(port.hvplot(name))
         return hv.Overlay(plots_to_overlay).opts(show_legend=True)
 
     @property
@@ -442,7 +425,7 @@ class Device:
             The device :code:`Scene` to visualize.
 
         """
-        return fabricate(self.layer_to_geoms, foundry, exclude_layer=exclude_layer)
+        return fabricate(self.layer_to_polys, foundry, exclude_layer=exclude_layer)
 
     @classmethod
     def aggregate(cls, devices: List["Device"], name: Optional[str] = None):
@@ -473,7 +456,7 @@ class Device:
         for pattern, _layer in self.pattern_to_layer:
             if _layer == layer:
                 pattern.smooth(distance)
-        self.layer_to_geoms, _ = self._init_multilayer()
+        self.layer_to_polys, _ = self._init_multilayer()
         return self
 
 
@@ -524,13 +507,12 @@ class Device:
             The `klamath` GDS elements for the device.
         """
         elements = []
-        for layer, geom in self.layer_to_geoms.items():
+        for layer, geom in self.layer_to_polys.items():
             elements += [
                 klamath.elements.Boundary(
                     layer=foundry.layer_to_gds_label[layer],
-                    xy=(poly_points(poly) / user_units_per_db_unit).astype(np.int32),
-                    properties={})
-                for poly in split_holes(geom)
+                    xy=(poly / user_units_per_db_unit).astype(np.int32),
+                    properties={}) for poly in geom
             ]
         for name, port in self.port.items():
             elements += [
@@ -560,7 +542,7 @@ class Device:
                                      self.gds_elements(foundry, user_units_per_db_unit))
 
     def to_gds(self, filepath: str, foundry: Foundry = FABLESS, user_units_per_db_unit: float = 0.001,
-               meters_per_db_unit: float = 1e-9):
+               meters_per_db_unit: float = 1e-9, transform: Optional[Union[GDSTransform, List[GDSTransform]]] = None):
         """Use `klamath <https://mpxd.net/code/jan/klamath/src/branch/master/klamath>`_ to convert to GDS
         using a foundry object and a provided :code:`filepath`.
 

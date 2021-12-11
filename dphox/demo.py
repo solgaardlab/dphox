@@ -1,12 +1,13 @@
 from .active import Clearout, GndAnchorWaveguide, LateralNemsPS, MEMSFlexure, LocalMesh, MZI, PullInNemsActuator, \
     PullOutNemsActuator, ThermalPS, Via
 from .foundry import CommonLayer
-from .passive import DC, TaperSpec, Waveguide, WaveguideDevice
-from .pattern import Box
+from .passive import DC, WaveguideDevice
+from .path import Path
+from .pattern import Box, TaperSpec
 
-ps = ThermalPS(Waveguide((1, 10)), ps_w=2, via=Via((0.4, 0.4), 0.1))
+ps = ThermalPS(Path().straight((10, 1)), ps_w=4, via=Via((0.4, 0.4), 0.1))
 dc = DC(waveguide_w=1, interaction_l=2, bend_l=5, interport_distance=10, gap_w=0.5)
-mzi = MZI(dc, top_internal=[ps], bottom_internal=[ps.copy], top_external=[ps.copy], bottom_external=[ps.copy])
+mzi = MZI(dc, top_internal=[ps.copy], bottom_internal=[ps.copy], top_external=[ps.copy], bottom_external=[ps.copy])
 
 
 # mesh = Mesh(mzi, 6)

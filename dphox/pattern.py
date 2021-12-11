@@ -1,3 +1,4 @@
+import pickle
 from copy import deepcopy as copy
 from enum import Enum
 
@@ -7,13 +8,14 @@ import numpy as np
 import shapely.wkt as swkt
 from descartes import PolygonPatch
 from pydantic.dataclasses import dataclass
-from shapely.affinity import rotate, scale, skew, translate
+from shapely.affinity import rotate
 from shapely.geometry import box, GeometryCollection, LineString, Point, JOIN_STYLE, CAP_STYLE
 from shapely.ops import split, unary_union
 
 from .typing import Dict, Float2, Float3, Float4, List, MultiPolygon, Optional, Polygon, PolygonLike, Shape, Spacing, \
     Union
-from .utils import fix_dataclass_init_docs, poly_points
+from .utils import fix_dataclass_init_docs, poly_points, split_holes
+from .transform import translate2d, reflect2d, skew2d, rotate2d, scale2d, AffineTransform
 
 NAZCA_IMPORTED = True
 PLOTLY_IMPORTED = True
@@ -34,6 +36,14 @@ try:
 except ImportError:
     SHAPELYVEC_IMPORTED = False
 
+try:
+    HOLOVIEWS_IMPORTED = True
+    import holoviews as hv
+    from holoviews import opts
+    import panel as pn
+except ImportError:
+    HOLOVIEWS_IMPORTED = False
+
 
 @fix_dataclass_init_docs
 @dataclass
@@ -45,19 +55,18 @@ class TaperSpec:
         params: The taper parameters for the polynomial taper.
         num_evaluations: Number of evaluations for the Taper
     """
-    length: float
     params: List[float]
     num_evaluations: int = 100
 
     @classmethod
-    def linear(cls, length: float, change_w: float, num_evaluations: int = 100):
+    def linear(cls, change_w: float, num_evaluations: int = 100):
         params = [0., change_w]
-        return cls(length, params, num_evaluations)
+        return cls(params, num_evaluations)
 
     @classmethod
-    def cubic(cls, length: float, change_w: float, num_evaluations: int = 100):
+    def cubic(cls, change_w: float, num_evaluations: int = 100):
         params = [0., 0., 3 * change_w, -2 * change_w]
-        return cls(length, params, num_evaluations)
+        return cls(params, num_evaluations)
 
 
 @fix_dataclass_init_docs
@@ -76,8 +85,8 @@ class Port:
         z: z position of the port (optional, not specified in design, mostly used for simulation).
         h: the height / thickness of the port (optional, not specified in design, mostly used for simulation).
     """
-    x: float
-    y: float
+    x: float = 0
+    y: float = 0
     a: float = 0
     w: float = 1
     z: float = 0
@@ -143,8 +152,67 @@ class Port:
         a = np.angle(c) * 180 / np.pi
         return cls(x, y, a, np.abs(c), z, h)
 
+    @classmethod
+    def from_linestring(cls, linestring: LineString, z: float = 0, h: float = 0) -> "Port":
+        """Initialize a :code:`Port` using a :code:`LineString` in Shapely.
+
+        The port can be unambiguously defined using a line. The Shapely :code:`Polygon` triangle defines the
+        center :math:`x, y` of the line as well as the width :math:`w` of the port. This is effectively the
+        inverse of the :code:`shapely` property of this class.
+
+        Args:
+            linestring: Shapely :code:`LineString` representing the port.
+            z: The z position of the port.
+            h: The height / thickness of the port.
+
+        Returns:
+            The :code:`Port` represented by the shapely :code:`Polygon` triangle.
+
+        """
+        if not isinstance(linestring, LineString):
+            raise TypeError(f'Input line must be a shapely LineString but got {type(linestring)}')
+
+        first, second = linestring.coords
+        c, = linestring.centroid.coords
+        d = (second[1] - first[1]) + (second[0] - first[0]) * 1j
+        a = np.angle(d) * 180 / np.pi
+        return cls(c[0], c[1], a, np.abs(d), z, h)
+
     def normal(self, scale: float = 1):
+        """The vector normal to the port
+
+        Args:
+            scale: The magnitude of the normal vector
+
+        Returns:
+            Return the vector normal to the port
+
+        """
         return np.array([np.cos(self.a * np.pi / 180), np.sin(self.a * np.pi / 180)]) * scale
+
+    def transformed_line(self, transform: np.ndarray):
+        dx, dy = np.sin(self.a * np.pi / 180) * self.w / 2, np.cos(self.a * np.pi / 180) * self.w / 2
+        x, y = self.xy
+        return np.array(transform[..., :2, :]) @ np.array([[x - dx, y - dy, 1], [x + dx, y + dy, 1]]).T
+
+    def transform(self, transform: np.ndarray):
+        line = self.transformed_line(transform).T
+        c = (line[0] + line[1]) / 2
+        d = (line[1, 1] - line[0, 1]) + (line[1, 0] - line[0, 0]) * 1j
+        self.a = np.angle(d) * 180 / np.pi
+        self.x = c[0]
+        self.y = c[1]
+        self.w = np.abs(d)
+        self.xy = np.array((self.x, self.y))
+        self.xya = np.array((self.x, self.y, self.a))
+        self.center = np.array((self.x, self.y, self.z))
+        return self
+
+    def hvplot(self, name: str = 'port'):
+        x, y = self.shapely.exterior.coords.xy
+        port_xy = self.xy - self.normal(self.w)
+        return hv.Polygons([{'x': x, 'y': y}]).opts(
+            data_aspect=1, frame_height=200, color='red', line_alpha=0) * hv.Text(*port_xy, name)
 
     @property
     def copy(self) -> "Port":
@@ -154,7 +222,7 @@ class Port:
             A deep copy of this port.
 
         """
-        return copy(self)
+        return pickle.loads(pickle.dumps(self))
 
 
 class GdspyPath(gy.Path):
@@ -283,7 +351,7 @@ class GdspyPath(gy.Path):
 
         """
         self.turn(radius, 90, tolerance=0.001).segment(height)
-        self.turn(radius, -180, tolerance=0.001).segment(height).turn(radius, np.pi / 2, tolerance=0.001)
+        self.turn(radius, -180, tolerance=0.001).segment(height).turn(radius, 90, tolerance=0.001)
         return self
 
     def to(self, port: Port):
@@ -309,58 +377,55 @@ class Pattern:
     MEEP and simphox for simulating the generated designs straightforwardly.
 
     Attributes:
-        *patterns: A list of polygons specified by the user, can be a Path, gdspy Polygon, shapely Polygon,
-            shapely MultiPolygon or Pattern.
+        polygons: the numpy array representation for the polygons in this pattern.
+        poses: a pytree of affine matrix transformations (3x3) giving all of the layout info for the pattern.
         decimal_places: decimal places for rounding (in case of tiny errors in polygons)
     """
 
     def __init__(self, *patterns: Union["Pattern", GdspyPath, PolygonLike], decimal_places: int = 5):
-        self.config = copy(self.__dict__)
-        self.polys = []
-        self.decimal_places = decimal_places
+        """Initializer for the pattern class.
 
-        def _extend_polys(patterns):
-            self.polys += [Polygon(polygon_point_list) for polygon_point_list in patterns]
+        Args:
+            *patterns: The patterns (Gdspy, Shapely, numpy array, Pattern)
+            decimal_places: decimal places for rounding (in case of tiny errors in polygons)
+        """
+        self.decimal_places = decimal_places
+        self.polygons = []
 
         for pattern in patterns:
             if isinstance(pattern, Pattern):
-                self.polys += pattern.polys
+                self.polygons.extend(pattern.polygons)
             elif isinstance(pattern, np.ndarray):
-                self.polys.append(Polygon(pattern))
+                self.polygons.append(pattern)
             elif isinstance(pattern, Polygon):
-                self.polys.append(pattern)
+                pattern = split_holes(pattern)
+                self.polygons.extend([poly_points(geom).T for geom in pattern.geoms])
             elif isinstance(pattern, MultiPolygon):
-                _extend_polys(list(pattern))
+                self.polygons.extend([poly_points(geom).T for geom in split_holes(pattern).geoms])
             elif isinstance(pattern, gy.FlexPath):
-                _extend_polys(pattern.get_polygons())
+                self.polygons.extend(pattern.get_polygons())
             elif isinstance(pattern, GeometryCollection):
-                _extend_polys(list(MultiPolygon([g for g in pattern.geoms if isinstance(g, Polygon)])))
+                self.polygons.extend([poly_points(geom).T for geom in split_holes(pattern).geoms])
             elif isinstance(pattern, GdspyPath):
-                _extend_polys(pattern.polygons)
+                self.polygons.extend(pattern.polygons)
             else:
                 raise TypeError(f'Pattern does not accept type {type(pattern)}')
-        self.shapely = MultiPolygon(self.polys)
-        self.shapely = swkt.loads(swkt.dumps(self.shapely, rounding_precision=self.decimal_places))
+
         self.port: Dict[str, Port] = {}
         self.reference_patterns: List[Pattern] = []
 
-    @classmethod
-    def from_shapely(cls, shapely_pattern: Union[Polygon, MultiPolygon, GeometryCollection]) -> "Pattern":
-        """Instantiate a pattern from a shapely pattern
+    @property
+    def all_points(self) -> np.ndarray:
+        return np.hstack(self.polygons) if len(self.polygons) > 1 else self.polygons[0]
 
-        Args:
-            shapely_pattern: Shapely pattern to convert
+    def transformed_polygons(self, transform: Union[np.ndarray, List[np.ndarray], AffineTransform]) -> List[np.ndarray]:
+        transformer = transform if isinstance(transform, AffineTransform) else AffineTransform(transform)
+        return transformer.transform_polygons(self.polygons)
 
-        Returns:
-
-        """
-        if isinstance(shapely_pattern, Polygon) or isinstance(shapely_pattern, MultiPolygon):
-            return cls(shapely_pattern)
-        elif isinstance(shapely_pattern, GeometryCollection):
-            return cls(MultiPolygon([g for g in shapely_pattern.geoms if isinstance(g, Polygon)]))
-        else:
-            raise AttributeError(f'`shapely_pattern` is not a Polygon, GeometryCollection, or MultiPolygon,'
-                                 f'it is a {type(shapely_pattern)}.')
+    @property
+    def shapely(self) -> MultiPolygon:
+        return swkt.loads(swkt.dumps(MultiPolygon([Polygon(p.T) for p in self.polygons]),
+                                     rounding_precision=self.decimal_places))
 
     def shapely_union(self) -> MultiPolygon:
         pattern = unary_union(self.polys)
@@ -393,6 +458,10 @@ class Pattern:
         return contains(geom, x_, y_)  # need to use union!
 
     @property
+    def polys(self):
+        return self.shapely.geoms
+
+    @property
     def bounds(self) -> Float4:
         """Bounds of the pattern
 
@@ -400,7 +469,11 @@ class Pattern:
             Tuple of the form :code:`(minx, miny, maxx, maxy)`
 
         """
-        return self.shapely.bounds
+        p = self.all_points
+        if p.shape[1] > 0:
+            return np.min(p[0]), np.min(p[1]), np.max(p[0]), np.max(p[1])
+        else:
+            return 0, 0, 0, 0
 
     @property
     def size(self) -> Float2:
@@ -424,6 +497,13 @@ class Pattern:
         b = self.bounds  # (minx, miny, maxx, maxy)
         return (b[2] + b[0]) / 2, (b[3] + b[1]) / 2  # (avgx, avgy)
 
+    def transform(self, transform: np.ndarray):
+        self.polygons = self.transformed_polygons(transform)
+        self.port = {name: port.transform(transform) for name, port in self.port.items()}
+        for pattern in self.reference_patterns:
+            pattern.transform(transform)
+        return self
+
     def translate(self, dx: float = 0, dy: float = 0) -> "Pattern":
         """Translate patter
 
@@ -435,14 +515,67 @@ class Pattern:
             The translated pattern
 
         """
-        self.polys = [translate(path, dx, dy) for path in self.polys]
-        self.shapely = MultiPolygon(self.polys)
-        # any patterns in the element should also be translated
-        for pattern in self.reference_patterns:
-            pattern.translate(dx, dy)
+        return self.transform(translate2d((dx, dy)))
+
+    def reflect(self, center: Float2 = (0, 0), horiz: bool = False) -> "Pattern":
+        """Reflect the component across a center point (default (0, 0))
+
+        Args:
+            center: The center point about which to flip
+            horiz: do horizontal flip, otherwise vertical flip
+
+        Returns:
+            Flipped pattern
+
+        """
+        self.transform(reflect2d(center, horiz))
         for name, port in self.port.items():
-            self.port[name] = Port(port.x + dx, port.y + dy, port.a, port.w)
+            port.a = np.mod(port.a + 180, 360)  # temp fix... need to change how ports are represented
         return self
+
+    def rotate(self, angle: float, origin: Union[Float2, np.ndarray] = (0, 0)) -> "Pattern":
+        """Runs Shapely's rotate operation on the geometry about :code:`origin`.
+
+        Args:
+            angle: rotation angle in degrees.
+            origin: origin of rotation.
+
+        Returns:
+            Rotated pattern by :code:`angle` about :code:`origin`
+
+        """
+        if angle % 360 != 0:  # to save time, only rotate if the angle is nonzero
+            a = angle * np.pi / 180
+            self.transform(rotate2d(a, origin))
+        return self
+
+    def skew(self, xs: float = 0, ys: float = 0, origin: Optional[Float2] = None) -> "Pattern":
+        """Affine skew operation on the geometry about :code:`origin`.
+
+        Args:
+            xs: x skew factor.
+            ys: y skew factor.
+            origin: origin of rotation (uses center of pattern if :code:`None`).
+
+        Returns:
+            Rotated pattern by :code:`angle` about :code:`origin`
+
+        """
+        return self.transform(skew2d((xs, ys), self.center if origin is None else origin))
+
+    def scale(self, xfact: float = 1, yfact: float = 1, origin: Optional[Float2] = None) -> "Pattern":
+        """Affine scale operation on the geometry about :code:`origin`.
+
+        Args:
+            xfact: x scale factor.
+            yfact: y scale factor.
+            origin: origin of rotation (uses center of pattern if :code:`None`).
+
+        Returns:
+            Rotated pattern by :code:`angle` about :code:`origin`
+
+        """
+        return self.transform(scale2d((xfact, yfact), self.center if origin is None else origin))
 
     def align(self, pattern_or_center: Union["Pattern", Float2] = (0, 0),
               other: Union["Pattern", Float2] = None) -> "Pattern":
@@ -507,101 +640,6 @@ class Pattern:
     def hstack(self, other_pattern: "Pattern", left: bool = False) -> "Pattern":
         return self.align(other_pattern).halign(other_pattern, left=left, opposite=True)
 
-    def reflect(self, center: Float2 = (0, 0), horiz: bool = False) -> "Pattern":
-        """Reflect the component across a center point (default (0, 0))
-
-        Args:
-            center: The center point about which to flip
-            horiz: do horizontal flip, otherwise vertical flip
-
-        Returns:
-            Flipped pattern
-
-        """
-        new_polys = []
-
-        for poly in self.polys:
-            points = poly_points(poly).T
-            new_points = np.stack((-points[0] + 2 * center[0], points[1])) if horiz \
-                else np.stack((points[0], -points[1] + 2 * center[1]))
-            new_polys.append(Polygon(new_points.T))
-        self.polys = new_polys
-        self.shapely = MultiPolygon(self.polys)
-        # any patterns in this pattern should also be flipped
-        for pattern in self.reference_patterns:
-            pattern.reflect(center, horiz)
-        self.port = {name: Port(-port.x + 2 * center[0], port.y, -port.a, port.w) \
-            if horiz else Port(port.x, -port.y + 2 * center[1], -port.a, port.w) for name, port in self.port.items()}
-        return self
-
-    def rotate(self, angle: float, origin: Union[Float2, np.ndarray] = (0, 0)) -> "Pattern":
-        """Runs Shapely's rotate operation on the geometry about :code:`origin`.
-
-        Args:
-            angle: rotation angle in degrees
-            origin: origin of rotation
-
-        Returns:
-            Rotated pattern by :code:`angle` about :code:`origin`
-
-        """
-        self.shapely = rotate(self.shapely, angle, origin)
-        self.polys = [poly for poly in self.shapely]
-        # any patterns in this pattern should also be rotated
-        for pattern in self.reference_patterns:
-            pattern.rotate(angle, origin)
-        port_to_point = {name: rotate(Point(*port.xy), angle, origin)
-                         for name, port in self.port.items()}
-        self.port = {name: Port(float(point.x), float(point.y), self.port[name].a + angle)
-                     for name, point in port_to_point.items()}
-        return self
-
-    def skew(self, xs: float = 0, ys: float = 0, origin: Optional[Float2] = None) -> "Pattern":
-        """Runs Shapely's skew operation on the geometry about :code:`origin`.
-
-        Args:
-            xs: x skew factor
-            ys: y skew factor
-            origin: origin of rotation (uses center of pattern if :code:`None`)
-
-        Returns:
-            Rotated pattern by :code:`angle` about :code:`origin`
-
-        """
-        self.shapely = skew(self.shapely, xs, ys, origin=self.center if origin is None else origin)
-        self.polys = [poly for poly in self.shapely]
-        # any patterns in this pattern should also be rotated
-        for pattern in self.reference_patterns:
-            pattern.skew(xs, ys, origin)
-        port_to_point = {name: skew(Point(*port.xy), xs, ys, origin)
-                         for name, port in self.port.items()}
-        self.port = {name: Port(float(point.x), float(point.y), self.port[name].a)
-                     for name, point in port_to_point.items()}
-        return self
-
-    def scale(self, xfact: float = 1, yfact: float = 1, origin: Optional[Float2] = None) -> "Pattern":
-        """Runs Shapely's skew operation on the geometry about :code:`origin`.
-
-        Args:
-            xs: x skew factor
-            ys: y skew factor
-            origin: origin of rotation (uses center of pattern if :code:`None`)
-
-        Returns:
-            Rotated pattern by :code:`angle` about :code:`origin`
-
-        """
-        self.shapely = scale(self.shapely, xfact, yfact, origin=self.center if origin is None else origin)
-        self.polys = [poly for poly in self.shapely]
-        # any patterns in this pattern should also be rotated
-        for pattern in self.reference_patterns:
-            pattern.scale(xfact, xfact, self.center if origin is None else origin)
-        port_to_line = {name: scale(port.shapely, xfact, yfact, origin=self.center if origin is None else origin)
-                        for name, port in self.port.items()}
-        self.port = {name: Port.from_shapely(line)
-                     for name, line in port_to_line.items()}
-        return self
-
     @property
     def copy(self) -> "Pattern":
         """Copies the pattern using deepcopy.
@@ -638,7 +676,7 @@ class Pattern:
             The new intersected pattern
 
         """
-        return Pattern.from_shapely(self.shapely.intersection(other_pattern.shapely))
+        return Pattern(self.shapely.intersection(other_pattern.shapely))
 
     def difference(self, other_pattern: "Pattern") -> "Pattern":
         """Difference between this pattern and provided pattern.
@@ -656,7 +694,7 @@ class Pattern:
             The new differenced pattern
 
         """
-        return Pattern.from_shapely(self.shapely.difference(other_pattern.shapely))
+        return Pattern(self.shapely.difference(other_pattern.shapely))
 
     def union(self, other_pattern: "Pattern") -> "Pattern":
         """Union between this pattern and provided pattern.
@@ -673,7 +711,7 @@ class Pattern:
             The new union pattern
 
         """
-        return Pattern.from_shapely(self.shapely.union(other_pattern.shapely))
+        return Pattern(self.shapely.union(other_pattern.shapely))
 
     def symmetric_difference(self, other_pattern: "Pattern") -> "Pattern":
         """Union between this pattern and provided pattern.
@@ -690,9 +728,9 @@ class Pattern:
             The new symmetric difference pattern
 
         """
-        return Pattern.from_shapely(self.shapely.symmetric_difference(other_pattern.shapely))
+        return Pattern(self.shapely.symmetric_difference(other_pattern.shapely))
 
-    def to_gds(self, cell: gy.Cell):
+    def to_gdspy(self, cell: gy.Cell):
         """Add to an existing GDSPY cell.
 
         Args:
@@ -702,11 +740,11 @@ class Pattern:
             The GDSPY cell corresponding to the :code:`Pattern`
 
         """
-        for poly in self.polys:
-            cell.add(gy.Polygon(poly_points(poly)) if isinstance(poly, Polygon) else cell.add(poly))
+        for poly in self.polygons:
+            cell.add(gy.Polygon(poly) if isinstance(poly, Polygon) else cell.add(poly))
 
     def replace(self, pattern: "Pattern", center: Optional[Float2] = None, raise_port: bool = True):
-        pattern_bbox = Pattern(GdspyPath(pattern.size[1]).segment(pattern.size[0]))
+        pattern_bbox = Box.bbox(pattern)
         align = self if center is None else center
         diff = self.difference(pattern_bbox.align(align))
         new_pattern = Pattern(diff, pattern.align(align))
@@ -728,46 +766,70 @@ class Pattern:
 
     def smooth(self, distance: float, min_area: float = None,
                join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.square) -> "Pattern":
-        smoothed = self.buffer(distance, join_style=join_style, cap_style=cap_style).buffer(-distance, join_style=join_style, cap_style=cap_style)
+        smoothed = self.buffer(distance,
+                               join_style=join_style,
+                               cap_style=cap_style).buffer(-distance, join_style=join_style, cap_style=cap_style)
         smoothed_exclude = Pattern(smoothed.shapely_union().union(self.shapely_union()).difference(
             self.shapely_union()))
         min_area = distance ** 2 / 4 if min_area is None else min_area
-        self.polys = self.polys + [p for p in smoothed_exclude.shapely if Polygon(p).area > min_area]
+        self.polygons += [p for p in smoothed_exclude.shapely.geoms if p.area > min_area]
         return self
 
     def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> "nd.Cell":
         if not NAZCA_IMPORTED:
             raise ImportError('Nazca not installed! Please install nazca prior to running nazca_cell().')
         with nd.Cell(cell_name) as cell:
-            for poly in self.polys:
-                nd.Polygon(points=poly_points(poly, self.decimal_places), layer=layer).put()
+            for poly in self.polygons:
+                nd.Polygon(points=poly, layer=layer).put()
             for name, port in self.port.items():
                 nd.Pin(name).put(*port.xya)
             nd.put_stub()
         return cell
 
-    def to(self, port: Port, from_port: Optional[str] = None):
+    def put(self, port: Port, from_port: Optional[Union[str, Port]] = None):
         if from_port is None:
             return self.rotate(port.a).translate(port.x, port.y)
         else:
-            return self.rotate(port.a - self.port[from_port].a + 180, origin=self.port[from_port].xy).translate(
-                port.x - self.port[from_port].x, port.y - self.port[from_port].y
-            )
+            fp = self.port[from_port] if isinstance(from_port, str) else from_port
+            return self.rotate(port.a - self.port[from_port].a + 180, origin=fp.xy).translate(port.x - fp.x,
+                                                                                              port.y - fp.y)
 
-    @classmethod
-    def from_gds(cls, filename):
-        """The top cell in a given GDS file is assigned to a pattern (not by spec, assumes single layer!)
+    def hvplot(self, color: str = 'black', name: str = 'pattern', alpha: float = 0.5, bounds: Optional[Float4] = None,
+               plot_ports: bool = True):
+        """Plot this device on a matplotlib plot.
 
         Args:
-            filename: the GDS file to extract the pattern.
+            color: The color for plotting the pattern.
+            alpha: The transparency factor for the plot (to see overlay of structures from many layers).
 
         Returns:
-            The :code:`Pattern` corresponding to the geometry in the GDS file.
+            The holoviews Overlay for displaying all of the polygons.
 
         """
-        lib = gy.GdsLibrary(infile=filename)
-        main_cell = lib.top_level()[0]
-        return cls(*main_cell.get_polygons())
+        if not HOLOVIEWS_IMPORTED:
+            raise ImportError('Holoviews, Panel, and/or Bokeh not yet installed. Check your installation...')
+        plots_to_overlay = []
+        b = self.bounds if bounds is None else bounds
+        geom = self.shapely_union()
+
+        def _holoviews_poly(shapely_poly):
+            x, y = poly_points(shapely_poly).T
+            holes = [[np.array(hole.coords.xy).T for hole in shapely_poly.interiors]]
+            return {'x': x, 'y': y, 'holes': holes}
+
+        polys = [_holoviews_poly(poly) for poly in geom.geoms] if isinstance(geom, MultiPolygon) else [
+            _holoviews_poly(geom)]
+
+        plots_to_overlay.append(
+            hv.Polygons(polys, label=name).opts(data_aspect=1, frame_height=200, fill_alpha=alpha,
+                                                ylim=(b[1], b[3]), xlim=(b[0], b[2]),
+                                                color=color, line_alpha=0, tools=['hover']))
+
+        if plot_ports:
+            for name, port in self.port.items():
+                plots_to_overlay.append(port.hvplot(name))
+
+        return hv.Overlay(plots_to_overlay)
 
     def __sub__(self, other: "Pattern"):
         return self.difference(other)
@@ -1018,115 +1080,3 @@ class MEMSFlexure(Pattern):
                                                                    self.stripe_w, self.spring_center))
         self.box = Box(self.extent)
         self.reference_patterns.append(self.box)
-
-
-class PathOp(str, Enum):
-    """Annotated path operation
-
-    This is simply an enum for the AnnotatedPath object. This is temporary until Waveguide/Path functionality is merged.
-
-    """
-    segment = 'segment'
-    turn = 'turn'
-    sbend = 'sbend'
-    dc = 'dc'
-    polynomial_taper = 'polynomial_taper'
-
-
-@fix_dataclass_init_docs
-@dataclass
-class Path(Pattern):
-    current_path: Union["Path", float]
-    operation: Optional[PathOp] = None
-    kwargs: Optional[Dict[str, Union[float, List[float], TaperSpec]]] = None
-
-    def __post_init_post_parse__(self):
-        # if isinstance(self.current_path, float):
-        #     self._path = GdspyPath(self.current_path)
-        # else:
-        #     self._path = self.current_path._path
-        #     if self.operation and self.kwargs:
-        #         {
-        #             PathOp.turn: self._path.turn,
-        #             PathOp.sbend: self._path.sbend,
-        #             PathOp.dc: self._path.dc,
-        #             PathOp.polynomial_taper: self._path.polynomial_taper,
-        #             PathOp.segment: self._path.segment
-        #         }[self.operation](**self.kwargs)
-        super(Path, self).__init__(self._path)
-
-
-@fix_dataclass_init_docs
-@dataclass
-class AnnotatedPath(Pattern):
-    """Annotated path (a schema-based path model).
-
-    This method is a wrapper class around GDSPY's :code:`Path` functionality.
-    TODO: This will be independent of GDSPY in future.
-
-    Attributes:
-        current_path: The current path.
-        operation: Operation on the path specified by :code:`GdspyPath`.
-        kwargs: The keyword arguments to call for the path :code:`operation()`.
-    """
-
-    current_path: Union["AnnotatedPath", float]
-    operation: Optional[PathOp] = None
-    kwargs: Optional[Dict[str, Union[float, List[float], TaperSpec]]] = None
-
-    def __post_init_post_parse__(self):
-        if isinstance(self.current_path, float):
-            self._path = GdspyPath(self.current_path)
-        else:
-            self._path = self.current_path._path
-            if self.operation and self.kwargs:
-                {
-                    PathOp.turn: self._path.turn,
-                    PathOp.sbend: self._path.sbend,
-                    PathOp.dc: self._path.dc,
-                    PathOp.polynomial_taper: self._path.polynomial_taper,
-                    PathOp.segment: self._path.segment
-                }[self.operation](**self.kwargs)
-        super(AnnotatedPath, self).__init__(self._path)
-
-    def segment(self, **kwargs):
-        return AnnotatedPath(self, PathOp.segment, kwargs)
-
-    def turn(self, **kwargs):
-        return AnnotatedPath(self, PathOp.turn, kwargs)
-
-    def sbend(self, **kwargs):
-        return AnnotatedPath(self, PathOp.sbend, kwargs)
-
-    def dc(self, bend_extent: Union[Float2, Float3], interaction_l: float, end_l: float = 0,
-           inverted: bool = False, use_radius: bool = False):
-        """Directional coupler waveguide path
-
-        This includes the top or bottom path, end stub lengths, interaction length, additional end bends if necessary.
-
-        Args:
-            bend_extent: Bend dimension of the form :code:`(length, height, final_width)` or :code:`(length, height)`,
-                where the latter is provided when the sbend is supposed to maintain the same final width throughout.
-            interaction_l: Interaction length (length of the middle straight section of the directional coupler).
-            end_l: End length
-            inverted: Bend down instead of bending up.
-            use_radius: Use a radius/turn instead of bezier curve.
-
-        Returns:
-            The current path with the dc path added (see GDSPY chaining).
-
-        """
-        kwargs = {
-            'bend_extent': bend_extent,
-            'interaction_l': interaction_l,
-            'end_l': end_l,
-            'inverted': inverted,
-            'use_radius': use_radius
-        }
-        return AnnotatedPath(self, PathOp.dc, kwargs)
-
-    def polynomial_taper(self, taper_spec: TaperSpec):
-        return AnnotatedPath(self, PathOp.polynomial_taper, {'taper_spec': taper_spec})
-
-
-AnnotatedPath.__pydantic_model__.update_forward_refs()

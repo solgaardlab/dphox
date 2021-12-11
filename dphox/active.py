@@ -4,11 +4,14 @@ from copy import deepcopy as copy
 import numpy as np
 from pydantic import Field
 from pydantic.dataclasses import dataclass
+from dataclasses import asdict
+import time
 
 from .device import Device, Via
 from .foundry import CommonLayer
-from .passive import AnnotatedPath, DC, WaveguideDevice, TapDC, Waveguide
+from .passive import DC, WaveguideDevice, TapDC
 from .pattern import Box, MEMSFlexure, Pattern, Port
+from .path import Path
 from .typing import List, Optional, Union
 from .utils import fix_dataclass_init_docs
 
@@ -19,14 +22,14 @@ class ThermalPS(Device):
     """Thermal phase shifter (e.g. TiN phase shifter).
 
     Attributes:
-        waveguide: Waveguide
+        waveguide: Waveguide under the phase shifter
         ps_w: Phase shifter width
         ps_l: Phase shifter length
         via: Via to connect heater to the top metal layer
         ridge: Waveguide layer
         ps_layer: Phase shifter layer (e.g. TiN)
     """
-    waveguide: Waveguide
+    waveguide: Path
     ps_w: float
     via: Via
     ps_l: Optional[float] = None
@@ -35,8 +38,8 @@ class ThermalPS(Device):
     name: str = "thermal_ps"
 
     def __post_init_post_parse__(self):
-        self.ps_l = self.waveguide.extent[1] if self.ps_l is None else self.ps_l
-        ps = Waveguide((self.ps_w, self.ps_l))
+        self.ps_l = self.waveguide.size[0] if self.ps_l is None else self.ps_l
+        ps = Path().straight((self.ps_l, self.ps_w))
         left_via = self.via.copy.align(self.waveguide.port['a0'].xy)
         right_via = self.via.copy.align(self.waveguide.port['b0'].xy)
 
@@ -46,9 +49,9 @@ class ThermalPS(Device):
         )
         self.port = self.waveguide.port
         self.ps = ps
-        self.port['gnd'] = Port(self.bounds[0], 0, -180)
-        self.port['pos'] = Port(self.bounds[1], 0)
-        self.wg_path = self.layer_to_geoms[self.ridge]
+        self.port['gnd'] = Port(self.waveguide.port['a0'].x, 0, -180)
+        self.port['pos'] = Port(self.waveguide.port['b0'].x, 0)
+        self.wg_path = self.layer_to_polys[self.ridge]
 
 
 @fix_dataclass_init_docs
@@ -238,7 +241,7 @@ class LateralNemsPS(Device):
         gnd_metal_layer: Ground electrode metal layer.
 
     """
-    phase_shifter_waveguide: Waveguide
+    phase_shifter_waveguide: Path
     gnd_anchor_waveguide: GndAnchorWaveguide
     clearout: Clearout
     actuator: Union[PullInNemsActuator, PullOutNemsActuator]
@@ -252,19 +255,21 @@ class LateralNemsPS(Device):
 
     def __post_init_post_parse__(self):
         psw = self.phase_shifter_waveguide.copy
-        top_actuator = self.actuator.copy.to(Port(psw.center[0], psw.bounds[3], 0))
-        bottom_actuator = self.actuator.copy.to(Port(psw.center[0], psw.bounds[1], -180))
+        top_actuator = self.actuator.copy.put(Port(psw.center[0], psw.bounds[3], 0))
+        bottom_actuator = self.actuator.copy.put(Port(psw.center[0], psw.bounds[1], -180))
         clearout = self.clearout.copy.align(psw)
-        left_gnd_waveguide = self.gnd_anchor_waveguide.copy.to(psw.port['a0'])
-        right_gnd_waveguide = self.gnd_anchor_waveguide.copy.to(psw.port['b0'])
+        left_gnd_waveguide = self.gnd_anchor_waveguide.copy.put(psw.port['a0'])
+        right_gnd_waveguide = self.gnd_anchor_waveguide.copy.put(psw.port['b0'])
         pos_metal = Box((self.clearout.size[0] + self.clearout_pos_sep,
-                         top_actuator.bounds[3] - bottom_actuator.bounds[1])).hollow(self.trace_w).align(clearout.center)
+                         top_actuator.bounds[3] - bottom_actuator.bounds[1])).hollow(self.trace_w).align(
+            clearout.center)
         gnd_metal = Box((right_gnd_waveguide.port['e0'].x - left_gnd_waveguide.port['e0'].x,
                          self.gnd_anchor_waveguide.size[1] + self.clearout_gnd_sep)).cup(self.trace_w).halign(
             left_gnd_waveguide.port['e0'].x).valign(left_gnd_waveguide.port['e1'].y)
 
         super(LateralNemsPS, self).__init__(self.name, [(psw, self.ridge), (pos_metal, self.pos_metal_layer),
-                                                        (gnd_metal, self.gnd_metal_layer)] + top_actuator.pattern_to_layer
+                                                        (gnd_metal,
+                                                         self.gnd_metal_layer)] + top_actuator.pattern_to_layer
                                             + bottom_actuator.pattern_to_layer + clearout.pattern_to_layer
                                             + left_gnd_waveguide.pattern_to_layer
                                             + right_gnd_waveguide.pattern_to_layer)
@@ -276,7 +281,7 @@ class LateralNemsPS(Device):
         self.wg_path = self.phase_shifter_waveguide
 
 
-PathComponent = Union[DC, TapDC, Waveguide, ThermalPS, LateralNemsPS, AnnotatedPath, "MultilayerPath", float]
+PathComponent = Union[DC, TapDC, Path, ThermalPS, LateralNemsPS, "MultilayerPath", float]
 
 
 @fix_dataclass_init_docs
@@ -304,23 +309,20 @@ class MultilayerPath(Device):
         port = None
         for p in self.sequence:
             if p is not None:
-                d = p if isinstance(p, Device) or isinstance(p, Pattern) else Waveguide((self.waveguide_w, p))
-                if port is None:
-                    waveguided_patterns.append(d.to(Port(0, 0), 'a0'))
-                else:
-                    waveguided_patterns.append(d.to(port, 'a0'))
-                port = d.port['b0']
+                d = p if isinstance(p, Device) or isinstance(p, Pattern) else Path().straight((p, self.waveguide_w))
+                waveguided_patterns.append(d.put(Port(0, 0), 'a0') if port is None else d.put(port, 'a0'))
+                port = d.port['b0'].copy
         pattern_to_layer = sum(
             [[(p, self.path_layer)] if isinstance(p, Pattern) else p.pattern_to_layer for p in waveguided_patterns],
             [])
         super(MultilayerPath, self).__init__(self.name, pattern_to_layer)
-        self.wg_path = self.layer_to_geoms[self.path_layer]
+        self.wg_path = self.layer_to_polys[self.path_layer]
         self.port['a0'] = Port(0, 0, -180)
         self.port['b0'] = port
 
     def append(self, element: PathComponent):
-        self.sequence += element
-        self.__post_init__()
+        self.sequence.append(element)
+        self.__post_init_post_parse__()
         return self
 
 
@@ -354,39 +356,39 @@ class MZI(Device):
         port = copy(self.coupler.port)
         if self.top_external:
             top_input = MultilayerPath(self.coupler.waveguide_w, self.top_external, self.ridge)
-            top_input.to(self.coupler.port['a1'], 'b0')
+            top_input.put(self.coupler.port['a1'], 'b0')
             port['a1'] = top_input.port['a0'].copy
             patterns.append(top_input)
         if self.bottom_external:
             bottom_input = MultilayerPath(self.coupler.waveguide_w, self.bottom_external, self.ridge)
-            bottom_input.to(self.coupler.port['a0'], 'b0')
+            bottom_input.put(self.coupler.port['a0'], 'b0')
             port['a0'] = bottom_input.port['a0'].copy
             patterns.append(bottom_input)
         if self.top_internal:
-            top_arm = MultilayerPath(self.coupler.waveguide_w, self.top_internal, self.ridge).to(port['b1'])
+            top_arm = MultilayerPath(self.coupler.waveguide_w, self.top_internal, self.ridge).put(port['b1'])
             port['b1'] = top_arm.port['b0'].copy
         if self.bottom_internal:
-            bottom_arm = MultilayerPath(self.coupler.waveguide_w, self.bottom_internal, self.ridge).to(port['b0'])
+            bottom_arm = MultilayerPath(self.coupler.waveguide_w, self.bottom_internal, self.ridge).put(port['b0'])
             port['b0'] = bottom_arm.port['b0'].copy
 
         arm_length_diff = port['b1'].x - port['b0'].x
 
         if arm_length_diff > 0:
             if self.bottom_internal:
-                bottom_arm.append(arm_length_diff)
+                bottom_arm.append(Path().straight((arm_length_diff, self.coupler.waveguide_w)))
             else:
-                bottom_arm = Waveguide((self.coupler.waveguide_w, arm_length_diff)).to(port['b0'])
+                bottom_arm = Path().straight((arm_length_diff, self.coupler.waveguide_w)).put(port['b0'])
             port['b0'] = bottom_arm.port['b0'].copy
         elif arm_length_diff < 0:
             if self.top_internal:
-                top_arm.append(arm_length_diff)
+                top_arm.append(Path().straight((arm_length_diff, self.coupler.waveguide_w)))
             else:
-                top_arm = Waveguide((self.coupler.waveguide_w, arm_length_diff)).to(port['b0'])
+                top_arm = Path().straight((arm_length_diff, self.coupler.waveguide_w)).put(port['b0'])
             port['b1'] = top_arm.port['b1'].copy
 
         patterns.extend([top_arm, bottom_arm])
 
-        final_coupler = self.coupler.copy.to(port['b0'])
+        final_coupler = self.coupler.copy.put(port['b0'])
         port['b0'] = final_coupler.port['b0'].copy
         port['b1'] = final_coupler.port['b1'].copy
         patterns.append(final_coupler)
@@ -451,13 +453,13 @@ class LocalMesh(Device):
                 path = mzi.copy.path(flip)
                 cols.append(path)
             cols.append(mzi.bottom_arm.copy)
-            paths.append(MultilayerPath(self.mzi.waveguide_w, cols, self.mzi.ridge).to(ports[idx], 'a0'))
+            paths.append(MultilayerPath(self.mzi.waveguide_w, cols, self.mzi.ridge).put(ports[idx], 'a0'))
 
         pattern_to_layer = sum([path.pattern_to_layer for path in paths], [])
         super(LocalMesh, self).__init__(self.name, pattern_to_layer)
         self.port = {
-            **{f'a{i}': Port(0, i * mzi.interport_distance, -180) for i in range(n)},
-            **{f'b{i}': Port(self.size[0], i * mzi.interport_distance) for i in range(n)}
+            **{f'a{i}': paths[i].port['a0'] for i in range(n)},
+            **{f'b{i}': paths[i].port['b0'] for i in range(n)}
         }
         self.interport_distance = mzi.interport_distance
         self.waveguide_w = self.mzi.waveguide_w
@@ -476,10 +478,10 @@ class LocalMesh(Device):
             path-matched triangular mesh or the rectangular mesh (which is inherently path matched).
         """
 
-        num_polys_per_row = len(self.layer_to_geoms[self.mzi.ridge]) // self.n
-        sizes = [0, 3] + [6] * (2 * self.n_layers - 1) + [3]
+        num_polys_per_row = len(self.layer_to_polys[self.mzi.ridge]) // self.n
+        sizes = [0, 2] + [4] * (2 * self.n_layers - 1) + [3]
         slices = np.cumsum(sizes, dtype=int)
-        geoms = self.layer_to_geoms[self.mzi.ridge].geoms
+        geoms = self.layer_to_polys[self.mzi.ridge]
         return np.array(
             [[geoms[num_polys_per_row * i + slices[s]:num_polys_per_row * i + slices[s + 1]]
               for s in range(len(slices) - 1)] for i in range(self.n)]
@@ -494,8 +496,8 @@ class LocalMesh(Device):
         Returns:
             Phase shifter array polygons.
         """
-        if ps_layer in self.layer_to_geoms:
-            return [ps for ps in self.layer_to_geoms[ps_layer].geoms]
+        if ps_layer in self.layer_to_polys:
+            return [ps for ps in self.layer_to_polys[ps_layer]]
         else:
             raise ValueError(f'The phase shifter layer {ps_layer} is not correct '
-                             f'or there is no phase shifter in this mesh')
+                             f'or there is no phase shifter in this mesh.')

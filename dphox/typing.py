@@ -1,4 +1,4 @@
-from typing import Union, Tuple, List, Optional, Dict, Callable
+from typing import Union, Tuple, List, Optional, Dict, Callable, Iterable
 import numpy as np
 from shapely.geometry import Polygon, MultiPolygon
 import gdspy as gy

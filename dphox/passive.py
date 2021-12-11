@@ -1,88 +1,18 @@
-from copy import deepcopy
-
 import numpy as np
-from pydantic import Field
 from pydantic.dataclasses import dataclass
-from shapely.geometry import MultiPolygon, LinearRing, Point
-from shapely.ops import unary_union
+from shapely.geometry import LinearRing, MultiPolygon, Point
 
 from .device import Device
 from .foundry import CommonLayer
-from .pattern import AnnotatedPath, Box, Ellipse, GdspyPath, Pattern, Port, TaperSpec, Sector
-from .typing import Float2, Int2, List, Optional, Union
+from .path import Path
+from .pattern import Box, Ellipse, GdspyPath, Pattern, Port, Sector
+from .typing import Float2, Int2, Optional, Union
 from .utils import fix_dataclass_init_docs
 
 try:
     import plotly.graph_objects as go
 except ImportError:
     pass
-
-
-@fix_dataclass_init_docs
-@dataclass
-class Waveguide(Pattern):
-    """Waveguide, the core photonic structure for guiding light.
-
-    A waveguide is a patterned slab of core material that is capable of guiding light. Here, we define a general
-    waveguide class which can be tapered or optionally consist of recursively defined waveguides, i.e. via
-    :code:`subtract_waveguide`, that enable the definition of complex adiabatic coupling and perturbation strategies.
-    This enables the :code:`Waveguide` class to be used in a variety of contexts including multimode interference.
-
-    Attributes:
-        extent: Tuple of waveguide width, length at the input of the waveguide path. Note that the taper
-            can extend to be wider than the original extent width.
-        taper: A :code:`TaperSpec` or list of :code:`TaperSpec`'s that sequentially taper the waveguide width
-            according to a :code:`Path.polynomial_taper` specification.
-        subtract_waveguide: A waveguide to subtract from the current waveguide. This is recursively defined, allowing
-            for the definition of highly complex waveguiding structures.
-        symmetric: Whether to symmetrically apply the taper params. For example, if a :code:`Waveguide`
-            were to be tapered by specifying :code:`taper_params` and `taper_ls`, the :code:`symmetric == True`
-            case would result in an inverted taper back to the original waveguide width. This is common in
-            certain applications such as crossings and phase shifters, thus it is set to :code:`True` by default,
-            though there are some devices such as waveguide terminations and escalators where such behavior is
-            not required.
-    """
-    extent: Float2
-    taper: Union[TaperSpec, List[TaperSpec]] = Field(default_factory=list)
-    subtract_waveguide: Optional["Waveguide"] = None
-    symmetric: bool = True
-
-    def __post_init_post_parse__(self):
-        waveguide = GdspyPath(self.extent[0])
-        self.taper = [self.taper] if isinstance(self.taper, TaperSpec) \
-            else self.taper
-        taper_l = np.sum([t.length for t in self.taper])
-        for taper in self.taper:
-            waveguide.polynomial_taper(taper, taper.num_evaluations)
-        if self.symmetric:
-            if self.extent[1] < 2 * taper_l:
-                raise ValueError(
-                    f'Require waveguide_extent[1] >= 2 * taper_l but got {self.extent[1]} <= {2 * taper_l}')
-            if self.extent[1] != 2 * taper_l:
-                waveguide.segment(self.extent[1] - 2 * taper_l)
-            for taper in reversed(self.taper):
-                waveguide.polynomial_taper(taper, taper.num_evaluations, inverted=True)
-        else:
-            if not self.extent[1] >= taper_l:
-                raise ValueError(f'Require length >= taper_l but got {self.extent[1]} < {taper_l}')
-            waveguide.segment(self.extent[1] - taper_l)
-        self.final_width = waveguide.w
-        waveguide = Pattern(waveguide)
-        if self.subtract_waveguide is not None:
-            if self.subtract_waveguide.size[1] >= waveguide.size[1]:
-                raise ValueError(f'Require the y extent of this waveguide to be greater than that of '
-                                 f'`subtract_waveguide`, but got {waveguide.size[1]} <= {self.subtract_waveguide.size[1]}')
-            waveguide = Pattern(waveguide.shapely_union() - self.subtract_waveguide.shapely_union())
-        super(Waveguide, self).__init__(waveguide)
-        self.port['a0'] = Port(0, 0, -180, w=self.extent[0])
-        self.port['b0'] = Port(self.size[0], 0, w=self.final_width)
-
-    @property
-    def wg_path(self) -> Pattern:
-        return self
-
-
-Waveguide.__pydantic_model__.update_forward_refs()
 
 
 @fix_dataclass_init_docs
@@ -102,7 +32,7 @@ class DC(Pattern):
             region is specified, which may be useful for broadband coupling.
         gap_w: Gap between the waveguides in the interaction region.
         interaction_l: Interaction length for the interaction region.
-        coupling_waveguide: An optional coupling waveguide to replace
+        coupler_waveguide_w: Coupling waveguide width
         end_bend_extent: If specified, places an additional end bend
         use_radius: use radius to define bends
     """
@@ -114,31 +44,23 @@ class DC(Pattern):
     interaction_l: float
     end_l: float = 0
     coupler_waveguide_w: Optional[float] = None
-    coupling_waveguide: Optional[Waveguide] = None
     use_radius: bool = False
 
     def __post_init_post_parse__(self):
         self.coupler_waveguide_w = self.waveguide_w if self.coupler_waveguide_w is None else self.coupler_waveguide_w
-        bend_extent = (self.bend_l, (self.interport_distance - self.gap_w - self.coupler_waveguide_w) / 2,
-                       self.coupler_waveguide_w)
-
-        lower_path = AnnotatedPath(self.waveguide_w).dc(bend_extent=bend_extent, interaction_l=self.interaction_l,
-                                                        end_l=self.end_l, use_radius=self.use_radius)
-        upper_path = AnnotatedPath(self.waveguide_w).dc(bend_extent=bend_extent, interaction_l=self.interaction_l,
-                                                        end_l=self.end_l, inverted=True, use_radius=self.use_radius)
+        dx, dy, w = (self.bend_l, (self.interport_distance - self.gap_w - self.coupler_waveguide_w) / 2,
+                     self.coupler_waveguide_w)
+        lower_path = Path().bezier_dc(self.waveguide_w, dx, dy, self.interaction_l)
+        upper_path = Path().bezier_dc(self.waveguide_w, dx, -dy, self.interaction_l)
         upper_path.translate(dx=0, dy=self.interport_distance)
         super(DC, self).__init__(lower_path, upper_path)
-        if self.coupling_waveguide is not None:
-            self.replace(self.coupling_waveguide)
         self.lower_path, self.upper_path = lower_path, upper_path
         self.port['a0'] = Port(0, 0, -180, w=self.waveguide_w)
         self.port['a1'] = Port(0, self.interport_distance, -180, w=self.waveguide_w)
         self.port['b0'] = Port(self.size[0], 0, w=self.waveguide_w)
         self.port['b1'] = Port(self.size[0], self.interport_distance, w=self.waveguide_w)
-        self.lower_path.port = {'a0': self.port['a0'], 'b0': self.port['b0']}
-        self.lower_path.wg_path = self.lower_path
-        self.upper_path.port = {'a0': self.port['a1'], 'b0': self.port['b1']}
-        self.upper_path.wg_path = self.upper_path
+        self.lower_path.port = {'a0': self.port['a0'].copy, 'b0': self.port['b0'].copy}
+        self.upper_path.port = {'a0': self.port['a1'].copy, 'b0': self.port['b1'].copy}
         self.reference_patterns.extend([self.lower_path, upper_path])
 
     @property
@@ -151,7 +73,7 @@ class DC(Pattern):
 
     @property
     def path_array(self):
-        return np.array([self.polys[:3], self.polys[3:]])
+        return np.array([self.polygons[:3], self.polygons[3:]])
 
 
 @fix_dataclass_init_docs
@@ -266,7 +188,7 @@ class Cross(Pattern):
         waveguide: waveguide to form the crossing (used to implement tapering)
     """
 
-    waveguide: Waveguide
+    waveguide: Path
 
     def __post_init_post_parse__(self):
         horizontal = self.waveguide.align()
@@ -377,8 +299,8 @@ class WaveguideDevice(Device):
             :code:`ridge_waveguide`.
         name: The device name.
     """
-    ridge_waveguide: Waveguide
-    slab_waveguide: Waveguide
+    ridge_waveguide: Path
+    slab_waveguide: Path
     ridge: str = CommonLayer.RIDGE_SI
     rib: str = CommonLayer.RIB_SI
     name: str = "rib_wg"
@@ -407,7 +329,7 @@ class StraightGrating(Device):
 
     """
     extent: Float2
-    waveguide: Waveguide
+    waveguide: Path
     pitch: float
     duty_cycle: float = 0.5
     rib_grow: float = 0
@@ -445,7 +367,7 @@ class FocusingGrating(Device):
     """
     radius: float
     angle: float
-    waveguide: Waveguide
+    waveguide: Path
     pitch: float
     duty_cycle: float = 0.5
     grating_frac: float = 1
@@ -491,8 +413,8 @@ class TapDC(Pattern):
     grating: Union[StraightGrating, FocusingGrating]
 
     def __post_init_post_parse__(self):
-        in_grating = self.grating_pad.copy.to(self.dc.port['b1'])
-        out_grating = self.grating_pad.copy.to(self.dc.port['a1'])
+        in_grating = self.grating_pad.copy.put(self.dc.port['b1'])
+        out_grating = self.grating_pad.copy.put(self.dc.port['a1'])
         super(TapDC, self).__init__(self.dc, in_grating, out_grating)
         self.port['a0'] = self.dc.port['a0']
         self.port['b0'] = self.dc.port['b0']
