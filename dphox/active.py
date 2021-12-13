@@ -12,6 +12,7 @@ from .foundry import CommonLayer
 from .passive import DC, WaveguideDevice, TapDC
 from .pattern import Box, MEMSFlexure, Pattern, Port
 from .path import Path
+from .transform import AffineTransform, GDSTransform
 from .typing import List, Optional, Union
 from .utils import fix_dataclass_init_docs
 
@@ -186,16 +187,16 @@ class GndAnchorWaveguide(Device):
             self.name, pattern_to_layer + dopes + vias + self.rib_waveguide.pattern_to_layer
         )
         self.port = {
-            'e0': gnd_pads[0].port['e'],
-            'e1': gnd_pads[1].port['e'],
-            'w0': gnd_pads[0].port['w'],
-            'w1': gnd_pads[1].port['w'],
-            'n0': gnd_pads[0].port['n'],
-            'n1': gnd_pads[1].port['n'],
-            's0': gnd_pads[0].port['s'],
-            's1': gnd_pads[1].port['s'],
-            'a0': self.rib_waveguide.port['a0'],
-            'b0': self.rib_waveguide.port['b0']
+            'e0': gnd_pads[0].port['e'].copy,
+            'e1': gnd_pads[1].port['e'].copy,
+            'w0': gnd_pads[0].port['w'].copy,
+            'w1': gnd_pads[1].port['w'].copy,
+            'n0': gnd_pads[0].port['n'].copy,
+            'n1': gnd_pads[1].port['n'].copy,
+            's0': gnd_pads[0].port['s'].copy,
+            's1': gnd_pads[1].port['s'].copy,
+            'a0': self.rib_waveguide.port['a0'].copy,
+            'b0': self.rib_waveguide.port['b0'].copy
         }
 
 
@@ -407,6 +408,9 @@ class MZI(Device):
         self.port = port
         self.interport_distance = self.init_coupler.interport_distance
         self.waveguide_w = self.coupler.waveguide_w
+        self.input_length = self.top_input.port['b0'].x - self.top_input.port['a0'].x
+        self.arm_length = self.top_arm.port['b0'].x - self.top_arm.port['a0'].x
+        self.full_length = self.port['b0'].x - self.port['a0'].x
 
     def path(self, flip: bool = False):
         first = self.init_coupler.lower_path.copy.reflect() if flip else self.init_coupler.lower_path
@@ -443,49 +447,81 @@ class LocalMesh(Device):
         num_straight = (n - 1) - np.hstack([np.arange(1, n), np.arange(n - 2, 0, -1)]) - 1 if triangular \
             else np.tile((0, 1), n // 2)[:n]
         n_layers = 2 * n - 3 if triangular else n
-        ports = [Port(0, i * mzi.interport_distance) for i in range(n)]
 
-        paths = []
+        self.upper_path = mzi.path(flip=False)
+        self.lower_path = mzi.path(flip=True)
+        self.mzi_out = mzi.bottom_input
+        self.upper_path.name = 'upper_mzi_path'
+        self.lower_path.name = 'lower_mzi_path'
+        self.mzi_out.name = 'mzi_out'
+
+        self.upper_transforms = []
+        self.lower_transforms = []
+        self.out_transforms = []
+        self.flip_array = np.zeros((n, n_layers))
         for idx in range(n):  # waveguides
-            cols = []
             for layer in range(n_layers):
                 flip = idx == n - 1 or (idx - layer % 2 < n and idx > num_straight[layer]) and (idx + layer) % 2
-                path = mzi.copy.path(flip)
-                cols.append(path)
-            cols.append(mzi.bottom_arm.copy)
-            paths.append(MultilayerPath(self.mzi.waveguide_w, cols, self.mzi.ridge).put(ports[idx], 'a0'))
+                if flip:
+                    self.lower_transforms.append((layer * mzi.full_length, idx * mzi.interport_distance))
+                    self.flip_array[idx, layer] = 1
+                else:
+                    self.upper_transforms.append((layer * mzi.full_length, idx * mzi.interport_distance))
+            self.out_transforms.append((n_layers * mzi.full_length + mzi.input_length, idx * mzi.interport_distance))
+        self.upper_path.set_parent_transform(np.array(self.upper_transforms))
+        self.lower_path.set_parent_transform(np.array(self.lower_transforms))
+        self.mzi_out.set_parent_transform(np.array(self.out_transforms))
 
-        pattern_to_layer = sum([path.pattern_to_layer for path in paths], [])
-        super(LocalMesh, self).__init__(self.name, pattern_to_layer)
+        super(LocalMesh, self).__init__(self.name, children=[self.upper_path, self.lower_path, self.mzi_out])
         self.port = {
-            **{f'a{i}': paths[i].port['a0'] for i in range(n)},
-            **{f'b{i}': paths[i].port['b0'] for i in range(n)}
+            **{f'a{i}': Port(0, i * mzi.interport_distance, 180, mzi.waveguide_w) for i in range(n)},
+            **{f'b{i}': Port(n_layers * mzi.full_length + mzi.input_length,
+                             i * mzi.interport_distance, 0, mzi.waveguide_w) for i in range(n)}
         }
         self.interport_distance = mzi.interport_distance
         self.waveguide_w = self.mzi.waveguide_w
-        # number of straight waveguide in the column
-        self.num_straight = num_straight
-        self.paths = paths
-        self.num_taps = 2 * n_layers + 1
         self.n_layers = n_layers
 
     @property
     def path_array(self) -> np.ndarray:
         """Path array, which is useful for plotting and demo purposes.
 
+        This method requires transforming only the polygons in the silicon layer.
+
         Returns:
-            A numpy array consisting of polygons (note: NOT numbers), which works for either the
-            path-matched triangular mesh or the rectangular mesh (which is inherently path matched).
+            A numpy array consisting of polygons (note: NOT numbers)
         """
 
-        num_polys_per_row = len(self.layer_to_polys[self.mzi.ridge]) // self.n
+        geoms = []
+
+        lower_polys = self.lower_path.full_layer_to_polys[self.mzi.ridge]
+        upper_polys = self.upper_path.full_layer_to_polys[self.mzi.ridge]
+        out_polys = self.mzi_out.full_layer_to_polys[self.mzi.ridge]
+
+        transformed_lower_polys = GDSTransform.from_array(np.array(self.lower_transforms))[0].transform_polygons(lower_polys)
+        transformed_upper_polys = GDSTransform.from_array(np.array(self.upper_transforms))[0].transform_polygons(upper_polys)
+        transformed_out_polys = GDSTransform.from_array(np.array(self.out_transforms))[0].transform_polygons(out_polys)
+
+        idx_upper = idx_lower = idx_out = 0
+        for idx in range(self.n):
+            path = []
+            for layer in range(self.n_layers):
+                if self.flip_array[idx, layer] == 1:
+                    path.extend([p[idx_lower] for p in transformed_lower_polys])
+                    idx_lower += 1
+                else:
+                    path.extend([p[idx_upper] for p in transformed_upper_polys])
+                    idx_upper += 1
+            path.extend([p[idx_out] for p in transformed_out_polys])
+            idx_out += 1
+            geoms.append(path)
+
+        # TODO: this is a temporary hack to slice the path for the simplest mesh
         sizes = [0, 2] + [4] * (2 * self.n_layers - 1) + [3]
         slices = np.cumsum(sizes, dtype=int)
-        geoms = self.layer_to_polys[self.mzi.ridge]
-        return np.array(
-            [[geoms[num_polys_per_row * i + slices[s]:num_polys_per_row * i + slices[s + 1]]
-              for s in range(len(slices) - 1)] for i in range(self.n)]
-        )
+
+        return np.array([[geoms[i][slices[s]:slices[s + 1]] for s in range(len(slices) - 1)] for i in range(self.n)],
+                        dtype=object)
 
     def phase_shifter_array(self, ps_layer: str):
         """Phase shifter array, which is useful for plotting and demo purposes.

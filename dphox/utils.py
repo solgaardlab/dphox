@@ -3,9 +3,10 @@ from typing import Callable, Tuple
 import numpy as np
 from shapely.geometry import LineString, MultiPolygon, Polygon
 from shapely.ops import split
-from scipy.special import fresnel
 
-from .typing import Union, Optional, Float2
+from pydantic.dataclasses import dataclass
+
+from .typing import Union, Optional, Float2, List
 
 MAX_GDS_POINTS = 8096
 
@@ -64,6 +65,8 @@ def split_holes(geom: Union[Polygon, MultiPolygon], along_y: bool = True) -> Mul
     polys = []
     if isinstance(geom, Polygon):
         geom = MultiPolygon([geom])
+    elif isinstance(geom, np.ndarray):
+        geom = MultiPolygon([Polygon(geom)])
     for geom_poly in geom.geoms:
         if len(geom_poly.interiors):
             c = geom_poly.interiors[0].centroid
@@ -83,9 +86,9 @@ def split_max_points(geom: Union[Polygon, MultiPolygon], max_num_points: int = M
     just return the input geometry :code:`geom`. Otherwise, recursively run the algorithm on the split geometries.
 
     Args:
-        geom: Geometry that potentially has holes
-        max_num_points:
-        along_y: Split the geometry along y
+        geom: Geometry that potentially has holes.
+        max_num_points: Maximum number of points.
+        along_y: Split the geometry along y.
 
     Returns:
         MultiPolygon representing the fractured geometry.
@@ -107,95 +110,24 @@ def split_max_points(geom: Union[Polygon, MultiPolygon], max_num_points: int = M
     return MultiPolygon(polys)
 
 
-def parametric_fn(path: Union[float, Callable],
-                  width: Union[Callable, float, Tuple[float, float]],
-                  num_evaluations: int = 99, max_num_points: int = MAX_GDS_POINTS,
-                  decimal_places: int = 5):
-    u = np.linspace(0, 1, num_evaluations)[:, np.newaxis]
-    if isinstance(path, float) or isinstance(path, int):
-        path = np.hstack([u * path, np.zeros_like(u)])
-        path_diff = np.hstack([np.ones_like(u) / num_evaluations * path, np.zeros_like(u)]).T
-    else:
-        path = path(u)
-        if isinstance(path, tuple):
-            path, path_diff = path
-            path_diff = path_diff.T
-        else:
-            path_diff = np.diff(path, axis=0)
-            path_diff = np.vstack((path_diff[0], path_diff))
-            path_diff = path_diff.T
+def bounds(polygons: List[np.ndarray]):
+    """Bounding box of the form :code:`(minx, maxx, miny, maxy)`
 
-    widths = width
-    if not isinstance(width, float) and not isinstance(width, int):
-        widths = taper(width)(u) if isinstance(width, tuple) else width(u)
+    Returns:
+        Bounding box tuple.
 
-    angles = np.arctan2(path_diff[1], path_diff[0])
-    width_translation = np.vstack((-np.sin(angles) * widths, np.cos(angles) * widths)).T / 2
-    top_path = np.around(path + width_translation, decimal_places)
-    bottom_path = np.around(path - width_translation, decimal_places)
-
-    back_port = LineString([bottom_path[-1], top_path[-1]])
-    front_port = LineString([top_path[0], bottom_path[0]])
-
-    # clean path fracture
-    num_splitters = num_evaluations * 2 // max_num_points
-    splitters = [LineString([top_path[(i + 1) * max_num_points // 2], bottom_path[(i + 1) * max_num_points // 2]])
-                 for i in range(num_splitters)]
-    polygon = Polygon(np.vstack((top_path, bottom_path[::-1])))
-    polys = []
-    for splitter in splitters:
-        geoms = split(polygon, splitter).geoms
-        poly, polygon = geoms[0], geoms[1]
-        polys.append(poly)
-    polys.append(polygon)
-    return MultiPolygon(polys), back_port, front_port
+    """
+    all_points = np.hstack(polygons)
+    return np.min(all_points[0]), np.max(all_points[0]), np.min(all_points[1]), np.max(all_points[1])
 
 
-def bezier_sbend_fn(bend_l, bend_h, inverted=False):
-    pole_1 = np.asarray((bend_l / 2, 0))
-    pole_2 = np.asarray((bend_l / 2, (-1) ** inverted * bend_h))
-    pole_3 = np.asarray((bend_l, (-1) ** inverted * bend_h))
-
-    def _sbend(t: np.ndarray):
-        path = 3 * (1 - t) ** 2 * t * pole_1 + 3 * (1 - t) * t ** 2 * pole_2 + t ** 3 * pole_3
-        derivative = 3 * (1 - t) ** 2 * pole_1 + 6 * (1 - t) * t * (pole_2 - pole_1) + 3 * t ** 2 * (pole_3 - pole_2)
-        return path, derivative
-
-    return _sbend
+def linear_taper(init_w: float, change_w: float):
+    return [init_w, change_w]
 
 
-def taper(taper_params: Union[np.ndarray, Tuple[float]]):
-    poly_exp = np.arange(len(taper_params), dtype=float)
-    return lambda u: np.sum(taper_params * u ** poly_exp, axis=1)
+def quad_taper(init_w: float, change_w: float):
+    return [init_w, 2 * change_w, -1 * change_w]
 
 
-def euler_bend_fn(radius: float, angle: float = 90):
-    angle = angle / 180 * np.pi
-
-    def _bend(t: np.ndarray):
-        z = np.sqrt(angle * t)
-        y, x = fresnel(z / np.sqrt(np.pi / 2))
-        return radius * np.hstack((x, y)), radius * np.hstack((y, -x))
-
-    return _bend
-
-
-def circular_bend_fn(radius: float, angle: float = 90):
-    angle = angle / 180 * np.pi
-
-    def _bend(t: np.ndarray):
-        x = radius * np.sin(angle * t)
-        y = radius * (1 - np.cos(angle * t))
-        return np.hstack((x, y)), radius * np.hstack((np.cos(angle * t), np.sin(angle * t)))
-
-    return _bend
-
-
-def spiral_fn(rotations: int, scale: float = 5, separation_scale: float = 1):
-    def _spiral(t: np.ndarray):
-        theta = t * rotations * np.pi + 2 * np.pi
-        radius = (theta - 2 * np.pi) * separation_scale / scale + 2 * np.pi
-        x, y = radius * np.cos(theta), radius * np.sin(theta)
-        return scale / np.pi * np.hstack((x, y)), scale / np.pi * np.hstack((y, -x))
-
-    return _spiral
+def cubic_taper(init_w: float, change_w: float):
+    return [init_w, 0., 3 * change_w, -2 * change_w]

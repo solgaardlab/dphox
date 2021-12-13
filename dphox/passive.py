@@ -5,7 +5,7 @@ from shapely.geometry import LinearRing, MultiPolygon, Point
 from .device import Device
 from .foundry import CommonLayer
 from .path import Path
-from .pattern import Box, Ellipse, GdspyPath, Pattern, Port, Sector
+from .pattern import Box, Ellipse, Pattern, Port, Sector
 from .typing import Float2, Int2, Optional, Union
 from .utils import fix_dataclass_init_docs
 

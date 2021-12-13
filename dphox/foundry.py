@@ -192,7 +192,7 @@ class Foundry:
                 return step.mat.color
 
 
-def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_device: Optional["Scene"] = None,
+def fabricate(layer_to_geom: Dict[str, List[np.ndarray]], foundry: Foundry, init_device: Optional["Scene"] = None,
               exclude_layer: Optional[List[CommonLayer]] = None) -> "Scene":
     """Fabricate a device based on a layer-to-geometry dict, :code:`Foundry`, and initial device (type :code:`Scene`).
 
@@ -215,7 +215,7 @@ def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_dev
         raise ImportError('Trimesh or Triangle library not imported.')
     device = Scene() if init_device is None else init_device
     prev_mat: Optional[Material] = None
-    bound_list = np.array([p.bounds for _, p in layer_to_geom.items()]).T
+    bound_list = np.array([p for _, p in layer_to_geom.items()]).T
     xy_extent = np.min(bound_list[0]), np.min(bound_list[1]), np.max(bound_list[2]), np.max(bound_list[3])
     clad_geometry = box(*xy_extent)
     mesh = extrude_polygon(clad_geometry, height=foundry.height)
@@ -233,10 +233,10 @@ def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_dev
             continue
         elif layer in layer_to_geom:
             # only silicon (rib/ridge) and metal (via, pad, multilevel) generally have multiple layers
-            geom = layer_to_geom[layer]
+            geom = MultiPolygon(layer_to_geom[layer])
             mesh_name = f"{step.mat.name}_{layer}" if step.mat.name in {SILICON.name, ALUMINUM.name} else layer
             if step.process_op == ProcessOp.GROW:
-                mesh = _shapely_to_mesh_from_step(layer_to_geom[layer], meshes, step)
+                mesh = _shapely_to_mesh_from_step(geom, meshes, step)
                 device.add_geometry(mesh.apply_translation((0, 0, dz)), geom_name=mesh_name)
             elif step.process_op == ProcessOp.DRI_ETCH:
                 # Directly etch device

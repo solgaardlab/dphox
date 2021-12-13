@@ -52,7 +52,11 @@ class AffineTransform:
     def __init__(self, transform: Union[np.ndarray, Iterable[np.ndarray]]):
         self.transform = transform
         if isinstance(self.transform, list) or isinstance(self.transform, tuple):
-            self.transform = np.linalg.multi_dot(self.transform)
+            self.transform = np.linalg.multi_dot(self.transform[::-1])
+
+    @property
+    def ndim(self):
+        return self.transform.ndim
 
     def transform_points(self, points: np.ndarray):
         return self.transform[..., :2, :] @ np.vstack((points, np.ones(points.shape[1])))
@@ -77,7 +81,8 @@ class GDSTransform(AffineTransform):
                                             translate2d((self.x, self.y))))
 
     @classmethod
-    def from_array(cls, transform: Optional[Union["GDSTransform", Tuple, np.ndarray]]):
+    def from_array(cls, transform: Optional[Union["GDSTransform", Tuple, np.ndarray]]) -> \
+            Tuple[AffineTransform, List["GDSTransform"]]:
         """Turns representations like :code:`(x, y, angle)` or a numpy array into convenient GDS/affine transforms.
 
         Args:
@@ -101,4 +106,3 @@ class GDSTransform(AffineTransform):
             raise TypeError("Expected transform to be of type GDSTransform, or tuple or ndarray representing GDS"
                             "transforms, but got a malformed input.")
         return AffineTransform(np.array([t.transform for t in gds_transforms])), gds_transforms
-

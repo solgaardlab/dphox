@@ -2,28 +2,28 @@ from .active import Clearout, GndAnchorWaveguide, LateralNemsPS, MEMSFlexure, Lo
     PullOutNemsActuator, ThermalPS, Via
 from .foundry import CommonLayer
 from .passive import DC, WaveguideDevice
-from .path import Path
-from .pattern import Box, TaperSpec
+from .path import Path, taper_waveguide, straight
+from .pattern import Box
+from .utils import cubic_taper
 
-ps = ThermalPS(Path().straight((10, 1)), ps_w=4, via=Via((0.4, 0.4), 0.1))
+ps = ThermalPS(straight((10, 1)), ps_w=4, via=Via((0.4, 0.4), 0.1))
 dc = DC(waveguide_w=1, interaction_l=2, bend_l=5, interport_distance=10, gap_w=0.5)
 mzi = MZI(dc, top_internal=[ps.copy], bottom_internal=[ps.copy], top_external=[ps.copy], bottom_external=[ps.copy])
+# mesh = LocalMesh(mzi, 6)
 
-
-# mesh = Mesh(mzi, 6)
 
 def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_height=12, via_extent=(0.5, 0.5),
-                    flexure_box_w=31, nominal_gap=0.201, waveguide_w=0.5,
-                    nanofin_w=0.2, taper_l=10, pull_in=False, trace_w=1):
-    psw = Waveguide(
-        extent=(waveguide_w + 2 * nominal_gap + 2 * nanofin_w, ps_l),
-        subtract_waveguide=Waveguide(
-            extent=(waveguide_w + 2 * nominal_gap, ps_l),  # gap = 0.7 - 0.5
-            taper=TaperSpec.cubic(taper_l, -0.2),
-            subtract_waveguide=Waveguide(
-                extent=(waveguide_w, ps_l),
-                taper=TaperSpec.cubic(taper_l, -0.2)
-            )
+                    ps_taper_change=-0.2, flexure_box_w=31, nominal_gap=0.201, waveguide_w=0.5,
+                    nanofin_w=0.2, taper_l=10, anchor_taper_l=1.4, pull_in=False, trace_w=1):
+
+    ps_w = waveguide_w + 2 * nominal_gap + 2 * nanofin_w
+    gap_w = waveguide_w + 2 * nominal_gap
+
+    psw = Path(
+        segments=[straight((ps_l, ps_w))],
+        subtract=Path(
+            segments=[taper_waveguide(cubic_taper(gap_w, ps_taper_change), ps_l, taper_l)],
+            subtract=taper_waveguide(cubic_taper(waveguide_w, ps_taper_change), ps_l, taper_l)
         )
     )
 
@@ -40,18 +40,15 @@ def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_height=12, via_extent=(0
 
     gaw = GndAnchorWaveguide(
         rib_waveguide=WaveguideDevice(
-            ridge_waveguide=Waveguide((waveguide_w + 2 * nominal_gap + 2 * nanofin_w + 0.1, anchor_length),
-                                      taper=TaperSpec.cubic(1.4, 1),
-                                      symmetric=False,
-                                      subtract_waveguide=Waveguide(
-                                          extent=(waveguide_w + 2 * nominal_gap, anchor_length),
-                                          taper=TaperSpec.cubic(1.4, 1),
-                                          symmetric=False,
-                                          subtract_waveguide=Waveguide(
-                                              (0.5, anchor_length),
-                                          ))),
-            slab_waveguide=Waveguide((0.5, anchor_length),
-                                     TaperSpec.cubic(1.5, 1))),
+            ridge_waveguide=Path(
+                segments=[taper_waveguide(cubic_taper(ps_w + 0.1, 1), 2 * anchor_length, anchor_taper_l, symmetric=False)],
+                subtract=Path(
+                    segments=[taper_waveguide(cubic_taper(gap_w, 1), 2 * anchor_length, anchor_taper_l, symmetric=False)],
+                    subtract=straight((2 * anchor_length, 0.5))
+                )
+            ),
+            slab_waveguide=taper_waveguide(cubic_taper(0.5, 1), anchor_length, anchor_taper_l + 0.1),
+        ),
         gnd_pad=Box((1, 3)),
         gnd_connector=Box((0.5, 2)),
         via=via_high,
@@ -88,4 +85,4 @@ def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_height=12, via_extent=(0
         trace_w=trace_w,
         clearout_pos_sep=10,
         clearout_gnd_sep=2
-    ).smooth_layer(0.19, CommonLayer.RIDGE_SI)
+    ) #.smooth_layer(0.19, CommonLayer.RIDGE_SI)

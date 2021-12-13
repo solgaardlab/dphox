@@ -17,8 +17,8 @@ from shapely.ops import unary_union
 from .foundry import CommonLayer, FABLESS, fabricate, Foundry
 from .pattern import Box, Pattern, Port
 from .transform import GDSTransform
-from .typing import Dict, Float2, Float3, Float4, Int2, List, Optional, Tuple, Union
-from .utils import fix_dataclass_init_docs, poly_points, PORT_LABEL_LAYER, PORT_LAYER, split_holes
+from .typing import Dict, Float2, Float4, Int2, List, Optional, Tuple, Union
+from .utils import fix_dataclass_init_docs, poly_points, PORT_LABEL_LAYER, PORT_LAYER
 
 try:
     import plotly.graph_objects as go
@@ -60,30 +60,32 @@ class Device:
             any previously defined :code:`Device`.
         pattern_to_layer: A list of tuples, each consisting of a :code:`Pattern` or :code:`PolygonLike` followed by
             a layer label (integer or string).
-        transform: The transforms
+        parent_transform: The transforms for this device when placed into a parent cell.
         children: The child devices in the hierarchy, which should be packaged along with all the relevant
-        transforms.
+            parent transforms.
     """
 
     def __init__(self, name: str, pattern_to_layer: List[Tuple[Pattern, Union[int, str]]] = None,
-                 transform: Optional[GDSTransformOrTuple] = None, children: Optional[List["Device"]] = None):
+                 children: Optional[List["Device"]] = None):
         self.name = name
         self.pattern_to_layer = [] if pattern_to_layer is None else pattern_to_layer
-        self.layer_to_polys, self.port = self._init_multilayer()
+        self.layer_to_polys = self._update_layers()
         self.children = [] if children is None else children
-        self.transform, self.gds_transforms = GDSTransform.from_array(transform)
+        self.parent_transform, self.parent_gds_transforms = GDSTransform.from_array(None)
+        self.port = {}
 
-    def _init_multilayer(self) -> Tuple[Dict[Union[int, str], List[np.ndarray]], Dict[str, Port]]:
+    def _update_layers(self) -> Dict[Union[int, str], List[np.ndarray]]:
         layer_to_polys = defaultdict(list)
         for pattern, layer in self.pattern_to_layer:
             layer_to_polys[layer].extend(pattern.polygons)
-        # TODO: temporary way to assign ports
-        port = dict(sum([list(pattern.port.items()) for pattern, _ in self.pattern_to_layer], []))
-        return layer_to_polys, port
+        return layer_to_polys
 
     def merge_patterns(self):
         self.pattern_to_layer = [(Pattern(*self.layer_to_polys[layer]), layer) for layer in self.layer_to_polys]
         return self
+
+    def set_parent_transform(self, parent_transform: Optional[GDSTransformOrTuple]):
+        self.parent_transform, self.parent_gds_transforms = GDSTransform.from_array(parent_transform)
 
     @classmethod
     def from_pattern(cls, pattern: Pattern, name: str, layer: str):
@@ -128,7 +130,7 @@ class Device:
 
     @property
     def bounds(self) -> Float4:
-        """Bounding box of the form (minx, maxx, miny, maxy)
+        """Bounding box of the form :code:`(minx, maxx, miny, maxy)`
 
         Returns:
             Bounding box tuple.
@@ -212,7 +214,7 @@ class Device:
         """
         for pattern, _ in self.pattern_to_layer:
             pattern.translate(dx, dy)
-        self.layer_to_polys, _ = self._init_multilayer()
+        self.layer_to_polys = self._update_layers()
         for name, port in self.port.items():
             self.port[name] = Port(port.x + dx, port.y + dy, port.a, port.w)
         return self
@@ -231,7 +233,7 @@ class Device:
         if angle % 360 != 0:  # to save time, only rotate if the angle is nonzero
             for pattern, _ in self.pattern_to_layer:
                 pattern.rotate(angle, origin)
-            self.layer_to_polys, _ = self._init_multilayer()
+            self.layer_to_polys = self._update_layers()
             port_to_point = {name: rotate(Point(*port.xy), angle, origin) for name, port in self.port.items()}
             self.port = {name: Port(float(point.x), float(point.y), np.mod(self.port[name].a + angle, 360))
                          for name, point in port_to_point.items()}
@@ -250,10 +252,28 @@ class Device:
         """
         for pattern, _ in self.pattern_to_layer:
             pattern.reflect(center, horiz)
-        self.layer_to_polys, _ = self._init_multilayer()
+        self.layer_to_polys = self._update_layers()
         return self
 
     def put(self, port: Port, from_port: Optional[str] = None):
+        """Lego-connect this device's :code:`from_port` (origin if not specified) to another device's port.
+
+        Args:
+            port: The port to which the device should be connected.
+            from_port: The port name corresponding to this device's port that should be connected to :code:`port`.
+
+        Returns:
+            This device, translated and rotated after connection.
+
+        """
+        if from_port is None:
+            return self.rotate(port.a).translate(port.x, port.y)
+        else:
+            return self.rotate(port.a - self.port[from_port].a + 180, origin=self.port[from_port].xy).translate(
+                port.x - self.port[from_port].x, port.y - self.port[from_port].y
+            )
+
+    def put_transform(self, port: Port, from_port: Optional[str] = None):
         """Lego-connect this device's :code:`from_port` (origin if not specified) to another device's port.
 
         Args:
@@ -335,7 +355,7 @@ class Device:
 
         """
         self.pattern_to_layer.append((pattern, layer))
-        self.layer_to_polys, self.port = self._init_multilayer()
+        self.layer_to_polys = self._update_layers()
 
     def plot(self, ax: Optional = None, foundry: Foundry = FABLESS,
              exclude_layer: Optional[List[CommonLayer]] = None, alpha: float = 0.5):
@@ -387,16 +407,34 @@ class Device:
             raise ImportError('Holoviews, Panel, and/or Bokeh not yet installed. Check your installation...')
         plots_to_overlay = []
         exclude_layer = [] if exclude_layer is None else exclude_layer
-        for layer, multipoly in self.layer_to_polys.items():
+        for layer, multipoly in self.full_layer_to_polys.items():
             if layer in exclude_layer:
                 continue
             color = foundry.color(layer)
             if color is None:
                 raise ValueError(f"The layer {layer} does not exist in the foundry stack, so could not find a color.")
-            plots_to_overlay.append(Pattern(*multipoly).hvplot(color, layer, alpha, self.bounds, plot_ports=False))
+            pattern = Pattern(*multipoly)
+            plots_to_overlay.append(pattern.hvplot(color, layer, alpha, pattern.bounds, plot_ports=False))
         for name, port in self.port.items():
             plots_to_overlay.append(port.hvplot(name))
         return hv.Overlay(plots_to_overlay).opts(show_legend=True)
+
+    @property
+    def full_layer_to_polys(self):
+        """Using breadth-first search of children, get all polygons in this device (useful for plotting purposes).
+
+        Returns:
+            The full layer to polygon representation of this device hierarchy (call this on-demand).
+
+        """
+        layer_to_polys = self.layer_to_polys.copy()
+        for child in self.children:
+            for layer, multipoly in child.full_layer_to_polys.items():  # this recursively goes down the child tre
+                polygons = child.parent_transform.transform_polygons(multipoly)
+                # polygons = polygons.reshape((-1, polygons.shape[-2:]))
+                layer_to_polys[layer].extend(sum([np.split(p, p.shape[0]) if p.ndim == 3 else [p] for p in polygons], []))
+                layer_to_polys[layer] = [np.squeeze(p) for p in layer_to_polys[layer]]
+        return layer_to_polys
 
     @property
     def size(self) -> Float2:
@@ -425,7 +463,11 @@ class Device:
             The device :code:`Scene` to visualize.
 
         """
-        return fabricate(self.layer_to_polys, foundry, exclude_layer=exclude_layer)
+        return fabricate(
+            layer_to_geom={layer: MultiPolygon(p) for layer, p in self.full_layer_to_polys.items()},
+            foundry=foundry,
+            exclude_layer=exclude_layer
+        )
 
     @classmethod
     def aggregate(cls, devices: List["Device"], name: Optional[str] = None):
@@ -456,7 +498,7 @@ class Device:
         for pattern, _layer in self.pattern_to_layer:
             if _layer == layer:
                 pattern.smooth(distance)
-        self.layer_to_polys, _ = self._init_multilayer()
+        self.layer_to_polys = self._update_layers()
         return self
 
 
@@ -511,7 +553,7 @@ class Device:
             elements += [
                 klamath.elements.Boundary(
                     layer=foundry.layer_to_gds_label[layer],
-                    xy=(poly / user_units_per_db_unit).astype(np.int32),
+                    xy=(poly.T / user_units_per_db_unit).astype(np.int32),
                     properties={}) for poly in geom
             ]
         for name, port in self.port.items():
@@ -538,11 +580,26 @@ class Device:
         Returns:
 
         """
-        klamath.library.write_struct(stream, self.name.encode('utf-8'),
-                                     self.gds_elements(foundry, user_units_per_db_unit))
+        elements = self.gds_elements(foundry, user_units_per_db_unit)
+        for child in self.children:
+            child.to_gds_stream(stream, foundry, user_units_per_db_unit)
+            for gds_transform in child.parent_gds_transforms:
+                xy = (np.array([[gds_transform.x, gds_transform.y]]) / user_units_per_db_unit).astype(np.int32)
+                elements.append(
+                    klamath.elements.Reference(
+                        struct_name=child.name.encode('utf-8'),
+                        xy=xy,
+                        angle_deg=gds_transform.angle,
+                        mag=gds_transform.mag,
+                        invert_y=False,
+                        colrow=None,
+                        properties={}
+                    )
+                )
+        klamath.library.write_struct(stream, self.name.encode('utf-8'), elements)
 
     def to_gds(self, filepath: str, foundry: Foundry = FABLESS, user_units_per_db_unit: float = 0.001,
-               meters_per_db_unit: float = 1e-9, transform: Optional[Union[GDSTransform, List[GDSTransform]]] = None):
+               meters_per_db_unit: float = 1e-9):
         """Use `klamath <https://mpxd.net/code/jan/klamath/src/branch/master/klamath>`_ to convert to GDS
         using a foundry object and a provided :code:`filepath`.
 
@@ -612,8 +669,10 @@ class Via(Device):
                          via_pattern.size[1] + 2 * bg), decimal_places=2).align(boundary), layer)
                    for layer, bg in zip(self.metal, self.boundary_grow)]
         super(Via, self).__init__(self.name, layers)
-        self.port['w'] = Port(self.bounds[0], 0, -180)
-        self.port['e'] = Port(self.bounds[2], 0)
-        self.port['s'] = Port(0, self.bounds[1], -90)
-        self.port['n'] = Port(0, self.bounds[3], 90)
-        self.port['c'] = Port(0, 0)
+        self.port = {
+            'w': Port(self.bounds[0], 0, -180),
+            'e': Port(self.bounds[2], 0),
+            's': Port(0, self.bounds[1], -90),
+            'n': Port(0, self.bounds[3], 90),
+            'c': Port(0, 0)
+        }

@@ -1,18 +1,16 @@
-import pickle
 from copy import deepcopy as copy
-from enum import Enum
 
 import gdspy as gy
 import matplotlib.pyplot as plt
 import numpy as np
-import shapely.wkt as swkt
 from descartes import PolygonPatch
 from pydantic.dataclasses import dataclass
 from shapely.affinity import rotate
 from shapely.geometry import box, GeometryCollection, LineString, Point, JOIN_STYLE, CAP_STYLE
 from shapely.ops import split, unary_union
 
-from .typing import Dict, Float2, Float3, Float4, List, MultiPolygon, Optional, Polygon, PolygonLike, Shape, Spacing, \
+from .port import Port
+from .typing import Dict, Float2, Float4, List, MultiPolygon, Optional, Polygon, PolygonLike, Shape, Spacing, \
     Union
 from .utils import fix_dataclass_init_docs, poly_points, split_holes
 from .transform import translate2d, reflect2d, skew2d, rotate2d, scale2d, AffineTransform
@@ -45,328 +43,6 @@ except ImportError:
     HOLOVIEWS_IMPORTED = False
 
 
-@fix_dataclass_init_docs
-@dataclass
-class TaperSpec:
-    """A taper specification for waveguide width changes (useful in phase shifting and coupling).
-
-    Attributes:
-        length: The taper length
-        params: The taper parameters for the polynomial taper.
-        num_evaluations: Number of evaluations for the Taper
-    """
-    params: List[float]
-    num_evaluations: int = 100
-
-    @classmethod
-    def linear(cls, change_w: float, num_evaluations: int = 100):
-        params = [0., change_w]
-        return cls(params, num_evaluations)
-
-    @classmethod
-    def cubic(cls, change_w: float, num_evaluations: int = 100):
-        params = [0., 0., 3 * change_w, -2 * change_w]
-        return cls(params, num_evaluations)
-
-
-@fix_dataclass_init_docs
-@dataclass
-class Port:
-    """Port used in components in DPhox
-
-    A port defines the center, width and angle/orientation of a port in a design. Note that ports always are considered
-    to have a width, and if a width is not provided the width is assumed to be 1 in the units of the file.
-
-    Attributes:
-        x: x position of the port.
-        y: y position of the port.
-        w: width of the port
-        a: Angle (orientation) of the port (in degrees).
-        z: z position of the port (optional, not specified in design, mostly used for simulation).
-        h: the height / thickness of the port (optional, not specified in design, mostly used for simulation).
-    """
-    x: float = 0
-    y: float = 0
-    a: float = 0
-    w: float = 1
-    z: float = 0
-    h: float = 0
-
-    def __post_init_post_parse__(self):
-        self.xy = np.array((self.x, self.y))
-        self.xya = np.array((self.x, self.y, self.a))
-        self.center = np.array((self.x, self.y, self.z))
-
-    @property
-    def size(self):
-        """Get the size of the :code:`Port` for simulation-related applications.
-
-        Returns:
-            The size of the Port in 3D space, i.e., (x, y, z).
-
-        """
-        if np.mod(self.a, 90) != 0:
-            raise ValueError(f"Require angle to be a multiple a multiple of 90 but got {self.a}")
-        return np.array((self.w, 0, self.h)) if np.mod(self.a, 180) != 0 else np.array((0, self.w, self.h))
-
-    @property
-    def shapely(self) -> Polygon:
-        """Return the :code:`Polygon` triangle corresponding to the :code:`Port`.
-
-        Based on center and orientation of the :code:`Port`, return the corresponding Shapely triangle.
-        This is effectively the inverse of the :code:`from_shapely` classmethod of this class.
-
-        Returns:
-            The shapely :code:`Polygon` triangle represented by the :code:`Port`.
-
-        """
-        dx, dy = np.sin(self.a * np.pi / 180) * self.w / 2, np.cos(self.a * np.pi / 180) * self.w / 2
-        return Polygon(
-            [(self.x - dx - dy * 0.75, self.y - dy - dx * 0.75), (self.x + dx - dy * 0.75, self.y + dy - dx * 0.75),
-             (self.x, self.y)])
-
-    @classmethod
-    def from_shapely(cls, triangle: Polygon, z: float = 0, h: float = 0) -> "Port":
-        """Initialize a :code:`Port` using a :code:`LineString` in Shapely.
-
-        The port can be unambiguously defined using a line. The Shapely :code:`Polygon` triangle defines the
-        center :math:`x, y` of the line as well as the width :math:`w` of the port. This is effectively the
-        inverse of the :code:`shapely` property of this class.
-
-        Args:
-            triangle: Triangle representing the port.
-            z: The z position of the port.
-            h: The height / thickness of the port.
-
-        Returns:
-            The :code:`Port` represented by the shapely :code:`Polygon` triangle.
-
-        """
-        if not isinstance(triangle, Polygon):
-            raise TypeError(f'Input line must be a shapely Polygon but got {type(triangle)}')
-
-        points = poly_points(triangle)
-        first, second, port_point, _ = points
-        x, y = port_point
-        c = (second[1] - first[1]) + (second[0] - first[0]) * 1j
-        a = np.angle(c) * 180 / np.pi
-        return cls(x, y, a, np.abs(c), z, h)
-
-    @classmethod
-    def from_linestring(cls, linestring: LineString, z: float = 0, h: float = 0) -> "Port":
-        """Initialize a :code:`Port` using a :code:`LineString` in Shapely.
-
-        The port can be unambiguously defined using a line. The Shapely :code:`Polygon` triangle defines the
-        center :math:`x, y` of the line as well as the width :math:`w` of the port. This is effectively the
-        inverse of the :code:`shapely` property of this class.
-
-        Args:
-            linestring: Shapely :code:`LineString` representing the port.
-            z: The z position of the port.
-            h: The height / thickness of the port.
-
-        Returns:
-            The :code:`Port` represented by the shapely :code:`Polygon` triangle.
-
-        """
-        if not isinstance(linestring, LineString):
-            raise TypeError(f'Input line must be a shapely LineString but got {type(linestring)}')
-
-        first, second = linestring.coords
-        c, = linestring.centroid.coords
-        d = (second[1] - first[1]) + (second[0] - first[0]) * 1j
-        a = np.angle(d) * 180 / np.pi
-        return cls(c[0], c[1], a, np.abs(d), z, h)
-
-    def normal(self, scale: float = 1):
-        """The vector normal to the port
-
-        Args:
-            scale: The magnitude of the normal vector
-
-        Returns:
-            Return the vector normal to the port
-
-        """
-        return np.array([np.cos(self.a * np.pi / 180), np.sin(self.a * np.pi / 180)]) * scale
-
-    def transformed_line(self, transform: np.ndarray):
-        dx, dy = np.sin(self.a * np.pi / 180) * self.w / 2, np.cos(self.a * np.pi / 180) * self.w / 2
-        x, y = self.xy
-        return np.array(transform[..., :2, :]) @ np.array([[x - dx, y - dy, 1], [x + dx, y + dy, 1]]).T
-
-    def transform(self, transform: np.ndarray):
-        line = self.transformed_line(transform).T
-        c = (line[0] + line[1]) / 2
-        d = (line[1, 1] - line[0, 1]) + (line[1, 0] - line[0, 0]) * 1j
-        self.a = np.angle(d) * 180 / np.pi
-        self.x = c[0]
-        self.y = c[1]
-        self.w = np.abs(d)
-        self.xy = np.array((self.x, self.y))
-        self.xya = np.array((self.x, self.y, self.a))
-        self.center = np.array((self.x, self.y, self.z))
-        return self
-
-    def hvplot(self, name: str = 'port'):
-        x, y = self.shapely.exterior.coords.xy
-        port_xy = self.xy - self.normal(self.w)
-        return hv.Polygons([{'x': x, 'y': y}]).opts(
-            data_aspect=1, frame_height=200, color='red', line_alpha=0) * hv.Text(*port_xy, name)
-
-    @property
-    def copy(self) -> "Port":
-        """Return a copy of this port for repeated use.
-
-        Returns:
-            A deep copy of this port.
-
-        """
-        return pickle.loads(pickle.dumps(self))
-
-
-class GdspyPath(gy.Path):
-    """This is just :code:`gdspy.Path` with some added sugar for tapering, bending, and more. The eventual plan is to
-    deprecate this class in favor of an independent Shapely-based path solution.
-
-    See Also:
-        https://gdspy.readthedocs.io/en/stable/gettingstarted.html#paths
-
-    """
-
-    def polynomial_taper(self, taper_spec: TaperSpec, layer: int = 0, inverted: bool = False):
-        """Polynomial taper for a GDSPY path.
-
-        Args:
-            length: Length of the poly taper
-            taper_params: Taper parameters
-            num_taper_evaluations: Number of evaluations for the taper (see gdspy documentation)
-            layer: Layer for the polynomial taper path
-            inverted: Invert the polynomial
-
-        Returns:
-            The current path with the polynomial taper added
-
-        """
-        curr_width = self.w * 2
-        taper_params = np.asarray(taper_spec.params)
-        length = taper_spec.length
-        if self.direction == '+x':
-            self.direction = 0
-        elif self.direction == '-x':
-            self.direction = np.pi
-        elif self.direction == '+y':
-            self.direction = np.pi / 2
-        elif self.direction == '-y':
-            self.direction = -np.pi / 2
-        self.parametric(lambda u: (np.cos(self.direction) * length * u, np.sin(self.direction) * length * u),
-                        lambda u: (np.cos(self.direction), np.sin(self.direction)),
-                        final_width=lambda u: curr_width - np.sum(taper_params) + np.sum(
-                            taper_params * (1 - u) ** np.arange(taper_params.size, dtype=float)) if inverted
-                        else curr_width + np.sum(taper_params * u ** np.arange(taper_params.size, dtype=float)),
-                        number_of_evaluations=taper_spec.num_evaluations, layer=layer)
-        return self
-
-    def sbend(self, bend_extent: Union[Float2, Float3], layer: int = 0, inverted: bool = False,
-              use_radius: bool = False):
-        """S bend using a bend dimension.
-
-        Args:
-            bend_extent: Bend dimension of the form :code:`(length, height, final_width)` or :code:`(length, height)`,
-                where the latter is provided when the sbend is supposed to maintain the same final width throughout.
-            layer: Layer for the sbend path.
-            inverted: Bend down instead of bending up.
-            use_radius: Use a radius/turn instead of bezier curve.
-
-        Returns:
-            The current path with the sbend added (see GDSPY chaining).
-
-        """
-        curr_width = 2 * self.w
-        final_width = bend_extent[-1] if len(bend_extent) == 3 else curr_width
-        if use_radius is False:
-            pole_1 = np.asarray((bend_extent[0] / 2, 0))
-            pole_2 = np.asarray((bend_extent[0] / 2, (-1) ** inverted * bend_extent[1]))
-            pole_3 = np.asarray((bend_extent[0], (-1) ** inverted * bend_extent[1]))
-            self.bezier([pole_1, pole_2, pole_3], final_width=final_width, layer=layer)
-        else:
-            halfway_final_width = (final_width + curr_width) / 2
-            if bend_extent[1] > 2 * bend_extent[0]:
-                angle = np.pi / 2 * (-1) ** inverted
-                self.turn(bend_extent[0], angle, final_width=halfway_final_width, number_of_points=199)
-                self.segment(bend_extent[1] - 2 * bend_extent[0])
-                self.turn(bend_extent[0], -angle, final_width=final_width, number_of_points=199)
-            else:
-                angle = np.arccos(1 - bend_extent[1] / 2 / bend_extent[0]) * (-1) ** inverted
-                self.turn(bend_extent[0], angle, final_width=halfway_final_width, number_of_points=199)
-                self.turn(bend_extent[0], -angle, final_width=final_width, number_of_points=199)
-        return self
-
-    def dc(self, bend_extent: Union[Float2, Float3], interaction_l: float, end_l: float = 0, layer: int = 0,
-           inverted: bool = False, end_bend_extent: Optional[Float3] = None, use_radius: bool = False):
-        """Directional coupler waveguide path (includes the top or bottom path, end stub lengths,
-        interaction length, additional end bends if necessary).
-
-        Args:
-            bend_extent: Bend dimension of the form :code:`(length, height, final_width)` or :code:`(length, height)`,
-                where the latter is provided when the sbend is supposed to maintain the same final width throughout.
-            interaction_l: Interaction length (length of the middle straight section of the directional coupler).
-            end_l: End length
-            layer: Layer of the directional coupler
-            inverted: Bend down instead of bending up.
-            end_bend_extent: Whether to include an additional end bend dimension for the directional coupler
-            use_radius: Use a radius/turn instead of bezier curve.
-
-        Returns:
-            The current path with the dc path added (see GDSPY chaining).
-
-        """
-        curr_width = self.w * 2
-        if end_bend_extent:
-            if end_bend_extent[-1] > 0:
-                self.segment(end_bend_extent[-1], layer=layer)
-            self.sbend(end_bend_extent[:2], layer, inverted, use_radius)
-        if end_l > 0:
-            self.segment(end_l, layer=layer)
-        self.sbend(bend_extent, layer, inverted, use_radius)
-        self.segment(interaction_l, layer=layer)
-        self.sbend((*bend_extent[:2], curr_width), layer, not inverted, use_radius)
-        if end_l > 0:
-            self.segment(end_l, layer=layer)
-        if end_bend_extent:
-            self.sbend(end_bend_extent[:2], layer, not inverted, use_radius)
-            if end_bend_extent[-1] > 0:
-                self.segment(end_bend_extent[-1], layer=layer)
-        return self
-
-    def trombone(self, height: float, radius: float):
-        """Height and radius
-
-        Args:
-            height: Height of the trombone structure.
-            radius: Radius of the trombone structure.
-
-        Returns:
-            The current path extended with trombone design.
-
-        """
-        self.turn(radius, 90, tolerance=0.001).segment(height)
-        self.turn(radius, -180, tolerance=0.001).segment(height).turn(radius, 90, tolerance=0.001)
-        return self
-
-    def to(self, port: Port):
-        """Connect the path to a port
-
-        Args:
-            port: Port.
-
-        Returns:
-            The current path extended to connect to the port
-
-        """
-        return self.sbend((port.x - self.x, port.y - self.y, port.w))
-
-
 class Pattern:
     """Pattern corresponding to a patterned layer of material that may be used in a layout.
 
@@ -382,7 +58,7 @@ class Pattern:
         decimal_places: decimal places for rounding (in case of tiny errors in polygons)
     """
 
-    def __init__(self, *patterns: Union["Pattern", GdspyPath, PolygonLike], decimal_places: int = 5):
+    def __init__(self, *patterns: Union["Pattern", PolygonLike], decimal_places: int = 6):
         """Initializer for the pattern class.
 
         Args:
@@ -397,6 +73,8 @@ class Pattern:
                 self.polygons.extend(pattern.polygons)
             elif isinstance(pattern, np.ndarray):
                 self.polygons.append(pattern)
+            # elif isinstance(pattern, list):
+            #     self.polygons.extend(pattern)
             elif isinstance(pattern, Polygon):
                 pattern = split_holes(pattern)
                 self.polygons.extend([poly_points(geom).T for geom in pattern.geoms])
@@ -406,7 +84,7 @@ class Pattern:
                 self.polygons.extend(pattern.get_polygons())
             elif isinstance(pattern, GeometryCollection):
                 self.polygons.extend([poly_points(geom).T for geom in split_holes(pattern).geoms])
-            elif isinstance(pattern, GdspyPath):
+            elif isinstance(pattern, gy.Path):
                 self.polygons.extend(pattern.polygons)
             else:
                 raise TypeError(f'Pattern does not accept type {type(pattern)}')
@@ -424,8 +102,7 @@ class Pattern:
 
     @property
     def shapely(self) -> MultiPolygon:
-        return swkt.loads(swkt.dumps(MultiPolygon([Polygon(p.T) for p in self.polygons]),
-                                     rounding_precision=self.decimal_places))
+        return MultiPolygon([Polygon(np.around(p.T, decimals=self.decimal_places)) for p in self.polygons])
 
     def shapely_union(self) -> MultiPolygon:
         pattern = unary_union(self.polys)
@@ -791,8 +468,7 @@ class Pattern:
             return self.rotate(port.a).translate(port.x, port.y)
         else:
             fp = self.port[from_port] if isinstance(from_port, str) else from_port
-            return self.rotate(port.a - self.port[from_port].a + 180, origin=fp.xy).translate(port.x - fp.x,
-                                                                                              port.y - fp.y)
+            return self.rotate(port.a - fp.a + 180, origin=fp.xy).translate(port.x - fp.x, port.y - fp.y)
 
     def hvplot(self, color: str = 'black', name: str = 'pattern', alpha: float = 0.5, bounds: Optional[Float4] = None,
                plot_ports: bool = True):
@@ -855,7 +531,7 @@ class Box(Pattern):
     """
 
     extent: Float2 = (1, 1)
-    decimal_places: int = 3
+    decimal_places: int = 6
 
     def __post_init_post_parse__(self):
         super(Box, self).__init__(box(-self.extent[0] / 2, -self.extent[1] / 2,
