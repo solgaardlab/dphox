@@ -1,20 +1,10 @@
 from enum import Enum
 
 import numpy as np
-from pydantic.dataclasses import dataclass
+from dataclasses import field, dataclass
 from shapely.geometry import box, MultiPolygon, Polygon
 
-TRIMESH_IMPORTED = True
-
-try:
-    import trimesh
-    import triangle
-    from trimesh.creation import extrude_polygon
-    from trimesh.scene import Scene
-except:
-    TRIMESH_IMPORTED = False
-
-from .typing import Dict, Float3, LayerLabel, List, Optional
+from .typing import Dict, Float3, LayerLabel, List, Optional, Callable
 from .utils import fix_dataclass_init_docs
 
 
@@ -56,6 +46,7 @@ ALCU = Material('alcu', color=(0.2, 0.4, 0))
 ALUMINA = Material('al2o3', 1.75, (0.2, 0, 0.2))
 HEATER = Material('tin', color=(0.7, 0.7, 0))  # (3.1477 + 5.8429 * 1j) ** 2,
 ETCH = Material('etch')
+DUMMY = Material('dummy', color=(0.7, 0.7, 0.7))
 
 
 class ProcessOp(str, Enum):
@@ -67,6 +58,7 @@ class ProcessOp(str, Enum):
         SAC_ETCH: sacrificial etch (only affects cladding material in a process)
         GROW: grow over the previously deposited layer
         DOPE: dopes the previously deposited layer
+        DUMMY: No process step associated with this
 
     """
     ISO_ETCH = 'iso_etch'
@@ -74,6 +66,7 @@ class ProcessOp(str, Enum):
     SAC_ETCH = 'sac_etch'
     GROW = 'grow'
     DOPE = 'dope'
+    DUMMY = 'dummy'
 
 
 class CommonLayer(str, Enum):
@@ -102,19 +95,24 @@ class CommonLayer(str, Enum):
         HEATER: Heater layer (usually titanium nitride).
         VIA_HEATER_2: Via metal connection from :code:`heater` to :code:`metal_2`.
         CLAD: Cladding layer (usually oxide).
-        CLEAROUT: Clearout layer for MEMS release process.
-
+        CLEAROUT: Clearout layer for a MEMS release process.
+        PHOTONIC_KEEPOUT: A layer specifying where photonics cannot be routed.
+        METAL_KEEPOUT: A layer specifying where metal cannot be routed.
+        BBOX: Layer for the bounding box of the design.
 
     """
     RIDGE_SI = 'ridge_si'
+    RIDGE_SI_2 = 'ridge_si_2'
     RIB_SI = 'rib_si'
+    RIDGE_SIN = 'ridge_sin'
+    RIDGE_SIN_2 = 'ridge_sin_2'
+    RIB_SIN = 'rib_sin'
     P_SI = 'p_si'
     N_SI = 'n_si'
     PP_SI = 'pp_si'
     NN_SI = 'nn_si'
     PPP_SI = 'pppdoped_si'
     NNN_SI = 'nnndoped_si'
-    RIDGE_SIN = 'ridge_sin'
     ALUMINA = 'alumina'
     POLY_SI_1 = 'poly_si_1'
     POLY_SI_2 = 'poly_si_2'
@@ -129,6 +127,10 @@ class CommonLayer(str, Enum):
     VIA_HEATER_2 = "via_heater_2"
     CLAD = "clad"
     CLEAROUT = "clearout"
+    PHOTONIC_KEEPOUT = "photonic_keepout"
+    METAL_KEEPOUT = "metal_keepout"
+    BBOX = "bbox"
+    TRENCH = "trench"
 
 
 @fix_dataclass_init_docs
@@ -164,16 +166,21 @@ class Foundry:
 
     Attributes:
         stack: List of process steps that when applied sequentially lead to a full foundry stack
+        height: Overall height of the foundry stack.
         cladding: The cladding material used by the foundry (usually OXIDE). This material will more-or-less
             cover the entire
+        other: A dictionary between other layers and layer labels (useful for loading PDK's)
+        port_fn: An optional callable that extracts a port dictionary for a given device / cell
 
     """
     stack: List[ProcessStep]
     height: float
     cladding: Material = None
+    port_layers: List[CommonLayer] = field(default_factory=list)
 
-    def __post_init_post_parse__(self):
+    def __post_init__(self):
         start_height = 0
+        self.port_fn = lambda d: {} if self.port_fn is None else self.port_fn
         for step in self.stack:
             step.start_height = start_height if step.start_height is None else step.start_height
             start_height = step.start_height + step.thickness if step.process_op == ProcessOp.GROW else step.start_height
@@ -184,7 +191,7 @@ class Foundry:
 
     @property
     def gds_label_to_layer(self):
-        return {step.gds_label: step.layer for step in self.stack}
+        return {label: layer for layer, label in self.layer_to_gds_label.items()}
 
     def color(self, layer: str):
         for step in self.stack:
@@ -192,7 +199,7 @@ class Foundry:
                 return step.mat.color
 
 
-def fabricate(layer_to_geom: Dict[str, List[np.ndarray]], foundry: Foundry, init_device: Optional["Scene"] = None,
+def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_device: Optional["Scene"] = None,
               exclude_layer: Optional[List[CommonLayer]] = None) -> "Scene":
     """Fabricate a device based on a layer-to-geometry dict, :code:`Foundry`, and initial device (type :code:`Scene`).
 
@@ -211,11 +218,26 @@ def fabricate(layer_to_geom: Dict[str, List[np.ndarray]], foundry: Foundry, init
         The device :code:`Scene` to visualize.
 
     """
-    if not TRIMESH_IMPORTED:
-        raise ImportError('Trimesh or Triangle library not imported.')
+
+    try:
+        import triangle
+    except ImportError:
+        raise ImportError("Fabrication requires the triangle module to be compiled with trimesh")
+    import trimesh
+    from trimesh.creation import extrude_polygon
+    from trimesh.scene import Scene
+
+    def _shapely_to_mesh_from_step(_geom: MultiPolygon, _meshes: List["trimesh.Trimesh"], _step: ProcessStep):
+        for _poly in _geom.geoms:
+            if _poly.area > 1e-8:
+                _meshes.append(extrude_polygon(_poly, height=_step.thickness))
+        _mesh = trimesh.util.concatenate(_meshes) if len(_meshes) > 0 else trimesh.Trimesh()
+        _mesh.visual.face_colors = _step.mat.color
+        return _mesh
+
     device = Scene() if init_device is None else init_device
     prev_mat: Optional[Material] = None
-    bound_list = np.array([p for _, p in layer_to_geom.items()]).T
+    bound_list = np.array([p.bounds for _, p in layer_to_geom.items()]).T
     xy_extent = np.min(bound_list[0]), np.min(bound_list[1]), np.max(bound_list[2]), np.max(bound_list[3])
     clad_geometry = box(*xy_extent)
     mesh = extrude_polygon(clad_geometry, height=foundry.height)
@@ -233,7 +255,7 @@ def fabricate(layer_to_geom: Dict[str, List[np.ndarray]], foundry: Foundry, init
             continue
         elif layer in layer_to_geom:
             # only silicon (rib/ridge) and metal (via, pad, multilevel) generally have multiple layers
-            geom = MultiPolygon(layer_to_geom[layer])
+            geom = layer_to_geom[layer]
             mesh_name = f"{step.mat.name}_{layer}" if step.mat.name in {SILICON.name, ALUMINUM.name} else layer
             if step.process_op == ProcessOp.GROW:
                 mesh = _shapely_to_mesh_from_step(geom, meshes, step)
@@ -247,7 +269,7 @@ def fabricate(layer_to_geom: Dict[str, List[np.ndarray]], foundry: Foundry, init
                 if prev_mat != SILICON:
                     raise ValueError("The previous material must be crystalline silicon for dopant implantation.")
                 geoms = []
-                for poly_si in prev_si_geom:
+                for poly_si in prev_si_geom.geoms:
                     for poly in geom:
                         mat = poly.intersection(poly_si)
                         if isinstance(mat, Polygon) or isinstance(mat, MultiPolygon):
@@ -265,7 +287,7 @@ def fabricate(layer_to_geom: Dict[str, List[np.ndarray]], foundry: Foundry, init
                 mesh.visual.face_colors = (*foundry.cladding.color, 0.5)
                 # raise NotImplementedError(f"Fabrication method not yet implemented for `{step.process_op.value}`")
                 # device.geometry['clad'] -= difference(device.geometry['clad'], mesh)
-            else:
+            elif not step.process_op == ProcessOp.DUMMY:
                 raise NotImplementedError(f"Fabrication method not yet implemented for `{step.process_op.value}`")
             if step.mat.name == SILICON.name:
                 prev_si_geom = geom
@@ -301,14 +323,10 @@ FABLESS = Foundry(
         ProcessStep(ProcessOp.GROW, 0.5, ALUMINUM, CommonLayer.VIA_HEATER_2, (505, 0)),
         # 3. Finally specify the clearout (needed for MEMS).
         ProcessStep(ProcessOp.SAC_ETCH, 4, ETCH, CommonLayer.CLEAROUT, (800, 0)),
+        ProcessStep(ProcessOp.DUMMY, 4, DUMMY, CommonLayer.TRENCH, (41, 0)),
+        ProcessStep(ProcessOp.DUMMY, 4, DUMMY, CommonLayer.PHOTONIC_KEEPOUT, (42, 0)),
+        ProcessStep(ProcessOp.DUMMY, 4, DUMMY, CommonLayer.METAL_KEEPOUT, (43, 0)),
+        ProcessStep(ProcessOp.DUMMY, 4, DUMMY, CommonLayer.BBOX, (44, 0)),
     ],
     height=5
 )
-
-
-def _shapely_to_mesh_from_step(geom: MultiPolygon, meshes: List["trimesh.Trimesh"], step: ProcessStep):
-    for poly in geom:
-        meshes.append(extrude_polygon(poly, height=step.thickness))
-    mesh = trimesh.util.concatenate(meshes)
-    mesh.visual.face_colors = step.mat.color
-    return mesh

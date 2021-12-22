@@ -75,7 +75,7 @@ html_static_path = ['_static']
 html_logo = "https://user-images.githubusercontent.com/7623867/134089718-b4de5f82-adfb-4b20-9b98-b230748a73f9.png"
 
 # Pydantic model settings
-autodoc_pydantic_model_show_json = True
+autodoc_pydantic_model_show_json = False
 autodoc_pydantic_settings_show_json = False
 
 

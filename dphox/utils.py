@@ -1,25 +1,23 @@
-from typing import Callable, Tuple
-
 import numpy as np
-from shapely.geometry import LineString, MultiPolygon, Polygon
+from shapely.geometry import GeometryCollection, LineString, MultiPolygon, Polygon
 from shapely.ops import split
 
-from pydantic.dataclasses import dataclass
-
-from .typing import Union, Optional, Float2, List
+from .typing import Float4, List, Optional, Union
 
 MAX_GDS_POINTS = 8096
+NUM_EVALUATIONS = 99
+DECIMALS = 6
 
 PORT_LAYER = 1
 PORT_LABEL_LAYER = 1002
 
 
-def poly_points(geom: Polygon, decimal_places: Optional[int] = None):
+def poly_points(geom: Polygon, decimals: Optional[int] = None):
     """Get the `exterior` points of a given polygon geometry
 
     Args:
         geom: Geometry from which to get exterior points
-        decimal_places: Number of decimal places to round the points
+        decimals: Number of decimal places to round the points
 
     Returns:
         The numpy array representing the points of the polygon.
@@ -29,7 +27,25 @@ def poly_points(geom: Polygon, decimal_places: Optional[int] = None):
     if len(coords) == 0:
         raise ValueError('There are no coordinates in this geometry.')
     points = np.array(coords.xy).T
-    return points if decimal_places is None else np.around(points, decimal_places)
+    return points if decimals is None else np.around(points, decimals)
+
+
+def linestring_points(geom: LineString, decimals: Optional[int] = None):
+    """Get the `exterior` points of a given polygon geometry
+
+    Args:
+        geom: Geometry from which to get exterior points
+        decimals: Number of decimal places to round the points
+
+    Returns:
+        The numpy array representing the points of the polygon.
+
+    """
+    coords = geom.coords
+    if len(coords) == 0:
+        raise ValueError('There are no coordinates in this geometry.')
+    points = np.array(coords.xy).T
+    return points if decimals is None else np.around(points, decimals)
 
 
 def fix_dataclass_init_docs(cls):
@@ -48,7 +64,8 @@ def fix_dataclass_init_docs(cls):
     return cls
 
 
-def split_holes(geom: Union[Polygon, MultiPolygon], along_y: bool = True) -> MultiPolygon:
+def split_holes(geom: Union[Polygon, MultiPolygon, GeometryCollection, np.ndarray],
+                along_y: bool = True) -> MultiPolygon:
     """Fracture a shapely geometry into polygon along x or y direction (depending on :code:`along_x`).
 
     If there are no holes, just return the input geometry :code:`geom`. Otherwise, recursively run the algorithm on the
@@ -67,8 +84,11 @@ def split_holes(geom: Union[Polygon, MultiPolygon], along_y: bool = True) -> Mul
         geom = MultiPolygon([geom])
     elif isinstance(geom, np.ndarray):
         geom = MultiPolygon([Polygon(geom)])
+    elif not isinstance(geom, MultiPolygon) and not isinstance(geom, GeometryCollection):
+        raise TypeError("The input geometry is not either a shapely Polygon, MultiPolygon or ndarray.")
     for geom_poly in geom.geoms:
-        if len(geom_poly.interiors):
+        holes = geom_poly.interiors
+        if holes:
             c = geom_poly.interiors[0].centroid
             minx, miny, maxx, maxy = geom_poly.bounds
             splitter = LineString([(c.x, miny), (c.x, maxy)]) if along_y else LineString([(minx, c.y), (maxx, c.y)])
@@ -79,7 +99,8 @@ def split_holes(geom: Union[Polygon, MultiPolygon], along_y: bool = True) -> Mul
     return MultiPolygon(polys)
 
 
-def split_max_points(geom: Union[Polygon, MultiPolygon], max_num_points: int = MAX_GDS_POINTS, along_y: bool = True):
+def split_max_points(geom: Union[Polygon, MultiPolygon, np.ndarray], max_num_points: int = MAX_GDS_POINTS,
+                     along_y: bool = True):
     """Fracture shapely geometry into polygons that possess a specified maximum number of points :code:`max_num_points`.
 
     If the number of points in yhe geometry is already less than or equal to :code:`max_num_points`,
@@ -97,6 +118,10 @@ def split_max_points(geom: Union[Polygon, MultiPolygon], max_num_points: int = M
     polys = []
     if isinstance(geom, Polygon):
         geom = MultiPolygon([geom])
+    elif isinstance(geom, np.ndarray):
+        geom = MultiPolygon([Polygon(geom)])
+    elif not isinstance(geom, MultiPolygon):
+        raise TypeError("The input geometry is not either a shapely Polygon, MultiPolygon or ndarray.")
 
     for geom_poly in geom:
         if poly_points(geom_poly).shape[0] > max_num_points:
@@ -110,24 +135,51 @@ def split_max_points(geom: Union[Polygon, MultiPolygon], max_num_points: int = M
     return MultiPolygon(polys)
 
 
-def bounds(polygons: List[np.ndarray]):
-    """Bounding box of the form :code:`(minx, maxx, miny, maxy)`
+def bounds(points: np.ndarray):
+    """Bounding box of points of the form :code:`(minx, miny, maxx, maxy)`
+
+    Args:
+        polygons: The ndarray polygon representation.
+        overall: Get the overall bounds rather than a list of bounds for each polygon
 
     Returns:
         Bounding box tuple.
 
     """
-    all_points = np.hstack(polygons)
-    return np.min(all_points[0]), np.max(all_points[0]), np.min(all_points[1]), np.max(all_points[1])
+    return np.array((np.min(points[0]), np.min(points[1]), np.max(points[0]), np.max(points[1])))
 
 
-def linear_taper(init_w: float, change_w: float):
-    return [init_w, change_w]
+def poly_bounds(polygons: List[np.ndarray], overall: bool = False):
+    """Bounding box of polygons of the form :code:`(minx, miny, maxx, maxy)`
+
+    Args:
+        polygons: The ndarray polygon representation.
+        overall: Get the overall bounds rather than a list of bounds for each polygon
+
+    Returns:
+        Bounding box tuple.
+
+    """
+
+    return bounds(np.hstack(polygons)) if overall else [bounds(p) for p in polygons]
 
 
-def quad_taper(init_w: float, change_w: float):
-    return [init_w, 2 * change_w, -1 * change_w]
+def min_aspect_bounds(b: Union[np.ndarray, Float4], min_aspect: float = 0.25):
+    """Minimum aspect ratio (needed for plotting)
 
+    We adjust the bounds of the smaller dimension to achieve the min aspect ratio if it is not already exceeded.
+    An aspect ratio of 0.25 indicates that one dimension cannot exceed 4 times the other.
 
-def cubic_taper(init_w: float, change_w: float):
-    return [init_w, 0., 3 * change_w, -2 * change_w]
+    Args:
+        b: bounds.
+        min_aspect: minimum aspect ratio.
+
+    Returns:
+        The new bounds.
+
+    """
+    b = np.array(b)
+    center = np.array((np.sum(b[::2]) / 2, np.sum(b[1::2]) / 2))
+    size = np.array((np.abs(b[2] - b[0]), np.abs(b[3] - b[1])))
+    dx = np.array((np.maximum(min_aspect * size[1], size[0]) / 2, np.maximum(size[1], min_aspect * size[0]) / 2))
+    return np.hstack((center - dx, center + dx))

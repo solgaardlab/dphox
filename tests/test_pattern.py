@@ -35,7 +35,7 @@ UNIT_BOX = Box()
     ],
 )
 def test_poly(pattern: Pattern, poly_list: List[np.ndarray]):
-    for i, poly in enumerate(pattern.polygons):
+    for i, poly in enumerate(pattern.geoms):
         np.testing.assert_allclose(poly.T, poly_list[i], atol=1e-9)
 
 

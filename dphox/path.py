@@ -1,420 +1,354 @@
-from pydantic import Field
-from pydantic.dataclasses import dataclass
-from shapely.ops import split
-from shapely.geometry import Polygon, MultiPolygon, LineString
-from scipy.special import fresnel
 import numpy as np
+from shapely.geometry import LineString, MultiLineString
 
-from .pattern import Box, Pattern, Port
-from .typing import Callable, Float2, List, Optional, Union, Tuple
-from .utils import fix_dataclass_init_docs, MAX_GDS_POINTS
+from .pattern import Pattern
+from .geometry import Geometry
+from .port import Port
+from .typing import CurveLike, CurveTuple, Float4, Iterable, List, Optional, PathWidth, Union
+from .utils import DECIMALS, linestring_points, MAX_GDS_POINTS, min_aspect_bounds
 
 
-def parametric(path: Union[float, Callable], width: Union[Callable, float, Tuple[float, float]],
-               num_evaluations: int = 99, max_num_points: int = MAX_GDS_POINTS, decimal_places: int = 5):
-    """Given :math:`t` parameter, this function defines
+class Curve(Geometry):
+    """A discrete curve consisting of points and tangents that used to define paths of varying widths.
+
+    Note:
+        In our definition of curve, we allow for multiple curve segments that are unconnected to each other.
+
+    Attributes:
+        curve: A function :math:`f(t) = (x(t), y(t))`, given :math:`t \\in [0, 1]`, or a length (float),
+            or a list of points, or a tuple of points and tangents.
+        num_evaluations: Number of evaluations to define :math:`f(t)` (number of points in the curve).
+    """
+
+    def __init__(self, *curves: Union[float, "Curve", CurveLike, List[CurveLike]]):
+        points, tangents = get_ndarray_curve(curves)
+        super().__init__(points, {}, [], tangents)
+        self.port = self.path_port()
+
+    def angles(self, full: bool = True):
+        """Calculate the angles for the tangents along the curve.
+
+        Args:
+            full: Whether to report the angles for the full coalesced curve.
+
+        Returns:
+            The angles of the tangents along the curve.
+
+        """
+
+        if full:
+            t = np.hstack(self.tangents)
+            return np.unwrap(np.arctan2(t[1], t[0]))
+        else:
+            return [np.unwrap(np.arctan2(t[1], t[0])) for t in self.tangents]
+
+    def total_length(self, full: bool = True):
+        """Calculate the total length at the end of each line segment of the curve.
+
+        Args:
+            full: Whether to report the lengths of the segments for the full coalesced curve.
+
+        Returns:
+            The lengths for the individual line segments of the curve.
+
+        """
+
+        if full:
+            return np.cumsum(self.lengths())
+        else:
+            return [np.cumsum(p) for p in self.lengths(full=False)]
+
+    def lengths(self, full: bool = True):
+        """Calculate the lengths of each line segment of the curve.
+
+        Args:
+            full: Whether to report the lengths of the segments for the full coalesced curve.
+
+        Returns:
+            The lengths for the individual line segments of the curve.
+
+        """
+
+        if full:
+            return np.linalg.norm(np.diff(self.points), axis=0)
+        else:
+            return [np.linalg.norm(np.diff(p), axis=0) for p in self.geoms]
+
+    @property
+    def pathlength(self):
+        return np.sum(self.lengths(full=True))
+
+    def curvature(self, full: bool = True, min_frac: float = 1e-3):
+        """Calculate the curvature vs length along the curve.
+
+        Args:
+            full: Whether to report the curvature vs length for the full coalesced curve.
+            min_frac: The minimum
+
+        Returns:
+            A tuple of the lengths and curvature along the length.
+
+        """
+        min_dist = min_frac * np.mean(self.lengths(full=True))
+        if full:
+            d, a = self.lengths(full=True), self.angles(full=True)
+            return np.cumsum(d)[d > min_dist], np.diff(a)[d > min_dist] / d[d > min_dist]
+        else:
+            return [(np.cumsum(d)[d > min_dist], np.diff(a)[d > min_dist] / d[d > min_dist])
+                    for d, a in zip(self.lengths(full=False), self.angles(full=False))]
+
+    @property
+    def normals(self):
+        """Calculate the normals (perpendicular to the tangents) along the curve.
+
+        Returns:
+            The normals for the curve.
+
+        """
+        return [np.vstack((-np.sin(a), np.cos(a))) for a in self.angles()]
+
+    def path_port(self, w: float = 1):
+        """Get the port and orientations from the normals of the curve assuming it is a piecewise path.
+
+        Note:
+            This function will not make sense if there are multiple unconnected curves.
+            This is generally reserved for path-related operations.
+            Unexpected behavior will occur if this method is used for arbitrary curve sets.
+
+        Args:
+            w: width of the port.
+
+        Returns:
+            The ports for the curve.
+
+        """
+        n = self.normals
+        n = (n[0].T[0], n[-1].T[-1])
+        p = (self.geoms[0].T[0], self.geoms[-1].T[-1])
+        return {
+            'a0': Port.from_points(np.array((p[0] + n[0] * w / 2, p[0] - n[0] * w / 2))),
+            'b0': Port.from_points(np.array((p[1] - n[1] * w / 2, p[1] + n[1] * w / 2)))
+        }
+
+    @property
+    def shapely(self):
+        """Shapely geometry
+
+        Returns:
+            The multiline string for the geometries.
+
+        """
+        return MultiLineString([LineString(p) for p in self.geoms])
+
+    def coalesce(self):
+        """Coalesce path segments into a single path
+
+        Note:
+            Caution: This assumes a C1 path, so paths with discontinuities will have incorrect tangents.
+
+        Returns:
+            The coalesced Curve.
+
+        """
+        self.geoms = [self.points]
+        self.tangents = [np.hstack(self.tangents)]
+        return self
+
+    def interpolated(self, distance: float):
+        """Interpolated curve such that all segments have equal length :code:`distance`.
+
+        Args:
+            distance: The length of segments in the interpolated path.
+
+        Returns:
+            The interpolated path.
+
+        """
+        return Curve([p.interpolate(distance) for p in self.shapely.geoms])
+
+    def path(self, width: Union[float, Iterable[PathWidth]] = 1, offset: Union[float, Iterable[PathWidth]] = 0,
+             decimals: int = DECIMALS) -> Pattern:
+        """Path (pattern) converted from this curve using width and offset specifications.
+
+        Args:
+            width: Width of the path. If a list of callables, apply a parametric width to each curve segment.
+            offset: Offset of the path. If a list of callables, apply a parametric offset to each curve segment.
+            decimals: Decimal precision of the path.
+
+        Returns:
+            A pattern representing the path.
+
+        """
+        path_patterns = []
+
+        widths = [width] * self.num_geoms if not isinstance(width, list) and not isinstance(width, tuple) else width
+        offsets = [offset] * self.num_geoms if not isinstance(offset, list) and not isinstance(offset,
+                                                                                               tuple) else offset
+
+        if not len(widths) == self.num_geoms:
+            raise AttributeError(f"Expected len(widths) == self.num_geoms, but got {len(widths)} != {self.num_geoms}")
+        if not len(offsets) == self.num_geoms:
+            raise AttributeError(f"Expected len(offsets) == self.num_geoms, but got {len(offsets)} != {self.num_geoms}")
+
+        for segment, tangent, width, offset in zip(self.geoms, self.tangents, widths, offsets):
+            if callable(width):
+                t = np.linspace(0, 1, segment.shape[1])[:, np.newaxis]
+                width = width(t)
+            if callable(offset):
+                t = np.linspace(0, 1, segment.shape[1])[:, np.newaxis]
+                offset = offset(t)
+            path_patterns.append(curve_to_path(segment, width, tangent, offset, decimals))
+
+        path = Pattern(path_patterns).set_port({'a0': path_patterns[0].port['a0'],
+                                                'b0': path_patterns[-1].port['b0']})
+        path.refs.append(self)
+        path.curve = self
+        return path
+
+    def hvplot(self, color: str = 'black', name: str = 'curve', bounds: Optional[Float4] = None,
+               plot_ports: bool = True):
+        """Plot this device on a matplotlib plot.
+
+        Args:
+            color: The color for plotting the pattern.
+            name: Name of the curve.
+            bounds: Bounds of the plot.
+            plot_ports: Plot the ports of the curve.
+
+        Returns:
+            The holoviews Overlay for displaying all of the polygons.
+
+        """
+        import holoviews as hv
+        plots_to_overlay = []
+        b = min_aspect_bounds(self.bounds) if bounds is None else bounds
+
+        for curve in self.geoms:
+            plots_to_overlay.append(
+                hv.Curve((curve[0], curve[1]), label=name).opts(data_aspect=1, frame_height=200,
+                                                                ylim=(b[1], b[3]), xlim=(b[0], b[2]),
+                                                                color=color, tools=['hover']))
+
+        if plot_ports:
+            for name, port in self.port.items():
+                plots_to_overlay.append(port.hvplot(name))
+
+        return hv.Overlay(plots_to_overlay)
+
+
+def curve_to_path(points: np.ndarray, widths: Union[float, np.ndarray], tangents: np.ndarray,
+                  offset: Union[float, np.ndarray] = 0, decimals: int = DECIMALS,
+                  max_num_points: int = MAX_GDS_POINTS):
+    """Converts a curve to a path.
 
     Args:
-        path: The path/curve function or length for a straight path.
-        width: The width function as a function of :math:`t` or width for a constant width along the path/curve.
-        num_evaluations: Number of points to evaluate the parametric function
-        max_num_points: Maximum number of points to evaluate the parametric function (split path if too long)
-        decimal_places: Number of decimal places precision
+        points: The points along the curve.
+        tangents: The normal directions / derivatives evaluated at the points along the curve.
+        widths: The widths at each point along the curve (measured perpendicular to the tangents).
+        offset: Offset of the path.
+        decimals: Number of decimals precision for the curve output.
+        max_num_points: Maximum number of points allowed in the curve (otherwise, break it apart).
+            Note that the polygon will have twice this amount.
 
     Returns:
-        A tuple of the multipolygon geometry, back port linestring (:code:`a0`), and front port linestring (:code:`b0`).
+        The resulting Pattern.
 
     """
-    u = np.linspace(0, 1, num_evaluations)[:, np.newaxis]
-    if isinstance(path, float) or isinstance(path, int):
-        path = np.hstack([u * path, np.zeros_like(u)])
-        path_diff = np.hstack([np.ones_like(u) / num_evaluations * path, np.zeros_like(u)]).T
-    else:
-        path = path(u)
-        if isinstance(path, tuple):
-            path, path_diff = path
-            path_diff = path_diff.T
-        else:
-            path_diff = np.diff(path, axis=0)
-            path_diff = np.vstack((path_diff[0], path_diff))
-            path_diff = path_diff.T
 
-    widths = width
-    if not isinstance(width, float) and not isinstance(width, int):
-        widths = taper_fn(width)(u) if isinstance(width, tuple) or isinstance(width, list) else width(u)
+    # step 1: find the path polygon points based on the points, tangents, widths, and offset
+    angles = np.arctan2(tangents[1], tangents[0])
+    w = np.vstack((-np.sin(angles) * widths, np.cos(angles) * widths)) / 2
+    off = np.vstack((-np.sin(angles) * offset, np.cos(angles) * offset)) / 2
+    top_path = np.around(points + w + off, decimals).T
+    bottom_path = np.around(points - w + off, decimals).T
+    front_port = np.array([bottom_path[-1], top_path[-1]])
+    back_port = np.array([top_path[0], bottom_path[0]])
 
-    angles = np.arctan2(path_diff[1], path_diff[0])
-    width_translation = np.vstack((-np.sin(angles) * widths, np.cos(angles) * widths)).T / 2
-    top_path = np.around(path + width_translation, decimal_places)
-    bottom_path = np.around(path - width_translation, decimal_places)
+    # step 2: split the path if there are too many points in it
+    num_evaluations = top_path.shape[0]
+    num_split = np.ceil(num_evaluations / max_num_points).astype(np.int32)
+    ranges = [(i * max_num_points, (i + 1) * max_num_points + 1) for i in range(num_split)]
 
-    front_port = LineString([bottom_path[-1], top_path[-1]])
-    back_port = LineString([top_path[0], bottom_path[0]])
-
-    # TODO: convert to more efficient path fracture
-    num_splitters = num_evaluations * 2 // max_num_points
-    splitters = [LineString([top_path[(i + 1) * max_num_points // 2], bottom_path[(i + 1) * max_num_points // 2]])
-                 for i in range(num_splitters)]
-    polygon = Polygon(np.vstack((top_path, bottom_path[::-1])))
-    polys = []
-    for splitter in splitters:
-        geoms = split(polygon, splitter).geoms
-        poly, polygon = geoms[0], geoms[1]
-        polys.append(poly)
-    polys.append(polygon)
-    pattern = Pattern(MultiPolygon(polys))
+    # step 3: convert the resulting polygon list into a Pattern whose polygons form the path.
+    pattern = Pattern([np.vstack((top_path[s[0]:s[1]], bottom_path[s[0]:s[1]][::-1])).T for s in ranges])
     pattern.port = {
-        'a0': Port.from_linestring(back_port),
-        'b0': Port.from_linestring(front_port)
+        'a0': Port.from_points(back_port),
+        'b0': Port.from_points(front_port)
     }
+
     return pattern
 
 
-def bezier_sbend_fn(bend_x: float, bend_y: float):
-    """Bezier sbend functional.
+def get_ndarray_curve(curvelike_list: Iterable[Union[float, "Curve", CurveLike, List[CurveLike]]]):
+    """A recursive list of lists of curvelike objects, which turned into a flat list of 2d ndarray polygons.
 
     Args:
-        bend_x: Change in :math:`x` due to the bend.
-        bend_y: Change in :math:`y` due to the bend.
+        curvelike_list: List of polygon-like objects including :code:`CurveSet`, shapely linestrings,
+            :code:`CurveTuple` (tuple of points and tangents), and more.
 
     Returns:
-        A function mapping 0 to 1 to the width of the taper along the path linestring.
+        A list of :math:`M` polygons that are each represented as :math:`2 \\times N_m` :code:`ndarray`'s.
 
     """
-    pole_1 = np.asarray((bend_x / 2, 0))
-    pole_2 = np.asarray((bend_x / 2, bend_y))
-    pole_3 = np.asarray((bend_x, bend_y))
-
-    def _sbend(t: np.ndarray):
-        path = 3 * (1 - t) ** 2 * t * pole_1 + 3 * (1 - t) * t ** 2 * pole_2 + t ** 3 * pole_3
-        derivative = 3 * (1 - t) ** 2 * pole_1 + 6 * (1 - t) * t * (pole_2 - pole_1) + 3 * t ** 2 * (pole_3 - pole_2)
-        return path, derivative
-
-    return _sbend
-
-
-def taper_fn(taper_params: Union[np.ndarray, Tuple[float]]):
-    """Taper functional.
-
-    Args:
-        taper_params: Polynomial taper parameter function of the form :math:`f(t; \\mathbf{x}) = \\sum_{n = 1}^N x_nt^n`
-
-    Returns:
-         A function mapping 0 to 1 to the width of the taper along the path linestring.
-
-    """
-    poly_exp = np.arange(len(taper_params), dtype=float)
-    return lambda u: np.sum(taper_params * u ** poly_exp, axis=1)
-
-
-def euler_bend_fn(radius: float, angle: float = 90):
-    """Euler bend functional
-
-    Args:
-        radius: Radius of the euler bend.
-        angle: Angle change of the euler bend arc.
-
-    Returns:
-        A function mapping 0 to 1 to the linestring of the bend path.
-
-    """
-    sign = np.sign(angle)
-    angle = np.abs(angle / 180 * np.pi)
-
-    def _bend(t: np.ndarray):
-        z = np.sqrt(angle * t)
-        y, x = fresnel(z / np.sqrt(np.pi / 2))
-        path = radius * np.hstack((x, y * sign))
-        derivative = radius * angle * np.hstack((np.cos(angle * t), np.sin(angle * t) * sign))
-        return path, derivative
-
-    return _bend
-
-
-def circular_bend_fn(radius: float, angle: float = 90):
-    """Circular bend functional
-
-    Args:
-        radius: Radius of the circular bend.
-        angle: Angle change of the circular arc.
-
-    Returns:
-        A function mapping 0 to 1 to the linestring of the bend path.
-
-    """
-    sign = np.sign(angle)
-    angle = np.abs(angle / 180 * np.pi)
-
-    def _bend(t: np.ndarray):
-        x = radius * np.sin(angle * t)
-        y = radius * (1 - np.cos(angle * t))
-        return np.hstack((x, y * sign)), radius * np.hstack((np.cos(angle * t), np.sin(angle * t) * sign))
-
-    return _bend
-
-
-def spiral_fn(turns: int, scale: float = 5, separation_scale: float = 1):
-    """Spiral functional.
-
-    Args:
-        turns: Number of 180 degree turns in the spiral function
-        scale: The scale of the spiral function (maps to minimum radius in final implementation relative to scale 1).
-        separation_scale: The separation scale for the spiral function (how fast to spiral out relative to scale 1)
-
-    Returns:
-        A function mapping 0 to 1 to the linestring of the spiral path.
-
-    """
-    def _spiral(t: np.ndarray):
-        theta = t * turns * np.pi + 2 * np.pi
-        radius = (theta - 2 * np.pi) * separation_scale / scale + 2 * np.pi
-        x, y = radius * np.cos(theta), radius * np.sin(theta)
-        return scale / np.pi * np.hstack((x, y)), scale / np.pi * np.hstack((y, -x))
-
-    return _spiral
-
-Width = Union[float, List[float], Callable]
-Curve = Union[float, Callable]
-
-
-@fix_dataclass_init_docs
-@dataclass
-class Straight(Box):
-    extent: Float2 = (1, 1)
-    decimal_places: int = 3
-
-    def __post_init_post_parse__(self):
-        super(Straight, self).__post_init_post_parse__()
-        self.port = {
-            'a0': self.port['w'],
-            'b0': self.port['e']
-        }
-
-
-@fix_dataclass_init_docs
-@dataclass
-class Taper(Pattern):
-    width: Width
-    length: float
-    num_evaluations: int = 99
-
-    def __post_init_post_parse__(self):
-        pattern = parametric(self.length, self.width, num_evaluations=self.num_evaluations)
-        super(Taper, self).__init__(pattern)
-        self.port = pattern.port
-
-
-@fix_dataclass_init_docs
-@dataclass
-class Turn(Pattern):
-    width: Width
-    radius: float
-    angle: float
-    euler: float = 0
-    num_evaluations: int = 99
-
-    def __post_init_post_parse__(self):
-        self.circular = parametric(circular_bend_fn(self.radius, self.angle * (1 - self.euler)), width=self.width,
-                                   num_evaluations=self.num_evaluations)
-        if self.euler > 0:
-            self.euler_start = parametric(euler_bend_fn(self.radius, self.angle * self.euler / 2), width=self.width,
-                                          num_evaluations=self.num_evaluations)
-            self.euler_end = parametric(euler_bend_fn(self.radius, self.angle * self.euler / 2), width=self.width,
-                                        num_evaluations=self.num_evaluations)
-            patterns = [self.euler_start, self.circular.put(self.euler_start.port['b0'])]
-            patterns.append(self.euler_end.reflect().put(self.circular.port['b0'], from_port='b0'))
-            port = {
-                'a0': self.euler_start.port['a0'],
-                'b0': self.euler_end.port['a0']
-            }
+    linestrings = []
+    tangents = []
+    for curve in curvelike_list:
+        new_tangents = []
+        if isinstance(curve, CurveTuple):
+            new_linestrings = [curve.points]
+            new_tangents = [curve.tangents]
+        elif np.isscalar(curve):
+            # just a straight segment
+            new_linestrings = np.array(((0, 0), (curve, 0))).T
+        elif isinstance(curve, list) or isinstance(curve, tuple):
+            # recursively apply to get list.
+            new_linestrings_and_tangents = sum([get_ndarray_curve([p]) for p in curve], [])
+            new_linestrings, new_tangents = zip(new_linestrings_and_tangents)
+        elif isinstance(curve, Curve):
+            new_linestrings = curve.geoms
+            new_tangents = curve.tangents
+        elif isinstance(curve, np.ndarray):
+            if curve.ndim != 2 and curve.ndim != 3:
+                raise AttributeError("The number of dimensions for the curve must be 2 or 3")
+            new_linestrings = [curve] if curve.ndim == 2 else curve.tolist()
+        elif isinstance(curve, LineString):
+            new_linestrings = linestring_points(curve).T
+        elif isinstance(curve, MultiLineString):
+            new_linestrings = [linestring_points(geom).T for geom in curve.geoms]
         else:
-            patterns = [self.circular]
-            port = self.circular.port
-        super(Turn, self).__init__(*patterns)
-        self.port = port
+            raise TypeError(f'Pattern does not accept type {type(curve)}')
+        tangents.extend(new_tangents if new_tangents else [np.gradient(p, axis=0) for p in new_linestrings])
+        linestrings.extend(new_linestrings)
+    return linestrings, tangents
 
 
-Arc = Turn
+def link(*geoms: Union[Pattern, Curve], front_port: str = 'b0', back_port: str = 'a0'):
+    """Link many separate curves or paths into a single geometry, assuming each geometry has a front and back port.
 
+    Note:
+        This is a simple linking function that simply uses the type of the first item in the list to attach
+        either a set of paths or a set of curves to each other.
 
-@fix_dataclass_init_docs
-@dataclass
-class Spiral(Pattern):
-    width: Width
-    n_turns: int
-    min_radius: float = 5
-    separation: float = 1
-    num_evaluations: int = 1000
+    Args:
+        geoms: The paths to link, assuming the curve is the first ref in each path.
+        front_port: Front port name.
+        back_port: Back port name.
 
-    def __post_init_post_parse__(self):
-        spiral = parametric(path=spiral_fn(self.n_turns, self.min_radius, separation_scale=self.separation),
-                            width=self.width, num_evaluations=self.num_evaluations)
-        bend = parametric(path=circular_bend_fn(self.min_radius, 180), width=self.width)
-        patterns = [spiral.copy.rotate(180), spiral, bend.copy.rotate(90), bend.rotate(-90)]
-        super(Spiral, self).__init__(*patterns)
-        self.port['a0'] = spiral.port['b0']
-        self.port['b0'] = Port(-self.port['a0'].x, self.port['a0'].y, -self.port['a0'].a, self.port['a0'].w)
-        self.put(self.port['a0'])
+    Returns:
+        The resulting geometry (path or curve) after linking many curves together into a single one.
 
-
-@fix_dataclass_init_docs
-@dataclass
-class BezierSBend(Pattern):
-    width: Width
-    dx: float
-    dy: float
-    num_evaluations: int = 99
-
-    def __post_init_post_parse__(self):
-        bend = parametric(path=bezier_sbend_fn(self.dx, self.dy), width=self.width,
-                          num_evaluations=self.num_evaluations)
-        super(BezierSBend, self).__init__(bend)
-        self.port = bend.port
-
-
-@fix_dataclass_init_docs
-@dataclass
-class TurnSBend(Pattern):
-    width: Width
-    angle: float
-    min_radius: float
-    euler: float = 0
-    num_evaluations: float = 99
-
-    def __post_init_post_parse__(self):
-        turn_up = Turn(self.width, self.min_radius, self.angle, self.euler, self.num_evaluations)
-        turn_down = Turn(self.width, self.min_radius, -self.angle, self.euler, self.num_evaluations)
-        segment = Path([turn_up, turn_down])
-        super(TurnSBend, self).__init__(segment)
-        self.port['a0'] = segment.port['a0']
-        self.port['b0'] = segment.port['b0']
-
-
-Segment = Union[Straight, Taper, Turn, Spiral, BezierSBend, TurnSBend, "Path"]
-
-
-@fix_dataclass_init_docs
-@dataclass
-class Path(Pattern):
-    """A parametric path for routing in photonic or electronic designs.
-
-    A waveguide is a patterned slab of core material that is capable of guiding light. Here, we define a general
-    waveguide class which can be tapered or optionally consist of recursively defined waveguides, i.e. via
-    :code:`subtract_waveguide`, that enable the definition of complex adiabatic coupling and perturbation strategies.
-    This enables the :code:`Waveguide` class to be used in a variety of contexts including multimode interference.
-
-    Attributes:
-        segments: Length or curve operation along the path.
-        subtract: A path to subtract from the current path. This is recursively defined, allowing
-            for the definition of highly complex waveguiding structures.
     """
-    segments: Union[Segment, List[Segment]] = Field(default_factory=list)
-    subtract: Optional["Path"] = None
-    decimal_places: int = 5
-
-    def __post_init_post_parse__(self):
-        self.pathway = []
-        self.polygons = []
-        self.port = {
-            'a0': Port(a=180),
-            'b0': Port()
-        }  # dummy ports
-        # add segments if they exist already
-        for segment in self.segments:
-            self.add(segment)
-        path = Pattern(*self.pathway)
-        if self.subtract is not None:
-            if self.subtract.size[1] > self.size[1]:
-                raise ValueError(f'Require the y extent of this waveguide to be greater than that of '
-                                 f'`subtract_waveguide`, but got {self.size[1]} < {self.subtract.size[1]}')
-            path = Pattern(self.shapely_union() - self.subtract.shapely_union())
-        super(Path, self).__init__(path)
-        if self.pathway:
-            self.port['a0'] = self.pathway[0].port['a0']
-            self.port['b0'] = self.pathway[-1].port['b0']
-        else:
-            self.port = {
-                'a0': Port(a=180),
-                'b0': Port()
-            }  # dummy ports
-
-    @property
-    def wg_path(self) -> Pattern:
-        return self
-
-    def add(self, segment: Segment, back: bool = False):
-        port_name = 'a0' if back else 'b0'
-        if back:  # swap input and output ports
-            segment.port = {
-                'a0': segment.port['b0'],
-                'b0': segment.port['a0']
-            }
-        self.pathway.append(segment.put(self.port[port_name], from_port='a0'))
-        self.polygons += self.pathway[-1].polygons
-        self.port[port_name] = self.pathway[-1].port[port_name]
-        return self
-
-    def symmetrize(self):
-        flipped = self.copy
-        flipped.port = {
-            'a0': flipped.port['b0'],
-            'b0': flipped.port['a0']
-        }
-        self.add(flipped)
-        return self
-
-    def straight(self, extent: Float2, back: bool = False):
-        return self.add(Straight(extent), back)
-
-    def taper(self, width: Width, length: float, back: bool = False):
-        return self.add(Taper(width, length), back)
-
-    def turn(self, width: Width, radius: float, angle: float, euler: float = 0, back: bool = False):
-        return self.add(Turn(width, radius, angle, euler), back)
-
-    def bezier_sbend(self, width: Width, dx: float, dy: float, back: bool = False):
-        return self.add(BezierSBend(width, dx, dy), back)
-
-    def turn_sbend(self, width: Width, angle: float, min_radius: float, euler: float = 0, back: bool = False):
-        return self.add(TurnSBend(width, angle, min_radius, euler), back)
-
-    def bezier_dc(self, width: Width, dx: float, dy: float, interaction_l: float):
-        return self.bezier_sbend(width, dx, dy).straight((interaction_l, self.port['b0'].w)).bezier_sbend(width, dx, -dy)
-
-
-Path.__pydantic_model__.update_forward_refs()
-
-
-def straight(extent: Float2):
-    return Path().straight(extent)
-
-
-def taper(width: Width, length: float):
-    return Path().taper(width, length)
-
-
-def taper_waveguide(width: Width, length: float, taper_length: float, symmetric: bool = True, taper_first: bool = True):
-    if 2 * taper_length > length:
-        raise ValueError(f"Require 2 * taper_length <= length, but got {2 * taper_length} >= {length}.")
-    init_w = width[0]
-    if taper_first:
-        path = Path().taper(width, taper_length).straight((length / 2 - taper_length, np.sum(width)))
+    port = geoms[0].port
+    for geom in geoms[1:]:
+        geom.put(port[front_port], from_port=back_port)
+        port[front_port] = geom.port[front_port]
+    if isinstance(geoms[0], Pattern):  # assume all patterns
+        pattern = Pattern(*geoms).set_port(port)
+        pattern.curve = Curve(*[path.curve for path in geoms])
+        pattern.refs.append(pattern.curve)
+        return pattern
+    elif isinstance(geoms[0], Curve):  # assume all curves
+        return Curve(*geoms)
     else:
-        path = Path().straight((length / 2 - taper_length, init_w)).taper(width, taper_length)
-    return path.symmetrize() if symmetric else path
+        raise TypeError(f"Geometries must either be a pattern or curve but got {type(geoms[0])}")
 
-
-def turn(width: Width, radius: float, angle: float, euler: float = 0):
-    return Path().turn(width, radius, angle, euler)
-
-
-def bezier_sbend(width: Width, dx: float, dy: float):
-    return Path().bezier_sbend(width, dx, dy)
-
-
-def turn_sbend(width: Width, angle: float, min_radius: float, euler: float = 0):
-    return Path().turn_sbend(width, angle, min_radius, euler)
-
-
-def bezier_dc(width: Width, dx: float, dy: float, interaction_l: float):
-    return Path().turn_sbend(width, dx, dy, interaction_l)

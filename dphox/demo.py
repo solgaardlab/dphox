@@ -2,52 +2,43 @@ from .active import Clearout, GndAnchorWaveguide, LateralNemsPS, MEMSFlexure, Lo
     PullOutNemsActuator, ThermalPS, Via
 from .foundry import CommonLayer
 from .passive import DC, WaveguideDevice
-from .path import Path, taper_waveguide, straight
+from .parametric import cubic_taper, straight
 from .pattern import Box
-from .utils import cubic_taper
 
-ps = ThermalPS(straight((10, 1)), ps_w=4, via=Via((0.4, 0.4), 0.1))
+ps = ThermalPS(straight(10).path(1), ps_w=4, via=Via((0.4, 0.4), 0.1))
 dc = DC(waveguide_w=1, interaction_l=2, bend_l=5, interport_distance=10, gap_w=0.5)
 mzi = MZI(dc, top_internal=[ps.copy], bottom_internal=[ps.copy], top_external=[ps.copy], bottom_external=[ps.copy])
-# mesh = LocalMesh(mzi, 6)
+mesh = LocalMesh(mzi, 6)
 
 
 def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_height=12, via_extent=(0.5, 0.5),
                     ps_taper_change=-0.2, flexure_box_w=31, nominal_gap=0.201, waveguide_w=0.5,
-                    nanofin_w=0.2, taper_l=10, anchor_taper_l=1.4, pull_in=False, trace_w=1):
+                    nanofin_w=0.2, taper_l=10, anchor_taper_l=1.4, pull_in=False, trace_w=1, smooth: float = 0):
 
     ps_w = waveguide_w + 2 * nominal_gap + 2 * nanofin_w
     gap_w = waveguide_w + 2 * nominal_gap
 
-    psw = Path(
-        segments=[straight((ps_l, ps_w))],
-        subtract=Path(
-            segments=[taper_waveguide(cubic_taper(gap_w, ps_taper_change), ps_l, taper_l)],
-            subtract=taper_waveguide(cubic_taper(waveguide_w, ps_taper_change), ps_l, taper_l)
-        )
-    )
+    ps_box = straight(ps_l).path(ps_w)
+    ps_gap = cubic_taper(gap_w, ps_taper_change, ps_l, taper_l)
+    ps_waveguide = cubic_taper(waveguide_w, ps_taper_change, ps_l, taper_l)
+    psw = ps_box - ps_gap + ps_waveguide
+    psw.port = ps_waveguide.port
 
-    via_low = Via(via_extent=via_extent,
-                  boundary_grow=0.25,
-                  metal=[CommonLayer.METAL_1],
-                  via=[CommonLayer.VIA_SI_1]
-                  )
-    via_high = Via(via_extent=via_extent,
-                   boundary_grow=0.25,
+    via_low = Via(via_extent=via_extent, boundary_grow=0.25,
+                  metal=[CommonLayer.METAL_1], via=[CommonLayer.VIA_SI_1])
+    via_high = Via(via_extent=via_extent, boundary_grow=0.25,
                    metal=[CommonLayer.METAL_1, CommonLayer.METAL_2],
-                   via=[CommonLayer.VIA_SI_1, CommonLayer.VIA_1_2]
-                   )
+                   via=[CommonLayer.VIA_SI_1, CommonLayer.VIA_1_2])
+
+    gaw_rib = cubic_taper(ps_w + 0.1, 1, 2 * anchor_length, anchor_taper_l, symmetric=False)
+    gaw_gap = cubic_taper(gap_w, 1, 2 * anchor_length, anchor_taper_l, symmetric=False)
+    gaw_waveguide = straight(2 * anchor_length).path(waveguide_w)
+    gaw_slab = cubic_taper(0.5, 1, anchor_length, anchor_taper_l + 0.1)
 
     gaw = GndAnchorWaveguide(
         rib_waveguide=WaveguideDevice(
-            ridge_waveguide=Path(
-                segments=[taper_waveguide(cubic_taper(ps_w + 0.1, 1), 2 * anchor_length, anchor_taper_l, symmetric=False)],
-                subtract=Path(
-                    segments=[taper_waveguide(cubic_taper(gap_w, 1), 2 * anchor_length, anchor_taper_l, symmetric=False)],
-                    subtract=straight((2 * anchor_length, 0.5))
-                )
-            ),
-            slab_waveguide=taper_waveguide(cubic_taper(0.5, 1), anchor_length, anchor_taper_l + 0.1),
+            ridge_waveguide=(gaw_rib - gaw_gap + gaw_waveguide).set_port(gaw_waveguide.port),
+            slab_waveguide=gaw_slab,
         ),
         gnd_pad=Box((1, 3)),
         gnd_connector=Box((0.5, 2)),
@@ -77,7 +68,8 @@ def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_height=12, via_extent=(0
         clearout_etch_stop_grow=0.5
     )
 
-    return LateralNemsPS(
+    ps = LateralNemsPS(
+        waveguide_w=waveguide_w,
         phase_shifter_waveguide=psw,
         gnd_anchor_waveguide=gaw,
         actuator=pina if pull_in else pona,
@@ -85,4 +77,6 @@ def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_height=12, via_extent=(0
         trace_w=trace_w,
         clearout_pos_sep=10,
         clearout_gnd_sep=2
-    ) #.smooth_layer(0.19, CommonLayer.RIDGE_SI)
+    )
+
+    return ps.smooth_layer(smooth, CommonLayer.RIDGE_SI) if smooth > 0 else ps

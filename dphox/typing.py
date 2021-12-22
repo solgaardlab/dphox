@@ -1,7 +1,10 @@
+from collections import namedtuple
 from typing import Union, Tuple, List, Optional, Dict, Callable, Iterable
 import numpy as np
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import Polygon, MultiPolygon, LineString
 import gdspy as gy
+
+CurveTuple = namedtuple("CurveTuple", "points tangents")
 
 Int2 = Tuple[int, int]
 Shape3 = Tuple[int, int, int]
@@ -13,4 +16,6 @@ Shape = Union[Int2, Shape3]
 Dim = Union[Float2, Float3]
 Spacing = Union[float, Tuple[float, float, float]]
 PolygonLike = Union[gy.Polygon, gy.FlexPath, Polygon, MultiPolygon, np.ndarray]
+CurveLike = Union[LineString, np.ndarray, CurveTuple]
 LayerLabel = Union[int, str, Int2]
+PathWidth = Union[Callable, float, Tuple[float, ...], np.ndarray]

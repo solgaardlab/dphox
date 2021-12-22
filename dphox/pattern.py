@@ -1,18 +1,15 @@
-from copy import deepcopy as copy
-
 import gdspy as gy
-import matplotlib.pyplot as plt
 import numpy as np
-from descartes import PolygonPatch
-from pydantic.dataclasses import dataclass
+from dataclasses import dataclass
 from shapely.affinity import rotate
 from shapely.geometry import box, GeometryCollection, LineString, Point, JOIN_STYLE, CAP_STYLE
 from shapely.ops import split, unary_union
 
+from .geometry import Geometry
 from .port import Port
 from .typing import Dict, Float2, Float4, List, MultiPolygon, Optional, Polygon, PolygonLike, Shape, Spacing, \
-    Union
-from .utils import fix_dataclass_init_docs, poly_points, split_holes
+    Union, Iterable
+from .utils import DECIMALS, fix_dataclass_init_docs, min_aspect_bounds, poly_points, split_holes
 from .transform import translate2d, reflect2d, skew2d, rotate2d, scale2d, AffineTransform
 
 NAZCA_IMPORTED = True
@@ -34,16 +31,8 @@ try:
 except ImportError:
     SHAPELYVEC_IMPORTED = False
 
-try:
-    HOLOVIEWS_IMPORTED = True
-    import holoviews as hv
-    from holoviews import opts
-    import panel as pn
-except ImportError:
-    HOLOVIEWS_IMPORTED = False
 
-
-class Pattern:
+class Pattern(Geometry):
     """Pattern corresponding to a patterned layer of material that may be used in a layout.
 
     A :code:`Pattern` is a core object in DPhox, which enables composition of multiple polygons or
@@ -54,58 +43,26 @@ class Pattern:
 
     Attributes:
         polygons: the numpy array representation for the polygons in this pattern.
-        poses: a pytree of affine matrix transformations (3x3) giving all of the layout info for the pattern.
-        decimal_places: decimal places for rounding (in case of tiny errors in polygons)
+        decimals: decimal places for rounding (in case of tiny errors in polygons)
     """
 
-    def __init__(self, *patterns: Union["Pattern", PolygonLike], decimal_places: int = 6):
+    def __init__(self, *patterns: Union["Pattern", PolygonLike, List[PolygonLike]], decimals: int = 6):
         """Initializer for the pattern class.
 
         Args:
             *patterns: The patterns (Gdspy, Shapely, numpy array, Pattern)
-            decimal_places: decimal places for rounding (in case of tiny errors in polygons)
+            decimals: decimal places for rounding (in case of tiny errors in polygons)
         """
-        self.decimal_places = decimal_places
-        self.polygons = []
-
-        for pattern in patterns:
-            if isinstance(pattern, Pattern):
-                self.polygons.extend(pattern.polygons)
-            elif isinstance(pattern, np.ndarray):
-                self.polygons.append(pattern)
-            # elif isinstance(pattern, list):
-            #     self.polygons.extend(pattern)
-            elif isinstance(pattern, Polygon):
-                pattern = split_holes(pattern)
-                self.polygons.extend([poly_points(geom).T for geom in pattern.geoms])
-            elif isinstance(pattern, MultiPolygon):
-                self.polygons.extend([poly_points(geom).T for geom in split_holes(pattern).geoms])
-            elif isinstance(pattern, gy.FlexPath):
-                self.polygons.extend(pattern.get_polygons())
-            elif isinstance(pattern, GeometryCollection):
-                self.polygons.extend([poly_points(geom).T for geom in split_holes(pattern).geoms])
-            elif isinstance(pattern, gy.Path):
-                self.polygons.extend(pattern.polygons)
-            else:
-                raise TypeError(f'Pattern does not accept type {type(pattern)}')
-
-        self.port: Dict[str, Port] = {}
-        self.reference_patterns: List[Pattern] = []
-
-    @property
-    def all_points(self) -> np.ndarray:
-        return np.hstack(self.polygons) if len(self.polygons) > 1 else self.polygons[0]
-
-    def transformed_polygons(self, transform: Union[np.ndarray, List[np.ndarray], AffineTransform]) -> List[np.ndarray]:
-        transformer = transform if isinstance(transform, AffineTransform) else AffineTransform(transform)
-        return transformer.transform_polygons(self.polygons)
+        self.decimals = decimals
+        self.curve: Optional["Curve"] = None  # reserved for paths.
+        super().__init__(get_ndarray_polygons(patterns), {}, [])
 
     @property
     def shapely(self) -> MultiPolygon:
-        return MultiPolygon([Polygon(np.around(p.T, decimals=self.decimal_places)) for p in self.polygons])
+        return MultiPolygon([Polygon(np.around(p.T, decimals=self.decimals)) for p in self.geoms])
 
     def shapely_union(self) -> MultiPolygon:
-        pattern = unary_union(self.polys)
+        pattern = unary_union(self.shapely.geoms)
         return pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern])
 
     def mask(self, shape: Shape, spacing: Spacing, smooth_feature: float = 0) -> np.ndarray:
@@ -133,210 +90,6 @@ class Pattern:
             # erode
             geom = geom.buffer(-smooth_feature, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.square)
         return contains(geom, x_, y_)  # need to use union!
-
-    @property
-    def polys(self):
-        return self.shapely.geoms
-
-    @property
-    def bounds(self) -> Float4:
-        """Bounds of the pattern
-
-        Returns:
-            Tuple of the form :code:`(minx, miny, maxx, maxy)`
-
-        """
-        p = self.all_points
-        if p.shape[1] > 0:
-            return np.min(p[0]), np.min(p[1]), np.max(p[0]), np.max(p[1])
-        else:
-            return 0, 0, 0, 0
-
-    @property
-    def size(self) -> Float2:
-        """Size of the pattern.
-
-        Returns:
-            Tuple of the form :code:`(sizex, sizey)`.
-
-        """
-        b = self.bounds  # (minx, miny, maxx, maxy)
-        return b[2] - b[0], b[3] - b[1]  # (maxx - minx, maxy - miny)
-
-    @property
-    def center(self) -> Float2:
-        """Center of the pattern.
-
-        Returns:
-            Center for the component.
-
-        """
-        b = self.bounds  # (minx, miny, maxx, maxy)
-        return (b[2] + b[0]) / 2, (b[3] + b[1]) / 2  # (avgx, avgy)
-
-    def transform(self, transform: np.ndarray):
-        self.polygons = self.transformed_polygons(transform)
-        self.port = {name: port.transform(transform) for name, port in self.port.items()}
-        for pattern in self.reference_patterns:
-            pattern.transform(transform)
-        return self
-
-    def translate(self, dx: float = 0, dy: float = 0) -> "Pattern":
-        """Translate patter
-
-        Args:
-            dx: Displacement in x
-            dy: Displacement in y
-
-        Returns:
-            The translated pattern
-
-        """
-        return self.transform(translate2d((dx, dy)))
-
-    def reflect(self, center: Float2 = (0, 0), horiz: bool = False) -> "Pattern":
-        """Reflect the component across a center point (default (0, 0))
-
-        Args:
-            center: The center point about which to flip
-            horiz: do horizontal flip, otherwise vertical flip
-
-        Returns:
-            Flipped pattern
-
-        """
-        self.transform(reflect2d(center, horiz))
-        for name, port in self.port.items():
-            port.a = np.mod(port.a + 180, 360)  # temp fix... need to change how ports are represented
-        return self
-
-    def rotate(self, angle: float, origin: Union[Float2, np.ndarray] = (0, 0)) -> "Pattern":
-        """Runs Shapely's rotate operation on the geometry about :code:`origin`.
-
-        Args:
-            angle: rotation angle in degrees.
-            origin: origin of rotation.
-
-        Returns:
-            Rotated pattern by :code:`angle` about :code:`origin`
-
-        """
-        if angle % 360 != 0:  # to save time, only rotate if the angle is nonzero
-            a = angle * np.pi / 180
-            self.transform(rotate2d(a, origin))
-        return self
-
-    def skew(self, xs: float = 0, ys: float = 0, origin: Optional[Float2] = None) -> "Pattern":
-        """Affine skew operation on the geometry about :code:`origin`.
-
-        Args:
-            xs: x skew factor.
-            ys: y skew factor.
-            origin: origin of rotation (uses center of pattern if :code:`None`).
-
-        Returns:
-            Rotated pattern by :code:`angle` about :code:`origin`
-
-        """
-        return self.transform(skew2d((xs, ys), self.center if origin is None else origin))
-
-    def scale(self, xfact: float = 1, yfact: float = 1, origin: Optional[Float2] = None) -> "Pattern":
-        """Affine scale operation on the geometry about :code:`origin`.
-
-        Args:
-            xfact: x scale factor.
-            yfact: y scale factor.
-            origin: origin of rotation (uses center of pattern if :code:`None`).
-
-        Returns:
-            Rotated pattern by :code:`angle` about :code:`origin`
-
-        """
-        return self.transform(scale2d((xfact, yfact), self.center if origin is None else origin))
-
-    def align(self, pattern_or_center: Union["Pattern", Float2] = (0, 0),
-              other: Union["Pattern", Float2] = None) -> "Pattern":
-        """Align center of pattern
-
-        Args:
-            pattern_or_center: A pattern (align to the pattern's center) or a center point for alignment.
-            other: If specified, instead of aligning based on this pattern's center,
-                align based on another pattern's center and translate accordingly.
-
-        Returns:
-            Aligned pattern
-
-        """
-        if other is None:
-            old_x, old_y = self.center
-        else:
-            old_x, old_y = other.center if isinstance(other, Pattern) else other
-        center = pattern_or_center.center if isinstance(pattern_or_center, Pattern) else pattern_or_center
-        self.translate(center[0] - old_x, center[1] - old_y)
-        return self
-
-    def halign(self, c: Union["Pattern", float], left: bool = True, opposite: bool = False) -> "Pattern":
-        """Horizontal alignment of pattern
-
-        Args:
-            c: A pattern (horizontal align to the pattern's boundary) or a center x for alignment
-            left: (if :code:`c` is pattern) Align to left boundary of component, otherwise right boundary
-            opposite: (if :code:`c` is pattern) Align opposite faces (left-right, right-left)
-
-        Returns:
-            Horizontally aligned pattern
-
-        """
-        x = self.bounds[0] if left else self.bounds[2]
-        p = c if isinstance(c, float) or isinstance(c, int) \
-            else (c.bounds[0] if left and not opposite or opposite and not left else c.bounds[2])
-        self.translate(dx=p - x)
-        return self
-
-    def valign(self, c: Union["Pattern", float], bottom: bool = True, opposite: bool = False) -> "Pattern":
-        """Vertical alignment of pattern
-
-        Args:
-            c: A pattern (vertical align to the pattern's boundary) or a center y for alignment
-            bottom: (if :code:`c` is pattern) Align to upper boundary of component, otherwise lower boundary
-            opposite: (if :code:`c` is pattern) Align opposite faces (upper-lower, lower-upper)
-
-        Returns:
-            Vertically aligned pattern
-
-        """
-        y = self.bounds[1] if bottom else self.bounds[3]
-        p = c if isinstance(c, float) or isinstance(c, int) \
-            else (c.bounds[1] if bottom and not opposite or opposite and not bottom else c.bounds[3])
-        self.translate(dy=p - y)
-        return self
-
-    def vstack(self, other_pattern: "Pattern", bottom: bool = False) -> "Pattern":
-        return self.align(other_pattern).valign(other_pattern, bottom=bottom, opposite=True)
-
-    def hstack(self, other_pattern: "Pattern", left: bool = False) -> "Pattern":
-        return self.align(other_pattern).halign(other_pattern, left=left, opposite=True)
-
-    @property
-    def copy(self) -> "Pattern":
-        """Copies the pattern using deepcopy.
-
-        Returns:
-            A copy of the Pattern so that changes do not propagate to the original :code:`Pattern`.
-
-        """
-        return copy(self)
-
-    def boolean_operation(self, other_pattern: "Pattern", operation: str):
-        op_to_func = {
-            'intersection': self.intersection,
-            'difference': self.difference,
-            'union': self.union,
-            'symmetric_difference': self.symmetric_difference
-        }
-        boolean_func = op_to_func.get(operation,
-                                      lambda: f"Not a valid boolean operation: Must be in {op_to_func.keys()}")
-        return boolean_func(other_pattern)
 
     def intersection(self, other_pattern: "Pattern") -> "Pattern":
         """Intersection between this pattern and provided pattern.
@@ -417,20 +170,38 @@ class Pattern:
             The GDSPY cell corresponding to the :code:`Pattern`
 
         """
-        for poly in self.polygons:
+        for poly in self.geoms:
             cell.add(gy.Polygon(poly) if isinstance(poly, Polygon) else cell.add(poly))
 
     def replace(self, pattern: "Pattern", center: Optional[Float2] = None, raise_port: bool = True):
-        pattern_bbox = Box.bbox(pattern)
+        """Replace the polygons in some part of the image with :code:`pattern`.
+
+        This is a useful property for inverse design. Note that the entire bounding box of the pattern is replaced
+        by :code:`pattern` which may not always be desirable, but we estimate this is sufficient for most inverse
+        design use cases.
+
+        Args:
+            pattern: The pattern which replaces this pattern.
+            center: The center where to replace the pattern.
+            raise_port: Whether to raise the port of this current pattern and add those ports to the new pattern.
+
+        Returns:
+            The new pattern with :code:`pattern` replacing the appropriate region of the image.
+
+        """
         align = self if center is None else center
-        diff = self.difference(pattern_bbox.align(align))
+        diff = self.difference(Box(pattern.size).align(align))
         new_pattern = Pattern(diff, pattern.align(align))
         if raise_port:
             new_pattern.port = self.port
         return new_pattern
 
     def plot(self, ax: Optional, color: str = 'black'):
-        ax = plt.gca() if ax is None else ax
+        # import locally since this import takes some time.
+        from descartes import PolygonPatch
+        if ax is None:
+            import matplotlib.pyplot as plt
+            ax = plt.gca()
         ax.add_patch(PolygonPatch(self.shapely_union(), facecolor=color, edgecolor='none'))
         b = self.bounds
         ax.set_xlim((b[0], b[2]))
@@ -446,29 +217,21 @@ class Pattern:
         smoothed = self.buffer(distance,
                                join_style=join_style,
                                cap_style=cap_style).buffer(-distance, join_style=join_style, cap_style=cap_style)
-        smoothed_exclude = Pattern(smoothed.shapely_union().union(self.shapely_union()).difference(
-            self.shapely_union()))
+        smoothed_exclude = Pattern(smoothed.shapely_union().union(self.shapely_union()) - self.shapely_union())
         min_area = distance ** 2 / 4 if min_area is None else min_area
-        self.polygons += [p for p in smoothed_exclude.shapely.geoms if p.area > min_area]
+        self.geoms += [p for p in smoothed_exclude.geoms if Polygon(p.T).area > min_area]
         return self
 
     def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> "nd.Cell":
         if not NAZCA_IMPORTED:
             raise ImportError('Nazca not installed! Please install nazca prior to running nazca_cell().')
         with nd.Cell(cell_name) as cell:
-            for poly in self.polygons:
+            for poly in self.geoms:
                 nd.Polygon(points=poly, layer=layer).put()
             for name, port in self.port.items():
                 nd.Pin(name).put(*port.xya)
             nd.put_stub()
         return cell
-
-    def put(self, port: Port, from_port: Optional[Union[str, Port]] = None):
-        if from_port is None:
-            return self.rotate(port.a).translate(port.x, port.y)
-        else:
-            fp = self.port[from_port] if isinstance(from_port, str) else from_port
-            return self.rotate(port.a - fp.a + 180, origin=fp.xy).translate(port.x - fp.x, port.y - fp.y)
 
     def hvplot(self, color: str = 'black', name: str = 'pattern', alpha: float = 0.5, bounds: Optional[Float4] = None,
                plot_ports: bool = True):
@@ -482,10 +245,9 @@ class Pattern:
             The holoviews Overlay for displaying all of the polygons.
 
         """
-        if not HOLOVIEWS_IMPORTED:
-            raise ImportError('Holoviews, Panel, and/or Bokeh not yet installed. Check your installation...')
+        import holoviews as hv
         plots_to_overlay = []
-        b = self.bounds if bounds is None else bounds
+        b = min_aspect_bounds(self.bounds) if bounds is None else bounds
         geom = self.shapely_union()
 
         def _holoviews_poly(shapely_poly):
@@ -520,6 +282,44 @@ class Pattern:
         return self.symmetric_difference(other)
 
 
+def get_ndarray_polygons(polylike_list: Iterable[Union["Pattern", PolygonLike, List[PolygonLike]]],
+                         decimals: int = DECIMALS):
+    """A recursive list of lists of polylike objects, which turned into a flat list of 2d ndarray polygons.
+
+    Args:
+        polylike_list: List of polygon-like objects including :code:`Pattern`, shapely geometry collections,
+            GDSPY geometries, and more.
+        decimals: decimal precision of the resulting polygons
+
+    Returns:
+        A list of :math:`M` polygons that are each represented as :math:`2 \\times N_m` :code:`ndarray`'s.
+
+    """
+    polygons = []
+    for pattern in polylike_list:
+        if isinstance(pattern, list):
+            # recursively apply to the list.
+            polygons.extend(sum([get_ndarray_polygons([p]) for p in pattern], []))
+        elif isinstance(pattern, Pattern):
+            polygons.extend(pattern.geoms)
+        elif isinstance(pattern, np.ndarray):
+            polygons.append(pattern)
+        elif isinstance(pattern, Polygon):
+            pattern = split_holes(pattern)
+            polygons.extend([poly_points(geom).T for geom in pattern.geoms])
+        elif isinstance(pattern, MultiPolygon):
+            polygons.extend([poly_points(geom).T for geom in split_holes(pattern).geoms])
+        elif isinstance(pattern, gy.FlexPath):
+            polygons.extend(pattern.get_polygons())
+        elif isinstance(pattern, GeometryCollection):
+            polygons.extend([poly_points(geom).T for geom in split_holes(pattern).geoms])
+        elif isinstance(pattern, gy.Path):
+            polygons.extend(pattern.geoms)
+        else:
+            raise TypeError(f'Pattern does not accept type {type(pattern)}')
+    return [np.around(p, decimals=decimals) for p in polygons]
+
+
 @fix_dataclass_init_docs
 @dataclass
 class Box(Pattern):
@@ -527,16 +327,16 @@ class Box(Pattern):
 
     Attributes:
         extent: Dimension (box width, box height)
-        decimal_places: The decimal places to resolve the box.
+        decimals: The decimal places to resolve the box.
     """
 
     extent: Float2 = (1, 1)
-    decimal_places: int = 6
+    decimals: int = 6
 
-    def __post_init_post_parse__(self):
+    def __post_init__(self):
         super(Box, self).__init__(box(-self.extent[0] / 2, -self.extent[1] / 2,
                                       self.extent[0] / 2, self.extent[1] / 2),
-                                  decimal_places=self.decimal_places)
+                                  decimals=self.decimals)
         self.port = {
             'c': Port(*self.center),
             'n': Port(self.center[0], self.bounds[3], 90, self.extent[0]),
@@ -544,19 +344,6 @@ class Box(Pattern):
             'e': Port(self.bounds[2], self.center[1], 0, self.extent[1]),
             's': Port(self.center[0], self.bounds[1], -90, self.extent[0])
         }
-
-    @classmethod
-    def bbox(cls, pattern: Pattern) -> "Box":
-        """Bounding box for pattern
-
-        Args:
-            pattern: The pattern over which to take a bounding box
-
-        Returns:
-            A bounding box pattern of the same size as :code:`pattern`
-
-        """
-        return cls(pattern.size).align(pattern)
 
     def expand(self, grow: float) -> "Box":
         """An aligned box that grows by amount :code:`grow`
@@ -686,7 +473,7 @@ class Ellipse(Pattern):
     radius_extent: Float2 = (1, 1)
     resolution: int = 16
 
-    def __post_init_post_parse__(self):
+    def __post_init__(self):
         super(Ellipse, self).__init__(Point(0, 0).buffer(1, resolution=self.resolution))
         self.scale(*self.radius_extent)
 
@@ -704,7 +491,7 @@ class Circle(Pattern):
     radius: float = 1
     resolution: int = 16
 
-    def __post_init_post_parse__(self):
+    def __post_init__(self):
         super(Circle, self).__init__(Point(0, 0).buffer(self.radius, resolution=self.resolution))
 
 
@@ -723,11 +510,11 @@ class Sector(Pattern):
     angle: float = 180
     resolution: int = 16
 
-    def __post_init_post_parse__(self):
+    def __post_init__(self):
         circle = Point(0, 0).buffer(self.radius, resolution=self.resolution)
         top_splitter = rotate(LineString([(0, self.radius), (0, 0)]), angle=self.angle / 2, origin=(0, 0))
         bottom_splitter = rotate(LineString([(0, 0), (0, self.radius)]), angle=-self.angle / 2, origin=(0, 0))
-        super(Sector, self).__init__(split(circle, LineString([*top_splitter.coords, *bottom_splitter.coords]))[1])
+        super(Sector, self).__init__(split(circle, LineString([*top_splitter.coords, (0, 0), *bottom_splitter.coords]))[1])
 
 
 @fix_dataclass_init_docs
@@ -737,7 +524,7 @@ class StripedBox(Pattern):
     stripe_w: float
     pitch: Union[float, Float2]
 
-    def __post_init_post_parse__(self):
+    def __post_init__(self):
         super(StripedBox, self).__init__(Box(self.extent).striped(self.stripe_w, self.pitch))
 
 
@@ -751,8 +538,19 @@ class MEMSFlexure(Pattern):
     connector_extent: Float2 = None
     spring_center: bool = False
 
-    def __post_init_post_parse__(self):
+    def __post_init__(self):
         super(MEMSFlexure, self).__init__(Box(self.extent).flexure(self.spring_extent, self.connector_extent,
                                                                    self.stripe_w, self.spring_center))
         self.box = Box(self.extent)
-        self.reference_patterns.append(self.box)
+        self.refs.append(self.box)
+
+
+@fix_dataclass_init_docs
+@dataclass
+class Quad(Pattern):
+    start: Port
+    end: Port
+
+    def __post_init__(self):
+        super(Quad, self).__init__(Pattern(np.hstack((self.start.line, self.end.line))))
+        self.port = {'a0': self.start.copy, 'b0': self.end.copy}

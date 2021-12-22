@@ -1,10 +1,10 @@
 import numpy as np
-from pydantic.dataclasses import dataclass
+from dataclasses import dataclass
 from shapely.geometry import LinearRing, MultiPolygon, Point
 
 from .device import Device
 from .foundry import CommonLayer
-from .path import Path
+from .parametric import bezier_dc
 from .pattern import Box, Ellipse, Pattern, Port, Sector
 from .typing import Float2, Int2, Optional, Union
 from .utils import fix_dataclass_init_docs
@@ -46,12 +46,12 @@ class DC(Pattern):
     coupler_waveguide_w: Optional[float] = None
     use_radius: bool = False
 
-    def __post_init_post_parse__(self):
+    def __post_init__(self):
         self.coupler_waveguide_w = self.waveguide_w if self.coupler_waveguide_w is None else self.coupler_waveguide_w
         dx, dy, w = (self.bend_l, (self.interport_distance - self.gap_w - self.coupler_waveguide_w) / 2,
                      self.coupler_waveguide_w)
-        lower_path = Path().bezier_dc(self.waveguide_w, dx, dy, self.interaction_l)
-        upper_path = Path().bezier_dc(self.waveguide_w, dx, -dy, self.interaction_l)
+        lower_path = bezier_dc(dx, dy, self.interaction_l).path(self.waveguide_w)
+        upper_path = bezier_dc(dx, -dy, self.interaction_l).path(self.waveguide_w)
         upper_path.translate(dx=0, dy=self.interport_distance)
         super(DC, self).__init__(lower_path, upper_path)
         self.lower_path, self.upper_path = lower_path, upper_path
@@ -61,7 +61,7 @@ class DC(Pattern):
         self.port['b1'] = Port(self.size[0], self.interport_distance, w=self.waveguide_w)
         self.lower_path.port = {'a0': self.port['a0'].copy, 'b0': self.port['b0'].copy}
         self.upper_path.port = {'a0': self.port['a1'].copy, 'b0': self.port['b1'].copy}
-        self.reference_patterns.extend([self.lower_path, upper_path])
+        self.refs.extend([self.lower_path, upper_path])
 
     @property
     def interaction_points(self) -> np.ndarray:
@@ -78,109 +78,6 @@ class DC(Pattern):
 
 @fix_dataclass_init_docs
 @dataclass
-class Interposer(Pattern):
-    """Pitch-changing array of waveguides with path length correction.
-
-    Args:
-        waveguide_w: The waveguide waveguide width.
-        n: The number of I/O (waveguides) for interposer.
-        init_pitch: The initial pitch (distance between successive waveguides) entering the interposer.
-        radius: The radius of bends for the interposer.
-        trombone_radius: The trombone bend radius for path equalization.
-        final_pitch: The final pitch (distance between successive waveguides) for the interposer.
-        self_coupling_extension_extent: The self coupling for alignment, which is useful since a major use case of
-            the interposer is for fiber array coupling.
-        horiz_dist: The additional horizontal distance.
-        num_trombones: The number of trombones for path equalization.
-        trombone_at_end: Whether to use a path-equalizing trombone near the waveguides spaced at :code:`final_period`.
-    """
-    waveguide_w: float
-    n: int
-    init_pitch: float
-    radius: float
-    trombone_radius: Optional[float] = None
-    final_pitch: Optional[float] = None
-    self_coupling_extension_extent: Optional[Float2] = None
-    self_coupling_final: bool = True
-    horiz_dist: float = 0
-    num_trombones: int = 1
-    trombone_at_end: bool = True
-
-    def __init__(self):
-        self.trombone_radius = self.radius if self.trombone_radius is None else self.trombone_radius
-        self.final_pitch = self.init_pitch if self.final_pitch is None else self.final_pitch
-        pitch_diff = self.final_pitch - self.init_pitch
-        paths = []
-        init_pos = np.zeros((self.n, 2))
-        final_pos = np.zeros_like(init_pos)
-        for idx in range(self.n):
-            radius = pitch_diff / 2 if not self.radius else self.radius
-            angle_r = np.sign(pitch_diff) * np.arccos(1 - np.abs(pitch_diff) / 4 / radius)
-            angled_length = np.abs(pitch_diff / np.sin(angle_r))
-            x_length = np.abs(pitch_diff / np.tan(angle_r))
-            angle = angle_r
-            path = GdspyPath(self.waveguide_w).segment(length=0).translate(dx=0, dy=self.init_pitch * idx)
-            mid = int(np.ceil(self.n / 2))
-            max_length_diff = (angled_length - x_length) * (mid - 1)
-            self.num_trombones = int(np.ceil(max_length_diff / 2 / (self.final_pitch - 3 * radius))) \
-                if not self.num_trombones else self.num_trombones
-            length_diff = (angled_length - x_length) * idx if idx < mid else (angled_length - x_length) * (
-                    self.n - 1 - idx)
-            if not self.trombone_at_end:
-                for _ in range(self.num_trombones):
-                    path.trombone(length_diff / 2 / self.num_trombones, radius=self.trombone_radius)
-            path.segment(self.horiz_dist)
-            if idx < mid:
-                path.turn(radius, -angle)
-                path.segment(angled_length * (mid - idx - 1))
-                path.turn(radius, angle)
-                path.segment(x_length * (idx + 1))
-            else:
-                path.turn(radius, angle)
-                path.segment(angled_length * (mid - self.n + idx))
-                path.turn(radius, -angle)
-                path.segment(x_length * (self.n - idx))
-            if self.trombone_at_end:
-                for _ in range(self.num_trombones):
-                    path.trombone(length_diff / 2 / self.num_trombones, radius=self.trombone_radius)
-            paths.append(path)
-            init_pos[idx] = np.asarray((0, self.init_pitch * idx))
-            final_pos[idx] = np.asarray((path.x, path.y))
-
-        if self.self_coupling_extension_extent is not None:
-            if self.self_coupling_final:
-                dx, dy = final_pos[0, 0], final_pos[0, 1]
-                p = self.final_pitch
-                s = 1
-            else:
-                dx, dy = init_pos[0, 0], init_pos[0, 1]
-                p = self.init_pitch
-                s = -1
-            radius, grating_length = self.self_coupling_extension_extent
-            self_coupling_path = GdspyPath(width=self.waveguide_w).rotate(-np.pi * self.self_coupling_final).translate(
-                dx=dx,
-                dy=dy - p)
-            self_coupling_path.turn(radius, -np.pi * s, tolerance=0.001)
-            self_coupling_path.segment(length=grating_length + 5)
-            self_coupling_path.turn(radius=radius, angle=np.pi / 2 * s, tolerance=0.001)
-            self_coupling_path.segment(length=p * (self.n + 1) - 6 * radius)
-            self_coupling_path.turn(radius=radius, angle=np.pi / 2 * s, tolerance=0.001)
-            self_coupling_path.segment(length=grating_length + 5)
-            self_coupling_path.turn(radius=radius, angle=-np.pi * s, tolerance=0.001)
-            paths.append(self_coupling_path)
-
-        super(Interposer, self).__init__(*paths)
-        self.self_coupling_path = None if self.self_coupling_extension_extent is None else paths[-1]
-        self.paths = paths
-        self.init_pos = init_pos
-        self.final_pos = final_pos
-        for idx in range(self.n):
-            self.port[f'a{idx}'] = Port(*init_pos[idx], -180, w=self.waveguide_w)
-            self.port[f'b{idx}'] = Port(*final_pos[idx], w=self.waveguide_w)
-
-
-@fix_dataclass_init_docs
-@dataclass
 class Cross(Pattern):
     """Cross
 
@@ -188,12 +85,12 @@ class Cross(Pattern):
         waveguide: waveguide to form the crossing (used to implement tapering)
     """
 
-    waveguide: Path
+    waveguide: Pattern
 
-    def __post_init_post_parse__(self):
+    def __post_init__(self):
         horizontal = self.waveguide.align()
         vertical = self.waveguide.align().copy.rotate(90)
-        super(Cross, self).__init__(horizontal, vertical)
+        super().__init__(horizontal, vertical)
         self.port['a0'] = horizontal.port['a0']
         self.port['a1'] = vertical.port['a0']
         self.port['b0'] = horizontal.port['b0']
@@ -220,69 +117,12 @@ class Array(Pattern):
     # orientation: Union[float, np.ndarray]
     pitch: Optional[Union[float, Float2]] = None
 
-    def __post_init_post_parse__(self):
+    def __post_init__(self):
         self.pitch = (self.pitch, self.pitch) if isinstance(self.pitch, float) else self.pitch
-        super(Array, self).__init__(MultiPolygon([self.unit.copy.translate(i * self.pitch, j * self.pitch)
+        super().__init__(MultiPolygon([self.unit.copy.translate(i * self.pitch, j * self.pitch)
                                                   for i in range(self.grid_shape[0])
                                                   for j in range(self.grid_shape[1])
                                                   ]))
-
-
-@fix_dataclass_init_docs
-@dataclass
-class DelayLine(Pattern):
-    """Delay line for unbalanced MZIs.
-
-    Attributes:
-        waveguide_w: the waveguide width
-        delay_length: the delay line length increase over the straight length
-        bend_radius: the bend radius of turns in the squiggle delay line
-        straight_length: the comparative straight segment this matches
-        number_bend_pairs: the number of bend pairs
-        flip: whether to flip the usual direction of the delay line
-    """
-    waveguide_w: float
-    delay_length: float
-    bend_radius: float
-    straight_length: float
-    number_bend_pairs: int = 1
-    flip: bool = False
-
-    def __post_init_post_parse__(self):
-
-        if ((2 * np.pi + 4) * self.number_bend_pairs + np.pi - 4) * self.bend_radius >= self.delay_length:
-            raise ValueError(
-                f"Bends alone exceed the delay length {self.delay_length}"
-                f"reduce the bend radius or the number of bend pairs")
-        segment_length = (self.delay_length - (
-                (2 * np.pi + 4) * self.number_bend_pairs + np.pi - 4) * self.bend_radius) / (
-                                 2 * self.number_bend_pairs)
-        extra_length = self.straight_length - 4 * self.bend_radius - segment_length
-        if extra_length <= 0:
-            raise ValueError(
-                f"The delay line does not fit in the horizontal distance of"
-                f"{self.straight_length} increase the number of bend pairs")
-        height = (4 * self.number_bend_pairs - 2) * self.bend_radius
-        p = GdspyPath(self.waveguide_w)
-        p.segment(length=self.bend_radius)
-        p.segment(length=segment_length)
-
-        bend_dir = -1 if self.flip else 1
-
-        for count in range(self.number_bend_pairs):
-            p.turn(radius=self.bend_radius, angle=np.pi * bend_dir)
-            p.segment(length=segment_length)
-            p.turn(radius=self.bend_radius, angle=-np.pi * bend_dir)
-            p.segment(length=segment_length)
-        p.segment(length=self.bend_radius)
-        p.turn(radius=self.bend_radius, angle=-np.pi / 2 * bend_dir)
-        p.segment(length=height)
-        p.turn(radius=self.bend_radius, angle=np.pi / 2 * bend_dir)
-        p.segment(length=extra_length)
-
-        super(DelayLine, self).__init__(p)
-        self.port['a0'] = Port(0, 0, -180, w=self.waveguide_w)
-        self.port['b0'] = Port(self.bounds[2], 0, w=self.waveguide_w)
 
 
 @fix_dataclass_init_docs
@@ -299,15 +139,15 @@ class WaveguideDevice(Device):
             :code:`ridge_waveguide`.
         name: The device name.
     """
-    ridge_waveguide: Path
-    slab_waveguide: Path
+    ridge_waveguide: Pattern
+    slab_waveguide: Pattern
     ridge: str = CommonLayer.RIDGE_SI
-    rib: str = CommonLayer.RIB_SI
+    slab: str = CommonLayer.RIB_SI
     name: str = "rib_wg"
 
-    def __post_init_post_parse__(self):
-        super(WaveguideDevice, self).__init__(self.name, [(self.ridge_waveguide, self.ridge),
-                                                          (self.slab_waveguide, self.rib)])
+    def __post_init__(self):
+        super().__init__(self.name, [(self.ridge_waveguide, self.ridge),
+                                     (self.slab_waveguide, self.slab)])
         self.port = self.ridge_waveguide.port
 
 
@@ -329,7 +169,7 @@ class StraightGrating(Device):
 
     """
     extent: Float2
-    waveguide: Path
+    waveguide: Pattern
     pitch: float
     duty_cycle: float = 0.5
     rib_grow: float = 0
@@ -338,11 +178,11 @@ class StraightGrating(Device):
     ridge: CommonLayer = CommonLayer.RIDGE_SI
     slab: CommonLayer = CommonLayer.RIB_SI
 
-    def __post_init_post_parse__(self):
+    def __post_init__(self):
         self.stripe_w = self.pitch * (1 - self.duty_cycle)
         slab = (Box(self.extent).hstack(self.waveguide).buffer(self.rib_grow), self.slab)
         grating = (Box(self.extent).hstack(self.waveguide).striped(self.stripe_w, (self.pitch, 0)), self.ridge)
-        super(StraightGrating, self).__init__(self.name, [slab, grating, (self.waveguide, self.ridge)])
+        super().__init__(self.name, [slab, grating, (self.waveguide, self.ridge)])
         self.port['a0'] = self.waveguide.port['a0']
 
 
@@ -367,7 +207,7 @@ class FocusingGrating(Device):
     """
     radius: float
     angle: float
-    waveguide: Path
+    waveguide: WaveguideDevice
     pitch: float
     duty_cycle: float = 0.5
     grating_frac: float = 1
@@ -377,7 +217,7 @@ class FocusingGrating(Device):
     ridge: CommonLayer = CommonLayer.RIDGE_SI
     slab: CommonLayer = CommonLayer.RIB_SI
 
-    def __post_init_post_parse__(self):
+    def __post_init__(self):
         self.stripe_w = self.pitch * (1 - self.duty_cycle)
         grating = Sector(self.radius, self.angle, self.resolution).shapely
         n_periods = int(self.radius * self.grating_frac / self.pitch) - 1
@@ -386,17 +226,18 @@ class FocusingGrating(Device):
                 self.radius - self.pitch * (n + 1) + self.stripe_w / 2).exterior.coords).buffer(self.stripe_w / 2)
             grating -= circle
         grating = Pattern(grating).rotate(90).translate(
-            np.abs(self.waveguide.final_width / np.tan(self.angle / 360 * np.pi))
+            np.abs(self.waveguide.port['b0'].w / np.tan(self.angle / 360 * np.pi))
         )
+        self.waveguide.slab = self.slab
+        self.waveguide.ridge = self.ridge
         if n_periods <= 0:
             raise ValueError(f'Calculated {n_periods} which is <= 0.'
                              f'Make sure that the pitch is not too big and grating_frac not'
                              f'too small compared to radius.')
-        super(FocusingGrating, self).__init__(self.name,
-                                              [(Box(grating.size).buffer(self.rib_grow).align(grating), self.slab),
-                                               (grating, self.ridge),
-                                               (self.waveguide, self.ridge)])
-        self.port['a0'] = self.waveguide.port['b0']
+        super().__init__(self.name,
+                         [(grating.buffer(self.rib_grow + self.pitch), self.slab),
+                          (grating, self.ridge), self.waveguide])
+        self.port['a0'] = self.waveguide.port['b0'].copy
         self.rotate(180).halign(0)
 
 
@@ -412,11 +253,11 @@ class TapDC(Pattern):
     dc: DC
     grating: Union[StraightGrating, FocusingGrating]
 
-    def __post_init_post_parse__(self):
+    def __post_init__(self):
         in_grating = self.grating_pad.copy.put(self.dc.port['b1'])
         out_grating = self.grating_pad.copy.put(self.dc.port['a1'])
-        super(TapDC, self).__init__(self.dc, in_grating, out_grating)
+        super().__init__(self.dc, in_grating, out_grating)
         self.port['a0'] = self.dc.port['a0']
         self.port['b0'] = self.dc.port['b0']
-        self.reference_patterns.append(self.dc)
+        self.refs.append(self.dc)
         self.wg_path = self.dc.lower_path

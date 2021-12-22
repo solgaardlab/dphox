@@ -1,20 +1,11 @@
-import pickle
+from copy import deepcopy as copy
+from dataclasses import dataclass
 
 import numpy as np
-from pydantic.dataclasses import dataclass
-from shapely.geometry import LineString
 
+from .transform import AffineTransform, GDSTransform, rotate2d, translate2d
 from .typing import Polygon
-from .utils import fix_dataclass_init_docs, poly_points
-from .transform import AffineTransform, rotate2d, translate2d, GDSTransform
-
-try:
-    HOLOVIEWS_IMPORTED = True
-    import holoviews as hv
-    from holoviews import opts
-    import panel as pn
-except ImportError:
-    HOLOVIEWS_IMPORTED = False
+from .utils import fix_dataclass_init_docs
 
 
 @fix_dataclass_init_docs
@@ -40,7 +31,7 @@ class Port:
     z: float = 0
     h: float = 0
 
-    def __post_init_post_parse__(self):
+    def __post_init__(self):
         self.xy = np.array((self.x, self.y))
         self.xya = np.array((self.x, self.y, self.a))
         self.center = np.array((self.x, self.y, self.z))
@@ -68,21 +59,27 @@ class Port:
             The shapely :code:`Polygon` triangle represented by the :code:`Port`.
 
         """
-        dx, dy = np.sin(self.a * np.pi / 180) * self.w / 2, np.cos(self.a * np.pi / 180) * self.w / 2
+        dx, dy = -np.sin(self.a * np.pi / 180) * self.w / 2, np.cos(self.a * np.pi / 180) * self.w / 2
+        n = -self.tangent(self.w / 2)
         return Polygon(
-            [(self.x - dx - dy * 0.75, self.y - dy - dx * 0.75), (self.x + dx - dy * 0.75, self.y + dy - dx * 0.75),
+            [(self.x - dx + n[0], self.y - dy + n[1]), (self.x + dx + n[0], self.y + dy + n[1]),
              (self.x, self.y)])
 
+    def flip(self):
+        self.a = np.mod(self.a + 180, 360)
+        return self
+
     @classmethod
-    def from_shapely(cls, triangle: Polygon, z: float = 0, h: float = 0) -> "Port":
+    def from_points(cls, points: np.ndarray, z: float = 0, h: float = 0) -> "Port":
         """Initialize a :code:`Port` using a :code:`LineString` in Shapely.
 
-        The port can be unambiguously defined using a line. The Shapely :code:`Polygon` triangle defines the
-        center :math:`x, y` of the line as well as the width :math:`w` of the port. This is effectively the
-        inverse of the :code:`shapely` property of this class.
+        The port can be unambiguously defined using a tangent whose port
+        faces 90 degrees counterclockwise (normal/perpendicular direction) from that tangent.
+        The width of the port is the magnitude of the vector and the location of the port is the
+        centroid of the vector.
 
         Args:
-            triangle: Triangle representing the port.
+            points: Points representing the vector.
             z: The z position of the port.
             h: The height / thickness of the port.
 
@@ -90,44 +87,15 @@ class Port:
             The :code:`Port` represented by the shapely :code:`Polygon` triangle.
 
         """
-        if not isinstance(triangle, Polygon):
-            raise TypeError(f'Input line must be a shapely Polygon but got {type(triangle)}')
 
-        points = poly_points(triangle)
-        first, second, port_point, _ = points
-        x, y = port_point
-        c = (second[1] - first[1]) + (second[0] - first[0]) * 1j
-        a = np.angle(c) * 180 / np.pi
-        return cls(x, y, a, np.abs(c), z, h)
-
-    @classmethod
-    def from_linestring(cls, linestring: LineString, z: float = 0, h: float = 0) -> "Port":
-        """Initialize a :code:`Port` using a :code:`LineString` in Shapely.
-
-        The port can be unambiguously defined using a line. The Shapely :code:`Polygon` triangle defines the
-        center :math:`x, y` of the line as well as the width :math:`w` of the port. This is effectively the
-        inverse of the :code:`shapely` property of this class.
-
-        Args:
-            linestring: Shapely :code:`LineString` representing the port.
-            z: The z position of the port.
-            h: The height / thickness of the port.
-
-        Returns:
-            The :code:`Port` represented by the shapely :code:`Polygon` triangle.
-
-        """
-        if not isinstance(linestring, LineString):
-            raise TypeError(f'Input line must be a shapely LineString but got {type(linestring)}')
-
-        first, second = linestring.coords
-        c, = linestring.centroid.coords
+        first, second = points
+        c = (first + second) / 2
         d = (second[1] - first[1]) + (second[0] - first[0]) * 1j
         a = -np.angle(d) * 180 / np.pi
         return cls(c[0], c[1], a, np.abs(d), z, h)
 
-    def normal(self, scale: float = 1):
-        """The vector normal to the port
+    def tangent(self, scale: float = 1):
+        """The vector tangent (parallel) to the direction of the port
 
         Args:
             scale: The magnitude of the normal vector
@@ -138,10 +106,26 @@ class Port:
         """
         return np.array([np.cos(self.a * np.pi / 180), np.sin(self.a * np.pi / 180)]) * scale
 
-    def transformed_line(self, transform: np.ndarray):
-        dx, dy = -np.sin(self.a * np.pi / 180) * self.w / 2, np.cos(self.a * np.pi / 180) * self.w / 2
+    def normal(self, scale: float = 1):
+        """The normal vector perpendicular to the direction of the port (e.g. useful for turns)
+
+        Args:
+            scale: The magnitude of the normal vector
+
+        Returns:
+            Return the vector normal to the port
+
+        """
+        return np.array([np.sin(self.a * np.pi / 180), -np.cos(self.a * np.pi / 180)]) * scale
+
+    @property
+    def line(self):
+        dx, dy = -self.normal(self.w / 2)
         x, y = self.xy
-        return np.array(transform[..., :2, :]) @ np.array([[x - dx, y - dy, 1], [x + dx, y + dy, 1]]).T
+        return np.array([[x - dx, y - dy], [x + dx, y + dy]]).T
+
+    def transformed_line(self, transform: np.ndarray):
+        return np.array(transform[..., :2, :]) @ np.vstack((self.line, np.array([(1, 1)])))
 
     def transform(self, transform: np.ndarray):
         line = self.transformed_line(transform).T
@@ -157,8 +141,10 @@ class Port:
         return self
 
     def hvplot(self, name: str = 'port'):
+        # import locally since this import takes a while to import globally.
+        import holoviews as hv
         x, y = self.shapely.exterior.coords.xy
-        port_xy = self.xy - self.normal(self.w)
+        port_xy = self.xy - self.tangent(self.w)
         return hv.Polygons([{'x': x, 'y': y}]).opts(
             data_aspect=1, frame_height=200, color='red', line_alpha=0) * hv.Text(*port_xy, name)
 
@@ -170,7 +156,7 @@ class Port:
             A deep copy of this port.
 
         """
-        return pickle.loads(pickle.dumps(self))
+        return copy(self)
 
 
 def port_transform(to_port: Port, from_port: Port = None) -> AffineTransform:
