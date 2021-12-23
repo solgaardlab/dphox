@@ -286,7 +286,8 @@ class Device:
             device: The child device to place.
             placement: The transform to apply OR the port to which the device should be connected.
                 Note that the transform to apply can be the form of an xya (x, y, angle) tuple or a port.
-            from_port: The port name corresponding to child device's port that should be connected to :code:`port`.
+            from_port: The port name corresponding to child device's port that should be connected according to
+                :code:`placement`. This effectively acts like a reference position/orientation for placement.
 
         Returns:
             This device, after modifying the children of the device.
@@ -300,9 +301,11 @@ class Device:
             transform = np.array([p.xya if isinstance(p, Port) else p for p in placement])
         else:
             if isinstance(from_port, str):
-                from_port = self.port[from_port]
+                from_port = device.port[from_port]
             elif isinstance(from_port, tuple):
                 from_port = Port(*from_port)
+            elif not isinstance(from_port, Port):
+                raise TypeError(f"from_port must be str, tuple or Port type but got {type(from_port)}.")
 
             def transformed_port(xya):
                 rotated_translate = -rotate2d(np.radians(xya[-1] - from_port.a + 180))[:2, :2] @ from_port.xy

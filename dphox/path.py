@@ -17,7 +17,7 @@ class Curve(Geometry):
     Attributes:
         curve: A function :math:`f(t) = (x(t), y(t))`, given :math:`t \\in [0, 1]`, or a length (float),
             or a list of points, or a tuple of points and tangents.
-        num_evaluations: Number of evaluations to define :math:`f(t)` (number of points in the curve).
+        resolution: Number of evaluations to define :math:`f(t)` (number of points in the curve).
     """
 
     def __init__(self, *curves: Union[float, "Curve", CurveLike, List[CurveLike]]):
@@ -269,8 +269,8 @@ def curve_to_path(points: np.ndarray, widths: Union[float, np.ndarray], tangents
     back_port = np.array([top_path[0], bottom_path[0]])
 
     # step 2: split the path if there are too many points in it
-    num_evaluations = top_path.shape[0]
-    num_split = np.ceil(num_evaluations / max_num_points).astype(np.int32)
+    resolution = top_path.shape[0]
+    num_split = np.ceil(resolution / max_num_points).astype(np.int32)
     ranges = [(i * max_num_points, (i + 1) * max_num_points + 1) for i in range(num_split)]
 
     # step 3: convert the resulting polygon list into a Pattern whose polygons form the path.

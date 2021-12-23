@@ -4,10 +4,10 @@ from scipy.special import fresnel
 from .path import Curve, link, straight
 from .transform import translate2d
 from .typing import Callable, CurveTuple, Float2, Optional, Tuple, Union
-from .utils import NUM_EVALUATIONS
+from .utils import DEFAULT_RESOLUTION
 
 
-def parametric_curve(curve_fn: Callable, num_evaluations: int):
+def parametric_curve(curve_fn: Callable, resolution: int):
     """Define curve (parametric function) given :math:`t \\in [0, 1]` input.
 
     Since the tangent direction is dependent on a tangents along the path, the curve definition is much more accurate
@@ -19,13 +19,13 @@ def parametric_curve(curve_fn: Callable, num_evaluations: int):
 
     Args:
         curve_fn: The function returning either the points in the path or a tuple of points and tangents.
-        num_evaluations: The number of evaluations from 0 to 1 to evaluate the parametric function.
+        resolution: The number of evaluations from 0 to 1 to evaluate the parametric function.
 
     Returns:
         The curve represented by the curve function.
 
     """
-    t = np.linspace(0, 1, num_evaluations)[:, np.newaxis]
+    t = np.linspace(0, 1, resolution)[:, np.newaxis]
     points = curve_fn(t)
     if isinstance(points, tuple):
         points, tangents = points
@@ -34,7 +34,7 @@ def parametric_curve(curve_fn: Callable, num_evaluations: int):
     return Curve(CurveTuple(points=points.T, tangents=tangents.T))
 
 
-def taper(length: float, num_evaluations: int = NUM_EVALUATIONS):
+def taper(length: float, resolution: int = DEFAULT_RESOLUTION):
     """Basically the same as a straight line along the x axis, but here we make extra evaluations by default.
 
     Note:
@@ -43,7 +43,7 @@ def taper(length: float, num_evaluations: int = NUM_EVALUATIONS):
 
     Args:
         length: Length of the taper.
-        num_evaluations: Number of evaluations along the taper.
+        resolution: Number of evaluations along the taper.
 
     Returns:
         A straight segment that can be tapered.
@@ -53,11 +53,11 @@ def taper(length: float, num_evaluations: int = NUM_EVALUATIONS):
     def _linear(t: np.ndarray):
         return np.hstack((t * length, np.zeros_like(t))), np.hstack((np.ones_like(t), np.zeros_like(t)))
 
-    return parametric_curve(_linear, num_evaluations=num_evaluations)
+    return parametric_curve(_linear, resolution=resolution)
 
 
 def cubic_bezier(pole_1: np.ndarray, pole_2: np.ndarray, pole_3: np.ndarray,
-                 num_evaluations: int = NUM_EVALUATIONS):
+                 resolution: int = DEFAULT_RESOLUTION):
     """The cubic bezier function, which is very useful for both smooth paths and sbends.
 
     The formula for a cubic bezier function follows the expression:
@@ -70,7 +70,7 @@ def cubic_bezier(pole_1: np.ndarray, pole_2: np.ndarray, pole_3: np.ndarray,
         pole_1: Pole 1 :math:`\\boldsymbol{c}_1`
         pole_2: Pole 2 :math:`\\boldsymbol{c}_2`
         pole_3: Pole 3 :math:`\\boldsymbol{c}_3`
-        num_evaluations: Number of evaluations along the cubic bezier.
+        resolution: Number of evaluations along the cubic bezier.
 
     Returns:
 
@@ -81,10 +81,10 @@ def cubic_bezier(pole_1: np.ndarray, pole_2: np.ndarray, pole_3: np.ndarray,
         tangents = 3 * (1 - t) ** 2 * pole_1 + 6 * (1 - t) * t * (pole_2 - pole_1) + 3 * t ** 2 * (pole_3 - pole_2)
         return path, tangents
 
-    return parametric_curve(_bezier, num_evaluations=num_evaluations)
+    return parametric_curve(_bezier, resolution=resolution)
 
 
-def bezier_sbend(bend_x: float, bend_y: float, num_evaluations: int = NUM_EVALUATIONS):
+def bezier_sbend(bend_x: float, bend_y: float, resolution: int = DEFAULT_RESOLUTION):
     """Bezier sbend.
 
     The formula for a cubic bezier function follows the expression:
@@ -98,7 +98,7 @@ def bezier_sbend(bend_x: float, bend_y: float, num_evaluations: int = NUM_EVALUA
     Args:
         bend_x: Change in :math:`x` due to the bend.
         bend_y: Change in :math:`y` due to the bend.
-        num_evaluations: Number of evaluations along the bezier sbend.
+        resolution: Number of evaluations along the bezier sbend.
 
     Returns:
         A function mapping 0 to 1 to the width of the taper along the path linestring.
@@ -107,10 +107,10 @@ def bezier_sbend(bend_x: float, bend_y: float, num_evaluations: int = NUM_EVALUA
     pole_1 = np.asarray((bend_x / 2, 0))
     pole_2 = np.asarray((bend_x / 2, bend_y))
     pole_3 = np.asarray((bend_x, bend_y))
-    return cubic_bezier(pole_1, pole_2, pole_3, num_evaluations=num_evaluations)
+    return cubic_bezier(pole_1, pole_2, pole_3, resolution=resolution)
 
 
-def euler_bend(radius: float, angle: float = 90, num_evaluations: int = NUM_EVALUATIONS):
+def euler_bend(radius: float, angle: float = 90, resolution: int = DEFAULT_RESOLUTION):
     """Euler bend.
 
     The formula for an euler bend function follows the expression given radius :math:`r` and angle :math:`\\alpha`:
@@ -122,7 +122,7 @@ def euler_bend(radius: float, angle: float = 90, num_evaluations: int = NUM_EVAL
     Args:
         radius: Radius of the euler bend.
         angle: Angle change of the euler bend arc.
-        num_evaluations: Number of evaluations along the euler bend.
+        resolution: Number of evaluations along the euler bend.
 
     Returns:
         The euler bend curve.
@@ -136,16 +136,16 @@ def euler_bend(radius: float, angle: float = 90, num_evaluations: int = NUM_EVAL
         y, x = fresnel(z / np.sqrt(np.pi / 2))
         return radius * np.hstack((x, y * sign)), np.hstack((np.cos(angle * t), np.sin(angle * t) * sign))
 
-    return parametric_curve(_bend, num_evaluations=num_evaluations)
+    return parametric_curve(_bend, resolution=resolution)
 
 
-def circular_bend(radius: float, angle: float = 90, num_evaluations: int = NUM_EVALUATIONS):
+def circular_bend(radius: float, angle: float = 90, resolution: int = DEFAULT_RESOLUTION):
     """Circular bend functional.
 
     Args:
         radius: Radius of the circular bend.
         angle: Angle change of the circular arc.
-        num_evaluations: Number of evaluations along the circular bend.
+        resolution: Number of evaluations along the circular bend.
 
     Returns:
         The circular bend curve.
@@ -159,7 +159,7 @@ def circular_bend(radius: float, angle: float = 90, num_evaluations: int = NUM_E
         y = radius * (1 - np.cos(angle * t))
         return np.hstack((x, y * sign)), np.hstack((np.cos(angle * t), np.sin(angle * t) * sign))
 
-    return parametric_curve(_bend, num_evaluations=num_evaluations)
+    return parametric_curve(_bend, resolution=resolution)
 
 
 def elliptic_bend(radius_x: float, radius_y: float, angle: float):
@@ -177,14 +177,14 @@ def elliptic_bend(radius_x: float, radius_y: float, angle: float):
     return circular_bend(1, np.arctan2(np.sin(angle) / radius_y, np.cos(angle) / radius_x)).scale(radius_x, radius_y)
 
 
-def turn(radius: float, angle: float = 90, euler: float = 0, num_evaluations=NUM_EVALUATIONS):
+def turn(radius: float, angle: float = 90, euler: float = 0, resolution=DEFAULT_RESOLUTION):
     """Turn (partial Euler) functional for angles between -90 and 90 degrees.
 
     Args:
         radius: Effective radius of the turn (for an equivalent circular bend).
         angle: Angle change for the turn in degrees.
         euler: Fraction of the bend :math:`p` that is an Euler bend, must satisfy :math:`0 \\leq p < 1`.
-        num_evaluations: Number of evaluations for the path.
+        resolution: Number of evaluations for the path.
 
     Returns:
         The turn curve.
@@ -196,19 +196,19 @@ def turn(radius: float, angle: float = 90, euler: float = 0, num_evaluations=NUM
         euler_angle = euler * angle / 2
         circular_angle = (1 - euler) * angle / 2
 
-        euler_curve = euler_bend(1, euler_angle, num_evaluations=int(euler / 2 * num_evaluations))
+        euler_curve = euler_bend(1, euler_angle, resolution=int(euler / 2 * resolution))
         circular_curve = circular_bend(1 / np.sqrt(2 * np.pi * np.radians(np.abs(euler_angle))), circular_angle,
-                                       num_evaluations=int((1 - euler) / 2 * num_evaluations))
+                                       resolution=int((1 - euler) / 2 * resolution))
 
         curve = Curve(euler_curve, circular_curve.to(euler_curve.port['b0'])).symmetrize()
         scale = radius * 2 * np.sin(np.radians(np.abs(angle)) / 2) / np.linalg.norm(curve.points.T[-1])
         return curve.scale(scale, scale, origin=(0, 0))
     else:
-        return circular_bend(radius, angle, num_evaluations)
+        return circular_bend(radius, angle, resolution)
 
 
 def arc(angle: float, radius: float, radius_y: Optional[float] = None, start_angle: float = None,
-        num_evaluations: int = NUM_EVALUATIONS):
+        resolution: int = DEFAULT_RESOLUTION):
     """Arc.
 
     Notes:
@@ -219,7 +219,7 @@ def arc(angle: float, radius: float, radius_y: Optional[float] = None, start_ang
         radius: The radius along the x-axis.
         radius_y: The radius along the y-axis (default to the radius if None).
         start_angle: Start angle for the arc (default to -angle / 2 if None).
-        num_evaluations: Number of evaluations for the curve.
+        resolution: Number of evaluations for the curve.
 
     Returns:
         The function mapping 0 to 1 to the curve/tangents for the arc.
@@ -235,12 +235,12 @@ def arc(angle: float, radius: float, radius_y: Optional[float] = None, start_ang
         y = radius_y * np.sin(angles)
         return np.hstack((x, y)), np.hstack((-np.sin(angles), np.cos(angles)))
 
-    return parametric_curve(_arc, num_evaluations)
+    return parametric_curve(_arc, resolution)
 
 
 def grating_arc(angle: float, duty_cycle: float, n_core: float, n_clad: float,
                 fiber_angle: float, wavelength: float, m: float,
-                num_evaluations: int = NUM_EVALUATIONS, include_width: bool = True):
+                resolution: int = DEFAULT_RESOLUTION, include_width: bool = True):
     """Grating arc.
 
     See Also:
@@ -251,10 +251,10 @@ def grating_arc(angle: float, duty_cycle: float, n_core: float, n_clad: float,
         duty_cycle: duty cycle for the grating
         n_clad: clad material index of refraction.
         n_core: core material index of refraction.
-        fiber_angle: angle of the fiber in degrees.
+        fiber_angle: angle of the fiber in degrees from horizontal (not NOT vertical).
         wavelength: wavelength accepted by the grating.
         m: grating index.
-        num_evaluations: Number of evaluations for the curve.
+        resolution: Number of evaluations for the curve.
         include_width: Include the width (paths in the grating arc).
 
     Returns:
@@ -275,18 +275,18 @@ def grating_arc(angle: float, duty_cycle: float, n_core: float, n_clad: float,
 
     width = duty_cycle * wavelength / (n_eff - n_clad * np.cos(fiber_angle))
 
-    curve = parametric_curve(_grating_arc, num_evaluations)
+    curve = parametric_curve(_grating_arc, resolution)
     return curve.path(width) if include_width else curve
 
 
-def turn_sbend(height: float, radius: float, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+def turn_sbend(height: float, radius: float, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
     """Turn-based sbend (as opposed to bezier-based sbend).
 
     Args:
         height: Height of the sbend.
         radius: Radius of the sbend.
         euler: Fraction of the turns that should be Euler turns.
-        num_evaluations: Number of evaluations for the curve.
+        resolution: Number of evaluations for the curve.
 
     Returns:
         The turn sbend curve.
@@ -296,25 +296,25 @@ def turn_sbend(height: float, radius: float, euler: float = 0, num_evaluations: 
     sign = np.sign(height)
     if h >= 2 * radius:
         angle = 90 * sign
-        turn_up = turn(radius, angle, euler, num_evaluations)
-        turn_down = turn(radius, -angle, euler, num_evaluations).to(turn_up.port['b0'])
+        turn_up = turn(radius, angle, euler, resolution)
+        turn_down = turn(radius, -angle, euler, resolution).to(turn_up.port['b0'])
         return Curve(turn_up, turn_down.transform(translate2d((0, (h - 2 * radius) * sign)))).coalesce()
     else:
         angle = 180 / np.pi * np.arccos(1 - h / (2 * radius)) * sign
-        turn_up = turn(radius, angle, euler, num_evaluations)
-        turn_down = turn(radius, -angle, euler, num_evaluations).to(turn_up.port['b0'])
+        turn_up = turn(radius, angle, euler, resolution)
+        turn_down = turn(radius, -angle, euler, resolution).to(turn_up.port['b0'])
         return Curve(turn_up, turn_down).coalesce()
 
 
 def spiral(turns: int, scale: float, separation_scale: float = 1, theta_offset: float = 0,
-           num_evaluations: int = 1000):
+           resolution: int = 1000):
     """Spiral (Archimedian).
 
     Args:
         turns: Number of 180 degree turns in the spiral function
         scale: The scale of the spiral function (maps to minimum radius in final implementation relative to scale 1).
         separation_scale: The separation scale for the spiral function (how fast to spiral out relative to scale 1)
-        num_evaluations: Number of evaluations for the curve.
+        resolution: Number of evaluations for the curve.
 
     Returns:
         The spiral curve.
@@ -327,30 +327,30 @@ def spiral(turns: int, scale: float, separation_scale: float = 1, theta_offset: 
         x, y = radius * np.cos(theta), radius * np.sin(theta)
         return scale / np.pi * np.hstack((x, y)), np.hstack((-np.sin(theta), np.cos(theta)))
 
-    return parametric_curve(_spiral, num_evaluations)
+    return parametric_curve(_spiral, resolution)
 
 
-def bezier_dc(dx: float, dy: float, interaction_l: float, num_evaluations: int = NUM_EVALUATIONS):
+def bezier_dc(dx: float, dy: float, interaction_l: float, resolution: int = DEFAULT_RESOLUTION):
     """Bezier curve-based directional coupler
 
     Args:
         dx: Bend length (specify positive value for bend to go backwards).
         dy: Bend height (specify negative value for bend to go down).
         interaction_l: Interaction length for the directional coupler.
-        num_evaluations: Number of points to evaluate in each of the four bezier paths.
+        resolution: Number of points to evaluate in each of the four bezier paths.
 
     Returns:
         The bezier dc path.
 
     """
     return link(
-        bezier_sbend(dx, dy, num_evaluations),
+        bezier_sbend(dx, dy, resolution),
         straight(interaction_l),
-        bezier_sbend(dx, -dy, num_evaluations)
+        bezier_sbend(dx, -dy, resolution)
     )
 
 
-def dc(radius: float, dy: float, interaction_l: float, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+def dc(radius: float, dy: float, interaction_l: float, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
     """Turn curve-based directional coupler
 
     Args:
@@ -358,21 +358,21 @@ def dc(radius: float, dy: float, interaction_l: float, euler: float = 0, num_eva
         dy: Bend height (specify negative value for bend to go down).
         interaction_l: Interaction length for the directional coupler.
         euler: Euler contribution to the directional coupler's bends.
-        num_evaluations: Number of points to evaluate in each of the four bezier paths.
+        resolution: Number of points to evaluate in each of the four bezier paths.
 
     Returns:
         The turn sbend-based dc path.
 
     """
     return link(
-        turn_sbend(dy, radius, euler, num_evaluations),
+        turn_sbend(dy, radius, euler, resolution),
         straight(interaction_l),
-        turn_sbend(-dy, radius, euler, num_evaluations)
+        turn_sbend(-dy, radius, euler, resolution)
     )
 
 
 def loopback(radius: float, euler: float, extension: Float2, loop_ccw: bool = True,
-             num_evaluations: int = NUM_EVALUATIONS):
+             resolution: int = DEFAULT_RESOLUTION):
     """Loopback path.
 
     Args:
@@ -380,60 +380,60 @@ def loopback(radius: float, euler: float, extension: Float2, loop_ccw: bool = Tr
         euler: Euler parameter for the turns (recommended: 0.2).
         extension: Extension x, y for the horizontal, vertical stretches of the loopback respectively.
         loop_ccw: Loop counterclockwise
-        num_evaluations: Number of evaluations for each turn.
+        resolution: Number of evaluations for each turn.
 
     Returns:
 
     """
     s = 2 * loop_ccw - 1
     return link(
-        turn(radius, -180 * s, euler, num_evaluations=num_evaluations),
+        turn(radius, -180 * s, euler, resolution=resolution),
         extension[0],
-        turn(radius, 90 * s, euler, num_evaluations=num_evaluations),
+        turn(radius, 90 * s, euler, resolution=resolution),
         extension[1],
-        turn(radius, 90 * s, euler, num_evaluations=num_evaluations),
+        turn(radius, 90 * s, euler, resolution=resolution),
         extension[0],
-        turn(radius, -180 * s, euler, num_evaluations=num_evaluations)
+        turn(radius, -180 * s, euler, resolution=resolution)
     )
 
 
-def trombone(radius: float, length: float, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+def trombone(radius: float, length: float, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
     """Trombone path.
 
     Args:
         radius: Radius of the trombone turns.
         length: Length / height of the trombone (minus the turn contributions).
         euler: Euler parameter for the turns (recommended: 0.2)
-        num_evaluations: Number of evaluations for each turn.
+        resolution: Number of evaluations for each turn.
 
     Returns:
 
     """
     return link(
-        turn_sbend(length + 2 * radius, radius, euler, num_evaluations),
-        turn_sbend(-length - 2 * radius, radius, euler, num_evaluations)
+        turn_sbend(length + 2 * radius, radius, euler, resolution),
+        turn_sbend(-length - 2 * radius, radius, euler, resolution)
     )
 
 
-def bent_trombone(radius: float, length: float, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+def bent_trombone(radius: float, length: float, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
     """Bent trombone path.
 
     Args:
         radius: Radius of the trombone turns.
         length: Length / height of the trombone (minus the turn contributions).
         euler: Euler parameter for the turns (recommended: 0.2)
-        num_evaluations: Number of evaluations for each turn.
+        resolution: Number of evaluations for each turn.
 
     Returns:
         A bent trombone path for path balancing with fewer bends
 
     """
     return link(
-        turn_sbend(4 * radius, radius, euler, num_evaluations),
+        turn_sbend(4 * radius, radius, euler, resolution),
         straight(length + radius),
-        turn(radius, -180, euler, num_evaluations=num_evaluations),
+        turn(radius, -180, euler, resolution=resolution),
         straight(length),
-        turn(radius, 180, euler, num_evaluations=num_evaluations)
+        turn(radius, 180, euler, resolution=resolution)
     )
 
 
@@ -494,7 +494,7 @@ def cubic_taper_fn(init_w: float, change_w: float):
 
 
 def cubic_taper(init_w: float, change_w: float, length: float, taper_length: float,
-                symmetric: bool = True, taper_first: bool = True, num_evaluations: int = NUM_EVALUATIONS):
+                symmetric: bool = True, taper_first: bool = True, resolution: int = DEFAULT_RESOLUTION):
     """A cubic taper waveguide pattern.
 
     Args:
@@ -504,7 +504,7 @@ def cubic_taper(init_w: float, change_w: float, length: float, taper_length: flo
         taper_length: Length of just the waveguide portion.
         symmetric: Whether to symmetrize the waveguide.
         taper_first: Whether to taper first.
-        num_evaluations: Number of evaluations for each turn.
+        resolution: Number of evaluations for each turn.
 
     Returns:
         The cubic taper waveguide.
@@ -514,145 +514,145 @@ def cubic_taper(init_w: float, change_w: float, length: float, taper_length: flo
         raise ValueError(f"Require 2 * taper_length <= length, but got {2 * taper_length} >= {length}.")
     straight_length = length / (1 + symmetric) - taper_length
     if taper_first:
-        path = link(taper(taper_length, num_evaluations), straight_length).path((cubic_taper_fn(init_w, change_w),
+        path = link(taper(taper_length, resolution), straight_length).path((cubic_taper_fn(init_w, change_w),
                                                                                  init_w + change_w))
     else:
-        path = link(straight_length, taper(taper_length, num_evaluations)).path(
+        path = link(straight_length, taper(taper_length, resolution)).path(
             (init_w, cubic_taper_fn(init_w, change_w)))
     return path.symmetrize() if symmetric else path
 
 
-def right_turn(radius: float, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+def right_turn(radius: float, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
     """Right turn curve from the perspective of the output port of the curve.
 
     Args:
         radius: Radius of the curve.
         euler: Euler bend contribution.
-        num_evaluations: Number of evaluations for each turn.
+        resolution: Number of evaluations for each turn.
 
     Returns:
         The right turn curve.
 
     """
-    return turn(radius, -90, euler=euler, num_evaluations=num_evaluations)
+    return turn(radius, -90, euler=euler, resolution=resolution)
 
 
-def left_turn(radius: float, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+def left_turn(radius: float, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
     """Left turn curve from the perspective of the output port of the curve.
 
     Args:
         radius: Radius of the curve.
         euler: Euler bend contribution.
-        num_evaluations: Number of evaluations for each turn.
+        resolution: Number of evaluations for each turn.
 
     Returns:
         The left turn curve.
 
     """
-    return turn(radius, euler=euler, num_evaluations=num_evaluations)
+    return turn(radius, euler=euler, resolution=resolution)
 
 
-def left_uturn(radius: float, length: float = 0, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+def left_uturn(radius: float, length: float = 0, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
     """Left uturn from the perspective of the output port of the curve.
 
     Args:
         radius: Radius of the uturn.
         length: Length between the two 90 degree turns.
         euler: Euler bend contribution.
-        num_evaluations: Number of evaluations for each turn.
+        resolution: Number of evaluations for each turn.
 
     Returns:
         The left uturn curve.
 
     """
-    return link(left_turn(radius, euler, num_evaluations), length, left_turn(radius, euler, num_evaluations)).coalesce()
+    return link(left_turn(radius, euler, resolution), length, left_turn(radius, euler, resolution)).coalesce()
 
 
-def right_uturn(radius: float, length: float = 0, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+def right_uturn(radius: float, length: float = 0, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
     """Right uturn from the perspective of the output port of the curve.
 
     Args:
         radius: Radius of the uturn.
         length: Length between the two 90 degree turns.
         euler: Euler bend contribution.
-        num_evaluations: Number of evaluations for each turn.
+        resolution: Number of evaluations for each turn.
 
     Returns:
         The right uturn curve.
 
     """
-    return link(right_turn(radius, euler, num_evaluations), length,
-                right_turn(radius, euler, num_evaluations)).coalesce()
+    return link(right_turn(radius, euler, resolution), length,
+                right_turn(radius, euler, resolution)).coalesce()
 
 
-def semicircle(radius: float, num_evaluations: int = NUM_EVALUATIONS):
+def semicircle(radius: float, resolution: int = DEFAULT_RESOLUTION):
     """A semicircle pattern.
 
     Args:
         radius: The radius of the semicircle.
-        num_evaluations: Number of evaluations for each turn.
+        resolution: Number of evaluations for each turn.
 
     Returns:
         The semicircle pattern.
 
     """
-    return arc(radius, 180, num_evaluations=num_evaluations).pattern
+    return arc(radius, 180, resolution=resolution).pattern
 
 
-def ring(radius: float, num_evaluations: int = NUM_EVALUATIONS):
+def ring(radius: float, resolution: int = DEFAULT_RESOLUTION):
     """A circle or ring curve of specified radius.
 
     Args:
         radius: The radius of the circle.
-        num_evaluations: Number of evaluations for each turn.
+        resolution: Number of evaluations for each turn.
 
     Returns:
         The circle or ring curve.
 
     """
-    return arc(radius, 360, num_evaluations=num_evaluations)
+    return arc(radius, 360, resolution=resolution)
 
 
-def racetrack(radius: float, length: float, euler: float, num_evaluations: int = NUM_EVALUATIONS):
+def racetrack(radius: float, length: float, euler: float, resolution: int = DEFAULT_RESOLUTION):
     """A circle or ring curve of specified radius.
 
     Args:
         radius: The radius of the uturn bends of the racetrack.
         length: The length of the straight section of the racetrack.
         euler: The Euler turn parameter for the uturns.
-        num_evaluations: Number of evaluations for each turn.
+        resolution: Number of evaluations for each turn.
 
     Returns:
         The racetrack curve.
 
     """
-    return link(left_uturn(radius, euler, num_evaluations), length, left_uturn(radius, euler, num_evaluations), length)
+    return link(left_uturn(radius, euler, resolution), length, left_uturn(radius, euler, resolution), length)
 
 
-def circle(radius: float, num_evaluations: int = NUM_EVALUATIONS):
+def circle(radius: float, resolution: int = DEFAULT_RESOLUTION):
     """A circle of specified radius.
 
     Args:
         radius: The radius of the circle.
-        num_evaluations: Number of evaluations for each turn.
+        resolution: Number of evaluations for each turn.
 
     Returns:
         The circle pattern.
 
     """
-    return ring(radius, num_evaluations).pattern
+    return ring(radius, resolution).pattern
 
 
-def ellipse(radius_x: float, radius_y: float, num_evaluations: int = NUM_EVALUATIONS):
+def ellipse(radius_x: float, radius_y: float, resolution: int = DEFAULT_RESOLUTION):
     """An ellipse of specified x and y radii.
 
     Args:
         radius_x: The x radius of the circle.
         radius_y: The y radius of the circle.
-        num_evaluations: Number of evaluations for each turn.
+        resolution: Number of evaluations for each turn.
 
     Returns:
         The ellipse pattern.
 
     """
-    return circle(1, num_evaluations).scale(radius_x, radius_y).pattern
+    return circle(1, resolution).scale(radius_x, radius_y).pattern

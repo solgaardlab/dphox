@@ -1,16 +1,17 @@
 from copy import deepcopy as copy
+from dataclasses import dataclass, field
 from typing import Tuple
 
 import numpy as np
-from dataclasses import field, dataclass
 
 from .device import Device, Via
 from .foundry import CommonLayer
-from .passive import DC, TapDC, WaveguideDevice
 from .parametric import straight
+from .passive import DC, TapDC, WaveguideDevice
 from .pattern import Box, MEMSFlexure, Pattern, Port
+from .route import Interposer
 from .transform import GDSTransform
-from .typing import List, Optional, Union
+from .typing import List, Union
 from .utils import fix_dataclass_init_docs
 
 
@@ -369,15 +370,15 @@ class MZI(Device):
 
         if arm_length_diff > 0:
             if self.bottom_internal:
-                bottom_arm.append(straight(self.coupler.waveguide_w, arm_length_diff))
+                bottom_arm.append(straight(arm_length_diff))
             else:
-                bottom_arm = straight(self.coupler.waveguide_w, arm_length_diff).to(port['b0'])
+                bottom_arm = straight(arm_length_diff).to(port['b0'])
             port['b0'] = bottom_arm.port['b0'].copy
         elif arm_length_diff < 0:
             if self.top_internal:
-                top_arm.append(straight(self.coupler.waveguide_w, arm_length_diff))
+                top_arm.append(straight(arm_length_diff))
             else:
-                top_arm = straight(self.coupler.waveguide_w, arm_length_diff).to(port['b0'])
+                top_arm = straight(arm_length_diff).to(port['b0'])
             port['b1'] = top_arm.port['b1'].copy
 
         patterns.extend([top_arm, bottom_arm])

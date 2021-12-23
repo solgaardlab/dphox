@@ -1,12 +1,11 @@
-from copy import deepcopy as copy
 from dataclasses import dataclass
 
 import numpy as np
 from shapely.geometry import MultiPolygon
 
 from .device import Device
-from .foundry import CommonLayer, OXIDE, SILICON
-from .parametric import bezier_dc, dc, grating_arc, straight
+from .foundry import AIR, CommonLayer, SILICON
+from .parametric import dc, grating_arc, straight
 from .pattern import Box, Pattern, Port
 from .typing import Float2, Int2, Optional, Union
 from .utils import fix_dataclass_init_docs
@@ -197,47 +196,49 @@ class FocusingGrating(Device):
 
     Attributes:
         angle: The opening angle for the focusing grating.
-        waveguide: The waveguide for the focusing grating.
+        waveguide_w: The waveguide width.
         wavelength: wavelength accepted by the grating.
         duty_cycle: duty cycle for the grating
         n_clad: clad material index of refraction (assume oxide by default).
         n_core: core material index of refraction (assume silicon by default).
-        fiber_angle: angle of the fiber in degrees.
+        fiber_angle: angle of the fiber in degrees from horizontal (not NOT vertical).
         num_periods: number of grating periods
-        num_evaluations: Number of evaluations for the curve.
+        resolution: Number of evaluations for the curve.
         grating_frac: The fraction of the distance radiating from the center occupied by the grating (otherwise ridge).
         rib_grow: Offset the rib / slab layer in size (usually positive).
+        waveguide_extra_l: The extra length of the waveguide
         name: Name of the device.
         ridge: The ridge layer for the partial etch.
         slab: The slab layer for the partial etch.
 
     """
-    angle: float
-    waveguide_w: float
-    waveguide_l: float
-    n_clad: int = OXIDE.n
+    waveguide_w: float = 0.5
+    angle: float = 22.5
+    n_env: int = AIR.n
     n_core: int = SILICON.n
-    min_period: int = 10
-    num_periods: int = 20
+    min_period: int = 40
+    num_periods: int = 30
     wavelength: float = 1.55
-    fiber_angle: float = 8
+    fiber_angle: float = 82
     duty_cycle: float = 0.5
     grating_frac: float = 1
-    num_evaluations: int = 16
+    resolution: int = 99
     rib_grow: float = 1
+    waveguide_extra_l: float = 0
     name: str = 'focusing_grating'
     ridge: CommonLayer = CommonLayer.RIDGE_SI
     slab: CommonLayer = CommonLayer.RIB_SI
 
     def __post_init__(self):
-        grating_arcs = [grating_arc(self.angle, self.duty_cycle, self.n_core, self.n_clad,
-                                    self.fiber_angle, self.wavelength, m, num_evaluations=self.num_evaluations)
+        grating_arcs = [grating_arc(self.angle, self.duty_cycle, self.n_core, self.n_env,
+                                    self.fiber_angle, self.wavelength, m, resolution=self.resolution)
                         for m in range(self.min_period, self.min_period + self.num_periods)]
         sector = Pattern(np.hstack((np.zeros((2, 1)), grating_arcs[0].curve.geoms[0])))
         grating = Pattern(grating_arcs, sector)
-        self.waveguide = WaveguideDevice(straight(self.waveguide_l).path(self.waveguide_w),
+        min_waveguide_l = np.abs(self.waveguide.port['b0'].w / np.tan(np.radians(self.angle)))
+        self.waveguide = WaveguideDevice(straight(self.waveguide_extra_l + min_waveguide_l).path(self.waveguide_w),
                                          slab=self.slab, ridge=self.ridge)
-        self.waveguide.halign(np.abs(self.waveguide.port['b0'].w / np.tan(np.radians(self.angle) / 2)), left=False)
+        self.waveguide.halign(min_waveguide_l, left=False)
         super().__init__(self.name,
                          [(grating.buffer(self.rib_grow), self.slab),
                           (grating, self.ridge), self.waveguide])

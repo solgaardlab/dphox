@@ -10,7 +10,7 @@ from .path import Curve
 from .pattern import Pattern
 from .port import Port
 from .typing import Optional
-from .utils import fix_dataclass_init_docs, NUM_EVALUATIONS
+from .utils import fix_dataclass_init_docs, DEFAULT_RESOLUTION
 
 
 def _turn_connect_angle_solve(start: Port, end: Port, start_r: float, end_r: float):
@@ -48,7 +48,7 @@ def _turn_connect_angle_solve(start: Port, end: Port, start_r: float, end_r: flo
 
 
 def turn_connect(start: Port, end: Port, radius: float, radius_end: Optional[float] = None, euler: float = 0,
-                 num_evaluations: int = NUM_EVALUATIONS, include_width: bool = True) -> Union[Pattern, Curve]:
+                 resolution: int = DEFAULT_RESOLUTION, include_width: bool = True) -> Union[Pattern, Curve]:
     """Turn connect.
 
     Args:
@@ -57,7 +57,7 @@ def turn_connect(start: Port, end: Port, radius: float, radius_end: Optional[flo
         radius: Start turn effective radius
         radius_end: End turn effective radius (use :code:`radius` if :code:`None`)
         euler: Euler path contribution (see :code:`turn` method).
-        num_evaluations: Number of evaluations for the turns.
+        resolution: Number of evaluations for the turns.
         include_width: Whether to include the width (cubic taper) of the turn connect
 
     Returns:
@@ -67,8 +67,8 @@ def turn_connect(start: Port, end: Port, radius: float, radius_end: Optional[flo
     start_r = radius
     end_r = start_r if radius_end is None else radius_end
     angles, length = _turn_connect_angle_solve(start.copy.flip(), end.copy.flip(), start_r, end_r)
-    curve = link(turn(start_r, angles[0], euler, num_evaluations),
-                 length, turn(end_r, angles[1], euler, num_evaluations)).to(start)
+    curve = link(turn(start_r, angles[0], euler, resolution),
+                 length, turn(end_r, angles[1], euler, resolution)).to(start)
 
     return curve.path(start.w) if include_width else curve
 
@@ -100,32 +100,32 @@ def manhattan_route(start: Port, lengths: np.ndarray, include_width: bool = True
 
 
 def spiral_delay(n_turns: int, min_radius: float, separation: float,
-                 num_evaluations: int = 1000, turn_num_evaluations: int = NUM_EVALUATIONS):
+                 resolution: int = 1000, turn_resolution: int = DEFAULT_RESOLUTION):
     """Spiral delay (large waveguide delay in minimal area).
 
     Args:
         n_turns: Number of turns in the spiral
         min_radius: Minimum radius of the spiral (affects the inner part of the design)
         separation: Separation of waveguides in the spiral.
-        num_evaluations: Number of evaluations for the spiral.
-        turn_num_evaluations: Number of evaluations for the turns.
+        resolution: Number of evaluations for the spiral.
+        turn_resolution: Number of evaluations for the turns.
 
     Returns:
         The spiral delay waveguide.
     """
     spiral_ = spiral(n_turns, min_radius, theta_offset=2 * np.pi,
-                     separation_scale=separation, num_evaluations=num_evaluations)
-    bend = circular_bend(min_radius, 180, num_evaluations=turn_num_evaluations)
+                     separation_scale=separation, resolution=resolution)
+    bend = circular_bend(min_radius, 180, resolution=turn_resolution)
     curve = link(spiral_.copy.reverse().flip_ends(), bend.copy.reflect(), bend, spiral_)
     start, end = curve.port['a0'], curve.port['b0']
     start_section = turn_connect(start, Port(start.x - 3 * min_radius, start.y, 0), min_radius,
-                                 num_evaluations=turn_num_evaluations, include_width=False)
+                                 resolution=turn_resolution, include_width=False)
     end_section = turn_connect(end, Port(end.x + 3 * min_radius, end.y, 180), min_radius,
-                               num_evaluations=turn_num_evaluations, include_width=False)
+                               resolution=turn_resolution, include_width=False)
     return link(start_section.reverse().flip_ends(), curve.reflect(), end_section)
 
 
-def loopify(curve: Curve, radius: float, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+def loopify(curve: Curve, radius: float, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
     """Automatically create a loop by connecting the ends of a curve
 
     Note:
@@ -135,13 +135,13 @@ def loopify(curve: Curve, radius: float, euler: float = 0, num_evaluations: int 
         curve: Curve to loopify.
         radius: Radius of the turns.
         euler: Euler parameter for the turn.
-        num_evaluations: Number of evaluations for the curves in the loop.
+        resolution: Number of evaluations for the curves in the loop.
 
     Returns:
         The loopified curve.
 
     """
-    return link(turn_connect(curve.port['a0'], curve.port['b0'], radius, euler, num_evaluations), curve)
+    return link(turn_connect(curve.port['a0'], curve.port['b0'], radius, euler, resolution), curve)
 
 
 @fix_dataclass_init_docs

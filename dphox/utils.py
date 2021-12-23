@@ -5,7 +5,7 @@ from shapely.ops import split
 from .typing import Float4, List, Optional, Union
 
 MAX_GDS_POINTS = 8096
-NUM_EVALUATIONS = 99
+DEFAULT_RESOLUTION = 99
 DECIMALS = 6
 
 PORT_LAYER = 1
