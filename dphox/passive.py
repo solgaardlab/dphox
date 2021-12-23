@@ -6,7 +6,7 @@ from shapely.geometry import MultiPolygon
 
 from .device import Device
 from .foundry import CommonLayer, OXIDE, SILICON
-from .parametric import bezier_dc, grating_arc, straight
+from .parametric import bezier_dc, dc, grating_arc, straight
 from .pattern import Box, Pattern, Port
 from .typing import Float2, Int2, Optional, Union
 from .utils import fix_dataclass_init_docs
@@ -29,9 +29,7 @@ class DC(Pattern):
 
     Attributes:
         waveguide_w: Waveguide width at the inputs and outputs.
-        bend_extent: If use_radius is True (bend_radius, bend_height), else (bend_width, bend_height).
-            If a third dimension is specified then the width of the waveguide portion in the interaction
-            region is specified, which may be useful for broadband coupling.
+        bend_radius: The bend radius of the directional coupler
         gap_w: Gap between the waveguides in the interaction region.
         interaction_l: Interaction length for the interaction region.
         coupler_waveguide_w: Coupling waveguide width
@@ -40,20 +38,21 @@ class DC(Pattern):
     """
 
     waveguide_w: float
-    bend_l: float
+    bend_radius: float
     interport_distance: float
     gap_w: float
     interaction_l: float
+    euler: float = 0.2
     end_l: float = 0
     coupler_waveguide_w: Optional[float] = None
     use_radius: bool = False
 
     def __post_init__(self):
         self.coupler_waveguide_w = self.waveguide_w if self.coupler_waveguide_w is None else self.coupler_waveguide_w
-        dx, dy, w = (self.bend_l, (self.interport_distance - self.gap_w - self.coupler_waveguide_w) / 2,
+        radius, dy, w = (self.bend_radius, (self.interport_distance - self.gap_w - self.coupler_waveguide_w) / 2,
                      self.coupler_waveguide_w)
-        lower_path = bezier_dc(dx, dy, self.interaction_l).path(self.waveguide_w)
-        upper_path = bezier_dc(dx, -dy, self.interaction_l).path(self.waveguide_w)
+        lower_path = dc(radius, dy, self.interaction_l, self.euler).path(self.waveguide_w)
+        upper_path = dc(radius, -dy, self.interaction_l, self.euler).path(self.waveguide_w)
         upper_path.translate(dx=0, dy=self.interport_distance)
         super(DC, self).__init__(lower_path, upper_path)
         self.lower_path, self.upper_path = lower_path, upper_path
@@ -218,14 +217,14 @@ class FocusingGrating(Device):
     waveguide_l: float
     n_clad: int = OXIDE.n
     n_core: int = SILICON.n
-    min_period: int = 15
-    num_periods: int = 30
+    min_period: int = 10
+    num_periods: int = 20
     wavelength: float = 1.55
-    fiber_angle: float = 0
+    fiber_angle: float = 8
     duty_cycle: float = 0.5
     grating_frac: float = 1
     num_evaluations: int = 16
-    rib_grow: float = 0
+    rib_grow: float = 1
     name: str = 'focusing_grating'
     ridge: CommonLayer = CommonLayer.RIDGE_SI
     slab: CommonLayer = CommonLayer.RIB_SI
@@ -238,7 +237,7 @@ class FocusingGrating(Device):
         grating = Pattern(grating_arcs, sector)
         self.waveguide = WaveguideDevice(straight(self.waveguide_l).path(self.waveguide_w),
                                          slab=self.slab, ridge=self.ridge)
-        self.waveguide.halign(np.abs(self.waveguide.port['b0'].w / np.tan(self.angle / 360 * np.pi)), left=False)
+        self.waveguide.halign(np.abs(self.waveguide.port['b0'].w / np.tan(np.radians(self.angle) / 2)), left=False)
         super().__init__(self.name,
                          [(grating.buffer(self.rib_grow), self.slab),
                           (grating, self.ridge), self.waveguide])

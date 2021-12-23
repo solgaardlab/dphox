@@ -52,6 +52,7 @@ def taper(length: float, num_evaluations: int = NUM_EVALUATIONS):
 
     def _linear(t: np.ndarray):
         return np.hstack((t * length, np.zeros_like(t))), np.hstack((np.ones_like(t), np.zeros_like(t)))
+
     return parametric_curve(_linear, num_evaluations=num_evaluations)
 
 
@@ -306,7 +307,7 @@ def turn_sbend(height: float, radius: float, euler: float = 0, num_evaluations: 
 
 
 def spiral(turns: int, scale: float, separation_scale: float = 1, theta_offset: float = 0,
-           num_evaluations: int = NUM_EVALUATIONS):
+           num_evaluations: int = 1000):
     """Spiral (Archimedian).
 
     Args:
@@ -349,6 +350,27 @@ def bezier_dc(dx: float, dy: float, interaction_l: float, num_evaluations: int =
     )
 
 
+def dc(radius: float, dy: float, interaction_l: float, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+    """Turn curve-based directional coupler
+
+    Args:
+        radius: Bend radius (specify positive value).
+        dy: Bend height (specify negative value for bend to go down).
+        interaction_l: Interaction length for the directional coupler.
+        euler: Euler contribution to the directional coupler's bends.
+        num_evaluations: Number of points to evaluate in each of the four bezier paths.
+
+    Returns:
+        The turn sbend-based dc path.
+
+    """
+    return link(
+        turn_sbend(dy, radius, euler, num_evaluations),
+        straight(interaction_l),
+        turn_sbend(-dy, radius, euler, num_evaluations)
+    )
+
+
 def loopback(radius: float, euler: float, extension: Float2, loop_ccw: bool = True,
              num_evaluations: int = NUM_EVALUATIONS):
     """Loopback path.
@@ -366,11 +388,11 @@ def loopback(radius: float, euler: float, extension: Float2, loop_ccw: bool = Tr
     s = 2 * loop_ccw - 1
     return link(
         turn(radius, -180 * s, euler, num_evaluations=num_evaluations),
-        straight(extension[0]),
+        extension[0],
         turn(radius, 90 * s, euler, num_evaluations=num_evaluations),
-        straight(extension[1]),
+        extension[1],
         turn(radius, 90 * s, euler, num_evaluations=num_evaluations),
-        straight(extension[0]),
+        extension[0],
         turn(radius, -180 * s, euler, num_evaluations=num_evaluations)
     )
 
@@ -472,93 +494,165 @@ def cubic_taper_fn(init_w: float, change_w: float):
 
 
 def cubic_taper(init_w: float, change_w: float, length: float, taper_length: float,
-                symmetric: bool = True, taper_first: bool = True):
+                symmetric: bool = True, taper_first: bool = True, num_evaluations: int = NUM_EVALUATIONS):
+    """A cubic taper waveguide pattern.
+
+    Args:
+        init_w: Initial width of the waveguide
+        change_w: Change in the waveguide width.
+        length: Length of the overall waveguide.
+        taper_length: Length of just the waveguide portion.
+        symmetric: Whether to symmetrize the waveguide.
+        taper_first: Whether to taper first.
+        num_evaluations: Number of evaluations for each turn.
+
+    Returns:
+        The cubic taper waveguide.
+
+    """
     if 2 * taper_length > length:
         raise ValueError(f"Require 2 * taper_length <= length, but got {2 * taper_length} >= {length}.")
     straight_length = length / (1 + symmetric) - taper_length
     if taper_first:
-        path = link(taper(taper_length), straight(straight_length)).path((cubic_taper_fn(init_w, change_w),
-                                                                          init_w + change_w))
+        path = link(taper(taper_length, num_evaluations), straight_length).path((cubic_taper_fn(init_w, change_w),
+                                                                                 init_w + change_w))
     else:
-        path = link(straight(straight_length), taper(taper_length)).path((init_w, cubic_taper_fn(init_w, change_w)))
+        path = link(straight_length, taper(taper_length, num_evaluations)).path(
+            (init_w, cubic_taper_fn(init_w, change_w)))
     return path.symmetrize() if symmetric else path
 
 
-def right_turn(radius: float, euler: float = 0):
-    return turn(radius, -90, euler=euler)
+def right_turn(radius: float, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+    """Right turn curve from the perspective of the output port of the curve.
+
+    Args:
+        radius: Radius of the curve.
+        euler: Euler bend contribution.
+        num_evaluations: Number of evaluations for each turn.
+
+    Returns:
+        The right turn curve.
+
+    """
+    return turn(radius, -90, euler=euler, num_evaluations=num_evaluations)
 
 
-def left_turn(radius: float, euler: float = 0):
-    return turn(radius, euler=euler)
+def left_turn(radius: float, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+    """Left turn curve from the perspective of the output port of the curve.
+
+    Args:
+        radius: Radius of the curve.
+        euler: Euler bend contribution.
+        num_evaluations: Number of evaluations for each turn.
+
+    Returns:
+        The left turn curve.
+
+    """
+    return turn(radius, euler=euler, num_evaluations=num_evaluations)
 
 
-def uturn(radius: float, euler: float = 0):
-    return link(left_turn(radius, euler), left_turn(radius, euler))
+def left_uturn(radius: float, length: float = 0, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+    """Left uturn from the perspective of the output port of the curve.
+
+    Args:
+        radius: Radius of the uturn.
+        length: Length between the two 90 degree turns.
+        euler: Euler bend contribution.
+        num_evaluations: Number of evaluations for each turn.
+
+    Returns:
+        The left uturn curve.
+
+    """
+    return link(left_turn(radius, euler, num_evaluations), length, left_turn(radius, euler, num_evaluations)).coalesce()
 
 
-def semicircle(radius: float):
+def right_uturn(radius: float, length: float = 0, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+    """Right uturn from the perspective of the output port of the curve.
+
+    Args:
+        radius: Radius of the uturn.
+        length: Length between the two 90 degree turns.
+        euler: Euler bend contribution.
+        num_evaluations: Number of evaluations for each turn.
+
+    Returns:
+        The right uturn curve.
+
+    """
+    return link(right_turn(radius, euler, num_evaluations), length,
+                right_turn(radius, euler, num_evaluations)).coalesce()
+
+
+def semicircle(radius: float, num_evaluations: int = NUM_EVALUATIONS):
     """A semicircle pattern.
 
     Args:
         radius: The radius of the semicircle.
+        num_evaluations: Number of evaluations for each turn.
 
     Returns:
         The semicircle pattern.
 
     """
-    return arc(radius, 180).pattern
+    return arc(radius, 180, num_evaluations=num_evaluations).pattern
 
 
-def ring(radius: float):
+def ring(radius: float, num_evaluations: int = NUM_EVALUATIONS):
     """A circle or ring curve of specified radius.
 
     Args:
         radius: The radius of the circle.
+        num_evaluations: Number of evaluations for each turn.
 
     Returns:
         The circle or ring curve.
 
     """
-    return arc(radius, 360)
+    return arc(radius, 360, num_evaluations=num_evaluations)
 
 
-def racetrack(radius: float, length: float, euler: float):
+def racetrack(radius: float, length: float, euler: float, num_evaluations: int = NUM_EVALUATIONS):
     """A circle or ring curve of specified radius.
 
     Args:
         radius: The radius of the uturn bends of the racetrack.
         length: The length of the straight section of the racetrack.
         euler: The Euler turn parameter for the uturns.
+        num_evaluations: Number of evaluations for each turn.
 
     Returns:
         The racetrack curve.
 
     """
-    return link(uturn(radius, euler), straight(length), uturn(radius, euler), straight(length))
+    return link(left_uturn(radius, euler, num_evaluations), length, left_uturn(radius, euler, num_evaluations), length)
 
 
-def circle(radius: float):
+def circle(radius: float, num_evaluations: int = NUM_EVALUATIONS):
     """A circle of specified radius.
 
     Args:
         radius: The radius of the circle.
+        num_evaluations: Number of evaluations for each turn.
 
     Returns:
         The circle pattern.
 
     """
-    return ring(radius).pattern
+    return ring(radius, num_evaluations).pattern
 
 
-def ellipse(radius_x: float, radius_y: float):
+def ellipse(radius_x: float, radius_y: float, num_evaluations: int = NUM_EVALUATIONS):
     """An ellipse of specified x and y radii.
 
     Args:
         radius_x: The x radius of the circle.
         radius_y: The y radius of the circle.
+        num_evaluations: Number of evaluations for each turn.
 
     Returns:
         The ellipse pattern.
 
     """
-    return circle(1).scale(radius_x, radius_y).pattern
+    return circle(1, num_evaluations).scale(radius_x, radius_y).pattern

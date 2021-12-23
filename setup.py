@@ -5,20 +5,18 @@ project_name = "dphox"
 
 setup(
     name=project_name,
-    version="0.0.1a4",
+    version="0.0.1",
     packages=find_packages(),
     install_requires=[
-        'pydantic==1.8.2',
         'numpy>=1.19',
         'scipy==1.7.1',
-        'matplotlib>=3.4.2',
         'shapely>=1.7.1',
-        'gdspy==1.6.8',
         'descartes==1.1.0',
         'klamath==1.1'
     ],
     extras_require={
         'all': [
+            'matplotlib>=3.4.2',
             'bokeh==2.2.3',
             'holoviews==1.14.6',
             'trimesh==3.9.30',

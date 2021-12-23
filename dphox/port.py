@@ -157,21 +157,3 @@ class Port:
 
         """
         return copy(self)
-
-
-def port_transform(to_port: Port, from_port: Port = None) -> AffineTransform:
-    if from_port is None:
-        return AffineTransform((rotate2d(to_port.a), translate2d(to_port.xy)))
-    else:
-        return AffineTransform((rotate2d(to_port.a - from_port.a + 180, origin=from_port.xy),
-                                translate2d(to_port.xy - from_port.xy)))
-
-
-def port_gds_transform(to_port: Port, from_port: Port = None):
-    if from_port is None:
-        return GDSTransform(*to_port.xy, to_port.a)
-    else:
-        xy = to_port.xy - from_port.xy
-        angle = to_port.a - from_port.a + 180
-        xy -= AffineTransform(rotate2d(angle)).transform_points(from_port.xy)
-        return GDSTransform(*xy, angle)

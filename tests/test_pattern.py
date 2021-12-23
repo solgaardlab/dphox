@@ -36,7 +36,7 @@ UNIT_BOX = Box()
 )
 def test_poly(pattern: Pattern, poly_list: List[np.ndarray]):
     for i, poly in enumerate(pattern.geoms):
-        np.testing.assert_allclose(poly.T, poly_list[i], atol=1e-9)
+        np.testing.assert_allclose(poly, poly_list[i], atol=1e-6)
 
 
 @pytest.mark.parametrize(
@@ -46,23 +46,20 @@ def test_poly(pattern: Pattern, poly_list: List[np.ndarray]):
                                                      [-0.5, -0.5, -0.25, -0.25, 0.25, 0.25, 0.5, 0.5, -0.5]],
                                                     [[0., -0.5, -0.5, 0., 0., -0.25, -0.25, 0., 0.],
                                                      [-0.5, -0.5, 0.5, 0.5, 0.25, 0.25, -0.25, -0.25, -0.5]]]],
-        [Circle(resolution=3) - Circle(resolution=3).scale(0.5, 0.5), [[[1, 8.66030000e-01, 5.0e-01, 0, 0, 2.5e-01,
-                                                                         4.33015000e-01, 5.0e-01, 4.33015000e-01,
-                                                                         2.5e-01, 0, 0, 5.0e-01, 8.66030000e-01, 1],
-                                                                        [0, -5.0e-01, -8.66030000e-01, -1, -5.0e-01,
-                                                                         -4.33015000e-01, -2.5e-01, 0, 2.5e-01,
-                                                                         4.33015000e-01, 5.0e-01, 1, 8.66030000e-01,
-                                                                         5.0e-01, 0]],
-                                                                       [[0, 0, -0.5, -8.66030000e-01, -1,
-                                                                         -8.66030000e-01, -0.5, 0, 0, 0, 0,
-                                                                         -0.25, -4.33015000e-01, -0.5,
-                                                                         -4.33015000e-01, -0.25, 0, 0, 0],
-                                                                        [-1, -1, -8.66030000e-01, -0.5, 0, 0.5,
-                                                                         8.66030000e-01, 1.00000000e+00, 1.00000000e+00,
-                                                                         0.5, 0.5, 4.33015000e-01, 0.25, 0,
-                                                                         -0.25, -4.33015000e-01, -0.5, -0.5, -1]]]],
+        [Circle(resolution=3) - Circle(resolution=3).scale(0.5, 0.5), [[[1., 0.866025, 0.5, 0., 0., 0.25,
+                                                                         0.433012, 0.5, 0.433012, 0.25, 0., -0.,
+                                                                         0.5, 0.866025, 1.],
+                                                                        [0., -0.5, -0.866025, -1., -0.5, -0.433012,
+                                                                         -0.25, 0., 0.25, 0.433012, 0.5, 1.,
+                                                                         0.866025, 0.5, 0.]],
+                                                                       [[0., -0.5, -0.866025, -1., -0.866025, -0.5,
+                                                                         -0., 0., -0.25, -0.433012, -0.5, -0.433012,
+                                                                         -0.25, 0., 0.],
+                                                                        [-1., -0.866025, -0.5, -0., 0.5, 0.866025,
+                                                                         1., 0.5, 0.433012, 0.25, 0., -0.25,
+                                                                         -0.433012, -0.5, -1.]]]],
     ],
 )
 def test_poly_with_hole(pattern: Pattern, poly_list: List[np.ndarray]):
     for i, poly in enumerate(split_holes(pattern.shapely_union())):
-        np.testing.assert_allclose(poly_points(poly).T, poly_list[i], atol=1e-9)
+        np.testing.assert_allclose(poly_points(poly).T, poly_list[i], atol=1e-5)

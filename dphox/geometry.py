@@ -164,8 +164,8 @@ class Geometry:
         """
         return self.transform(scale2d((xfact, yfact), self.center if origin is None else origin))
 
-    def to(self, port: Union[Tuple[float, ...], Port], from_port: Optional[Union[str, Port]] = None):
-        port = Port(*port) if isinstance(port, tuple) else port
+    def to(self, port: Union[Tuple[float, ...], Port] = (0, 0), from_port: Optional[Union[str, Port]] = None):
+        port = Port(*port) if isinstance(port, tuple) or isinstance(port, np.ndarray) else port
         from_port = Port(*from_port) if isinstance(from_port, tuple) else from_port
         if from_port is None:
             return self.rotate(port.a).translate(port.x, port.y)

@@ -6,7 +6,7 @@ from .parametric import cubic_taper, straight
 from .pattern import Box
 
 ps = ThermalPS(straight(10).path(1), ps_w=4, via=Via((0.4, 0.4), 0.1))
-dc = DC(waveguide_w=1, interaction_l=2, bend_l=5, interport_distance=10, gap_w=0.5)
+dc = DC(waveguide_w=1, interaction_l=2, bend_radius=2.5, interport_distance=10, gap_w=0.5)
 mzi = MZI(dc, top_internal=[ps.copy], bottom_internal=[ps.copy], top_external=[ps.copy], bottom_external=[ps.copy])
 mesh = LocalMesh(mzi, 6)
 

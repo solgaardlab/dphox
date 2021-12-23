@@ -56,6 +56,7 @@ class AffineTransform:
     Attributes:
         transform: The `...x3x3` transform or list of sequential 3x3 transforms that are multiplied together.
     """
+
     def __init__(self, transform: Union[np.ndarray, Iterable[np.ndarray]]):
         self.transform = transform
         if isinstance(self.transform, list) or isinstance(self.transform, tuple):
@@ -104,11 +105,12 @@ class GDSTransform(AffineTransform):
 
     def __post_init__(self):
         super(GDSTransform, self).__init__((scale2d((self.mag, self.mag)),
-                                            rotate2d(self.angle),
+                                            rotate2d(np.radians(self.angle)),
                                             translate2d((self.x, self.y))))
 
     @classmethod
-    def parse(cls, transform: Optional[Union["GDSTransform", Tuple, np.ndarray]]) -> \
+    def parse(cls, transform: Optional[Union["GDSTransform", Tuple, np.ndarray]],
+              existing_transform: Optional[Tuple[AffineTransform, List["GDSTransform"]]] = None) -> \
             Tuple[AffineTransform, List["GDSTransform"]]:
         """Turns representations like :code:`(x, y, angle)` or a numpy array into convenient GDS/affine transforms.
 
@@ -132,4 +134,9 @@ class GDSTransform(AffineTransform):
         else:
             raise TypeError("Expected transform to be of type GDSTransform, or tuple or ndarray representing GDS"
                             "transforms, but got a malformed input.")
-        return AffineTransform(np.array([t.transform for t in gds_transforms])), gds_transforms
+        parallel_transform = np.array([t.transform for t in gds_transforms])
+        if existing_transform is not None:
+            return AffineTransform(np.vstack((existing_transform[0].transform, parallel_transform))),\
+                   existing_transform[1] + gds_transforms
+        else:
+            return AffineTransform(parallel_transform), gds_transforms

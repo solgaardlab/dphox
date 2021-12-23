@@ -17,7 +17,7 @@ BOX = Box((1, 1))
     ],
 )
 def test_reflect(pattern: Pattern, origin: Optional[Tuple[int, int]], horiz: bool, expected_polygon: np.ndarray):
-    np.testing.assert_allclose(np.asarray(pattern.copy.reflect(origin, horiz).polys[0].exterior.coords.xy),
+    np.testing.assert_allclose(np.asarray(pattern.copy.reflect(origin, horiz).geoms[0]),
                                expected_polygon)
 
 
@@ -37,7 +37,7 @@ def test_reflect(pattern: Pattern, origin: Optional[Tuple[int, int]], horiz: boo
     ],
 )
 def test_rotate(pattern: Pattern, origin: Optional[Tuple[int, int]], angle: float, expected_polygon: np.ndarray):
-    np.testing.assert_allclose(np.asarray(pattern.copy.rotate(angle, origin).polys[0].exterior.coords.xy),
+    np.testing.assert_allclose(np.asarray(pattern.copy.rotate(angle, origin).geoms[0]),
                                expected_polygon, rtol=3e-5)
 
 
@@ -52,5 +52,5 @@ def test_rotate(pattern: Pattern, origin: Optional[Tuple[int, int]], angle: floa
 )
 def test_scale(pattern: Pattern, xfact: int, yfact: int, origin: Optional[Tuple[int, int]],
                expected_polygon: np.ndarray):
-    np.testing.assert_allclose(np.asarray(pattern.copy.scale(xfact, yfact, origin=origin).polys[0].exterior.coords.xy),
+    np.testing.assert_allclose(np.asarray(pattern.copy.scale(xfact, yfact, origin=origin).geoms[0]),
                                expected_polygon, rtol=3e-5)

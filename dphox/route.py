@@ -1,13 +1,14 @@
-import numpy as np
-from pydantic.dataclasses import dataclass
-from shapely.geometry import JOIN_STYLE, LineString
+from typing import Union
 
+import numpy as np
+from dataclasses import dataclass
+
+from .device import Device
+from .passive import FocusingGrating
+from .parametric import circular_bend, link, loopback, spiral, straight, bent_trombone, trombone, turn
 from .path import Curve
-from .port import Port
-import scipy.interpolate as interpolate
-from .parametric import loopback, link, trombone, straight, turn, spiral, circular_bend
-from .transform import rotate2d
 from .pattern import Pattern
+from .port import Port
 from .typing import Optional
 from .utils import fix_dataclass_init_docs, NUM_EVALUATIONS
 
@@ -47,7 +48,7 @@ def _turn_connect_angle_solve(start: Port, end: Port, start_r: float, end_r: flo
 
 
 def turn_connect(start: Port, end: Port, radius: float, radius_end: Optional[float] = None, euler: float = 0,
-                 include_width: bool = True):
+                 num_evaluations: int = NUM_EVALUATIONS, include_width: bool = True) -> Union[Pattern, Curve]:
     """Turn connect.
 
     Args:
@@ -56,6 +57,7 @@ def turn_connect(start: Port, end: Port, radius: float, radius_end: Optional[flo
         radius: Start turn effective radius
         radius_end: End turn effective radius (use :code:`radius` if :code:`None`)
         euler: Euler path contribution (see :code:`turn` method).
+        num_evaluations: Number of evaluations for the turns.
         include_width: Whether to include the width (cubic taper) of the turn connect
 
     Returns:
@@ -65,21 +67,22 @@ def turn_connect(start: Port, end: Port, radius: float, radius_end: Optional[flo
     start_r = radius
     end_r = start_r if radius_end is None else radius_end
     angles, length = _turn_connect_angle_solve(start.copy.flip(), end.copy.flip(), start_r, end_r)
-    curve = link(turn(start_r, angles[0], euler),
-                 straight(length),
-                 turn(end_r, angles[1], euler)).to(start)
+    curve = link(turn(start_r, angles[0], euler, num_evaluations),
+                 length, turn(end_r, angles[1], euler, num_evaluations)).to(start)
 
     return curve.path(start.w) if include_width else curve
 
 
-def manhattan_route(start: Port, lengths: np.ndarray, bezier_evaluations: int = 0, include_width: bool = True):
-    """Manhattan route.
+def manhattan_route(start: Port, lengths: np.ndarray, include_width: bool = True):
+    """Manhattan route (intended for metal routing).
+
+    Starting with horizontal and switching back and forth with vertical, make alternating turns.
+    A positive length indicates moving in a +x or +y direction, whereas a negative length
+    indicates moving in a -x or -y direction.
 
     Args:
-        start: Start port.
-        lengths: List of dx and dy segments (alternating).
-        bezier_evaluations: If zero, the path is not smoothed, otherwise, specify the number of bezier evaluations
-            for each segment.
+        start: Start port for the route.
+        lengths: List of dx and dy segments (alternating left and right turns).
         include_width: Include width returns a path instead of a curve.
 
     Returns:
@@ -90,29 +93,55 @@ def manhattan_route(start: Port, lengths: np.ndarray, bezier_evaluations: int = 
     xs = np.hstack((0, np.tile(np.cumsum(lengths[::2]), 2).reshape((2, -1)).T.flatten()))[:lengths.size + 1]
     ys = np.hstack(((0, 0), np.tile(np.cumsum(lengths[1::2]), 2).reshape((2, -1)).T.flatten()))[:lengths.size + 1]
     points = np.vstack((xs, ys)).T
-    if bezier_evaluations:
-        midpoints = np.vstack((points[0], (points[1:] + points[:-1]) / 2, points[-1]))
-        tck = interpolate.splprep(midpoints, s=0, per=True)[0]
-        # create interpolated lists of points
-        xint, yint = interpolate.splev(np.linspace(0, 1, bezier_evaluations * lengths.size), tck)
-        segments.append(points)
-    else:
-        path = Curve(points)
-        if include_width:
-            path = Pattern(path.shapely.buffer(start.w, join_style=2, cap_style=2))
-
+    path = Curve(points)
+    if include_width:
+        path = Pattern(path.shapely.buffer(start.w, join_style=2, cap_style=2))
     return path.to(start)
 
 
-def spiral_delay(n_turns: int, min_radius: float, separation: float, num_evaluations: int = NUM_EVALUATIONS):
+def spiral_delay(n_turns: int, min_radius: float, separation: float,
+                 num_evaluations: int = 1000, turn_num_evaluations: int = NUM_EVALUATIONS):
+    """Spiral delay (large waveguide delay in minimal area).
+
+    Args:
+        n_turns: Number of turns in the spiral
+        min_radius: Minimum radius of the spiral (affects the inner part of the design)
+        separation: Separation of waveguides in the spiral.
+        num_evaluations: Number of evaluations for the spiral.
+        turn_num_evaluations: Number of evaluations for the turns.
+
+    Returns:
+        The spiral delay waveguide.
+    """
     spiral_ = spiral(n_turns, min_radius, theta_offset=2 * np.pi,
                      separation_scale=separation, num_evaluations=num_evaluations)
-    bend = circular_bend(min_radius, 180)
+    bend = circular_bend(min_radius, 180, num_evaluations=turn_num_evaluations)
     curve = link(spiral_.copy.reverse().flip_ends(), bend.copy.reflect(), bend, spiral_)
     start, end = curve.port['a0'], curve.port['b0']
-    start_section = turn_connect(start, Port(start.x - 3 * min_radius, start.y, 0), min_radius, include_width=False)
-    end_section = turn_connect(end, Port(end.x + 3 * min_radius, end.y, 180), min_radius, include_width=False)
+    start_section = turn_connect(start, Port(start.x - 3 * min_radius, start.y, 0), min_radius,
+                                 num_evaluations=turn_num_evaluations, include_width=False)
+    end_section = turn_connect(end, Port(end.x + 3 * min_radius, end.y, 180), min_radius,
+                               num_evaluations=turn_num_evaluations, include_width=False)
     return link(start_section.reverse().flip_ends(), curve.reflect(), end_section)
+
+
+def loopify(curve: Curve, radius: float, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
+    """Automatically create a loop by connecting the ends of a curve
+
+    Note:
+        This only works in some cases, as there are no self-intersection checks.
+
+    Args:
+        curve: Curve to loopify.
+        radius: Radius of the turns.
+        euler: Euler parameter for the turn.
+        num_evaluations: Number of evaluations for the curves in the loop.
+
+    Returns:
+        The loopified curve.
+
+    """
+    return link(turn_connect(curve.port['a0'], curve.port['b0'], radius, euler, num_evaluations), curve)
 
 
 @fix_dataclass_init_docs
@@ -136,76 +165,90 @@ class Interposer(Pattern):
     waveguide_w: float
     n: int
     init_pitch: float
-    radius: float
+    final_pitch: float
+    radius: Optional[float] = None
     euler: float = 0
-    trombone_radius: Optional[float] = None
-    final_pitch: Optional[float] = None
+    trombone_radius: float = 5
     self_coupling_final: bool = True
     self_coupling_init: bool = False
-    self_coupling_radius: float = 5
+    self_coupling_radius: float = None
     self_coupling_extension: float = 0
     additional_x: float = 0
     num_trombones: int = 1
     trombone_at_end: bool = True
 
-    def __init__(self):
+    def __post_init__(self):
         w = self.waveguide_w
-        self.trombone_radius = self.radius if self.trombone_radius is None else self.trombone_radius
-        self.final_pitch = self.init_pitch if self.final_pitch is None else self.final_pitch
         pitch_diff = self.final_pitch - self.init_pitch
+        self.radius = np.abs(pitch_diff) / 2 if self.radius is None else self.radius
+        r = self.radius
+
         paths = []
-        init_pos = np.zeros((self.n, 2))
+        init_pos = np.zeros((2, self.n))
+        init_pos[1] = self.init_pitch * np.arange(self.n)
+        init_pos = init_pos.T
         final_pos = np.zeros_like(init_pos)
-        radius = pitch_diff / 2 if not self.radius else self.radius
-        angle_r = np.sign(pitch_diff) * np.arccos(1 - np.abs(pitch_diff) / 4 / radius)
+
+        if np.abs(1 - np.abs(pitch_diff) / 4 / r) > 1:
+            raise ValueError(f"Radius {r} needs to be at least abs(pitch_diff) / 2 = {np.abs(pitch_diff) / 2}.")
+        angle_r = np.sign(pitch_diff) * np.arccos(1 - np.abs(pitch_diff) / 4 / r)
         angled_length = np.abs(pitch_diff / np.sin(angle_r))
         x_length = np.abs(pitch_diff / np.tan(angle_r))
         mid = int(np.ceil(self.n / 2))
-        max_length_diff = (angled_length - x_length) * (mid - 1)
-        self.num_trombones = int(np.ceil(max_length_diff / 2 / (self.final_pitch - 3 * radius))) \
-            if not self.num_trombones else self.num_trombones
+        angle = np.degrees(angle_r)
+
         for idx in range(self.n):
             init_pos[idx] = np.asarray((0, self.init_pitch * idx))
             length_diff = (angled_length - x_length) * idx if idx < mid else (angled_length - x_length) * (
                     self.n - 1 - idx)
             segments = []
-            trombone_section = [trombone(w, self.trombone_radius,
+            trombone_section = [trombone(self.trombone_radius,
                                          length_diff / 2 / self.num_trombones, self.euler)] * self.num_trombones
             if not self.trombone_at_end:
                 segments += trombone_section
-            segments.append(straight(self.waveguide_w, self.additional_x))
+            segments.append(self.additional_x)
             if idx < mid:
-                segments += [turn(w, radius, -angle_r, self.euler), straight(w, angled_length * (mid - idx - 1)),
-                             turn(w, radius, angle_r, self.euler), straight(w, x_length * (idx + 1))]
+                segments += [turn(r, -angle, self.euler), angled_length * (mid - idx - 1),
+                             turn(r, angle, self.euler), x_length * (idx + 1)]
             else:
-                segments += [turn(w, radius, angle_r, self.euler), straight(w, angled_length * (mid - self.n + idx)),
-                             turn(w, radius, -angle_r, self.euler), straight(w, x_length * (self.n - idx))]
+                segments += [turn(r, angle, self.euler), angled_length * (mid - self.n + idx),
+                             turn(r, -angle, self.euler), x_length * (self.n - idx)]
             if self.trombone_at_end:
                 segments += trombone_section
-            paths.append(Path(segments))
-            final_pos[idx] = np.asarray((paths[-1].x(), paths[-1].y()))
-
-        port = {
-            **{f'a{idx}': Port(*init_pos[idx], -180, w=self.waveguide_w) for idx in range(self.n)},
-            **{f'b{idx}': Port(*final_pos[idx], w=self.waveguide_w) for idx in range(self.n)}
-        }
+            paths.append(link(*segments).path(w).to(init_pos[idx]))
+            final_pos[idx] = paths[-1].port['b0'].xy
 
         if self.self_coupling_final:
+            scr = self.final_pitch / 4 if self.self_coupling_radius is None else self.self_coupling_radius
             dx, dy = final_pos[0, 0], final_pos[0, 1]
             p = self.final_pitch
-            port = Port(dx, dy - p)
-            extension = (self.self_coupling_extension, p * (self.n + 1) - 6 * radius)
-            paths.append(loopback(w, radius, self.euler, extension).to())
+            port = Port(dx, dy - p, -180)
+            extension = (self.self_coupling_extension, p * (self.n + 1) - 6 * scr)
+            paths.append(loopback(scr, self.euler, extension).path(w).to(port))
         if self.self_coupling_init:
+            scr = self.init_pitch / 4 if self.self_coupling_radius is None else self.self_coupling_radius
             dx, dy = init_pos[0, 0], init_pos[0, 1]
             p = self.init_pitch
             port = Port(dx, dy - p)
-            extension = (self.self_coupling_extension, p * (self.n + 1) - 6 * radius)
-            paths.append(loopback(w, radius, self.euler, extension).to())
+            extension = (self.self_coupling_extension, p * (self.n + 1) - 6 * scr)
+            paths.append(loopback(scr, self.euler, extension).path(w).to(port))
+
+        port = {**{f'a{idx}': Port(*init_pos[idx], -180, w=self.waveguide_w) for idx in range(self.n)},
+                **{f'b{idx}': Port(*final_pos[idx], w=self.waveguide_w) for idx in range(self.n)},
+                'l0': paths[-1].port['a0'], 'l1': paths[-1].port['b0']}
 
         super().__init__(*paths)
-        self.self_coupling_path = None if self.self_coupling_extension_extent is None else paths[-1]
+        self.self_coupling_path = None if self.self_coupling_extension is None else paths[-1]
         self.paths = paths
         self.init_pos = init_pos
         self.final_pos = final_pos
         self.port = port
+
+    def with_gratings(self, grating: FocusingGrating):
+        interposer = Device('interposer', [(self, 'ridge_si')])
+        interposer.port = self.port
+        for idx in range(6):
+            interposer.place(grating, self.port[f'b{idx}'], from_port=grating.port['a0'])
+        interposer.place(grating, self.port['l0'], from_port=grating.port['a0'])
+        interposer.place(grating, self.port['l1'], from_port=grating.port['a0'])
+        return interposer

@@ -294,6 +294,8 @@ class Device:
         """
         if device.name not in self.child_to_device:
             self.child_to_device[device.name] = device
+        if not isinstance(placement, list) and not isinstance(placement, tuple) and not isinstance(placement, np.ndarray):
+            placement = [placement]
         if from_port is None:
             transform = np.array([p.xya if isinstance(p, Port) else p for p in placement])
         else:
@@ -306,11 +308,26 @@ class Device:
                 rotated_translate = -rotate2d(np.radians(xya[-1] - from_port.a + 180))[:2, :2] @ from_port.xy
                 return xya + np.array((*rotated_translate, -from_port.a + 180))
 
-            if not isinstance(placement, list) and not isinstance(placement, tuple):
-                placement = [placement]
             transform = np.array([transformed_port(p.xya) if isinstance(p, Port) else transformed_port(p)
                                   for p in placement])
-        self.child_to_transform[device.name] = GDSTransform.parse(transform)
+        self.child_to_transform[device.name] = GDSTransform.parse(transform,
+                                                                  self.child_to_transform.get(device.name))
+
+    def clear(self, device: Union[str, "Device"]):
+        """Clear the device or its name from the children of this device. Do nothing if the device isn't present.
+
+        Args:
+            device: Child device to remove
+
+        Returns:
+            This device.
+
+        """
+        name = device.name if isinstance(device, Device) else device
+        if name in self.child_to_device:
+            del self.child_to_device[name]
+            del self.child_to_transform[name]
+        return self
 
     @property
     def copy(self) -> "Device":
@@ -379,7 +396,7 @@ class Device:
         self.layer_to_polys = self._update_layers()
 
     def plot(self, ax: Optional = None, foundry: Foundry = FABLESS,
-             exclude_layer: Optional[List[CommonLayer]] = None, alpha: float = 0.5):
+             exclude_layer: Optional[List[CommonLayer]] = None, alpha: float = 0.5, plot_ports: bool = False):
         """Plot this device on a matplotlib plot.
 
         Args:
@@ -397,21 +414,23 @@ class Device:
             # import locally since this import takes some time.
             import matplotlib.pyplot as plt
             ax = plt.gca()
-        for layer, pattern in self.layer_to_polys.items():
+        for layer, multipoly in self.full_layer_to_polys.items():
             if layer in exclude_layer:
                 continue
             color = foundry.color(layer)
             if color is None:
                 raise ValueError(f"The layer {layer} does not exist in the foundry stack,"
                                  f"so could not find a color. Make sure you specify the correct foundry.")
+            pattern = Pattern(*multipoly)
             ax.add_patch(
-                PolygonPatch(unary_union(MultiPolygon(pattern)),  # union avoids some weird plotting with alpha < 1
+                PolygonPatch(unary_union(MultiPolygon(pattern.shapely)),  # union avoids some weird plotting with alpha < 1
                              facecolor=color, edgecolor='none', alpha=alpha))
-            for name, port in self.port.items():
-                port_xy = port.xy - port.tangent(port.w)
-                ax.add_patch(PolygonPatch(port.shapely,
-                                          facecolor='red', edgecolor='none', alpha=alpha))
-                ax.text(*port_xy, name)
+            if plot_ports:
+                for name, port in self.port.items():
+                    port_xy = port.xy - port.tangent(port.w)
+                    ax.add_patch(PolygonPatch(port.shapely,
+                                              facecolor='red', edgecolor='none', alpha=alpha))
+                    ax.text(*port_xy, name)
         b = self.bounds
         ax.set_xlim((b[0], b[2]))
         ax.set_ylim((b[1], b[3]))
