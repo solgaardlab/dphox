@@ -5,12 +5,12 @@ from shapely.affinity import rotate
 from shapely.geometry import box, GeometryCollection, LineString, Point, JOIN_STYLE, CAP_STYLE
 from shapely.ops import split, unary_union
 
+from .foundry import CommonLayer, fabricate, Foundry, FABLESS
 from .geometry import Geometry
 from .port import Port
 from .typing import Dict, Float2, Float4, List, MultiPolygon, Optional, Polygon, PolygonLike, Shape, Spacing, \
     Union, Iterable
 from .utils import DECIMALS, fix_dataclass_init_docs, min_aspect_bounds, poly_points, split_holes
-from .transform import translate2d, reflect2d, skew2d, rotate2d, scale2d, AffineTransform
 
 NAZCA_IMPORTED = True
 PLOTLY_IMPORTED = True
@@ -227,9 +227,9 @@ class Pattern(Geometry):
             raise ImportError('Nazca not installed! Please install nazca prior to running nazca_cell().')
         with nd.Cell(cell_name) as cell:
             for poly in self.geoms:
-                nd.Polygon(points=poly, layer=layer).put()
+                nd.Polygon(points=poly, layer=layer).to()
             for name, port in self.port.items():
-                nd.Pin(name).put(*port.xya)
+                nd.Pin(name).to(*port.xya)
             nd.put_stub()
         return cell
 
@@ -268,6 +268,27 @@ class Pattern(Geometry):
                 plots_to_overlay.append(port.hvplot(name))
 
         return hv.Overlay(plots_to_overlay)
+
+    def trimesh(self, foundry: Foundry = FABLESS, layer: CommonLayer = CommonLayer.RIDGE_SI):
+        """Fabricate this pattern based on a :code:`Foundry`.
+
+        This method is fairly rudimentary and will not implement things like conformal deposition. At the moment,
+        you can implement things like rib etches which can be determined using 2d shape operations. Depositions in
+        layers above etched layers will just start from the maximum z extent of the previous layer. This is specified
+        by the :code:`Foundry` stack.
+
+        Args:
+            foundry: The foundry for each layer.
+            layer: The layer for this pattern.
+
+        Returns:
+            The device :code:`Scene` to visualize.
+
+        """
+        return fabricate(
+            layer_to_geom={layer: MultiPolygon([Polygon(p.T) for p in self.geoms])},
+            foundry=foundry,
+        )
 
     def __sub__(self, other: "Pattern"):
         return self.difference(other)

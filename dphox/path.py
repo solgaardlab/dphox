@@ -25,77 +25,77 @@ class Curve(Geometry):
         super().__init__(points, {}, [], tangents)
         self.port = self.path_port()
 
-    def angles(self, full: bool = True):
+    def angles(self, path: bool = True):
         """Calculate the angles for the tangents along the curve.
 
         Args:
-            full: Whether to report the angles for the full coalesced curve.
+            path: Whether to report the angles for the full coalesced curve.
 
         Returns:
             The angles of the tangents along the curve.
 
         """
 
-        if full:
+        if path: 
             t = np.hstack(self.tangents)
             return np.unwrap(np.arctan2(t[1], t[0]))
         else:
             return [np.unwrap(np.arctan2(t[1], t[0])) for t in self.tangents]
 
-    def total_length(self, full: bool = True):
+    def total_length(self, path: bool = True):
         """Calculate the total length at the end of each line segment of the curve.
 
         Args:
-            full: Whether to report the lengths of the segments for the full coalesced curve.
+            path: Whether to report the lengths of the segments for the full coalesced curve.
 
         Returns:
             The lengths for the individual line segments of the curve.
 
         """
 
-        if full:
+        if path: 
             return np.cumsum(self.lengths())
         else:
-            return [np.cumsum(p) for p in self.lengths(full=False)]
+            return [np.cumsum(p) for p in self.lengths(path=False)]
 
-    def lengths(self, full: bool = True):
+    def lengths(self, path: bool = True):
         """Calculate the lengths of each line segment of the curve.
 
         Args:
-            full: Whether to report the lengths of the segments for the full coalesced curve.
+            path: Whether to report the lengths of the segments for the full coalesced curve.
 
         Returns:
             The lengths for the individual line segments of the curve.
 
         """
 
-        if full:
+        if path: 
             return np.linalg.norm(np.diff(self.points), axis=0)
         else:
             return [np.linalg.norm(np.diff(p), axis=0) for p in self.geoms]
 
     @property
     def pathlength(self):
-        return np.sum(self.lengths(full=True))
+        return np.sum(self.lengths(path=True))
 
-    def curvature(self, full: bool = True, min_frac: float = 1e-3):
+    def curvature(self, path: bool = True, min_frac: float = 1e-3):
         """Calculate the curvature vs length along the curve.
 
         Args:
-            full: Whether to report the curvature vs length for the full coalesced curve.
+            path: Whether to report the curvature vs length for the full coalesced curve.
             min_frac: The minimum
 
         Returns:
             A tuple of the lengths and curvature along the length.
 
         """
-        min_dist = min_frac * np.mean(self.lengths(full=True))
-        if full:
-            d, a = self.lengths(full=True), self.angles(full=True)
+        min_dist = min_frac * np.mean(self.lengths(path=True))
+        if path: 
+            d, a = self.lengths(path=True), self.angles(path=True)
             return np.cumsum(d)[d > min_dist], np.diff(a)[d > min_dist] / d[d > min_dist]
         else:
             return [(np.cumsum(d)[d > min_dist], np.diff(a)[d > min_dist] / d[d > min_dist])
-                    for d, a in zip(self.lengths(full=False), self.angles(full=False))]
+                    for d, a in zip(self.lengths(path=False), self.angles(path=False))]
 
     @property
     def normals(self):
@@ -235,6 +235,10 @@ class Curve(Geometry):
 
         return hv.Overlay(plots_to_overlay)
 
+    @property
+    def pattern(self):
+        return Pattern(self.geoms)
+
 
 def curve_to_path(points: np.ndarray, widths: Union[float, np.ndarray], tangents: np.ndarray,
                   offset: Union[float, np.ndarray] = 0, decimals: int = DECIMALS,
@@ -301,9 +305,10 @@ def get_ndarray_curve(curvelike_list: Iterable[Union[float, "Curve", CurveLike, 
             # just a straight segment
             new_linestrings = np.array(((0, 0), (curve, 0))).T
         elif isinstance(curve, list) or isinstance(curve, tuple):
-            # recursively apply to get list.
-            new_linestrings_and_tangents = sum([get_ndarray_curve([p]) for p in curve], [])
-            new_linestrings, new_tangents = zip(new_linestrings_and_tangents)
+            # recursively apply to the list.
+            new_linestrings_and_tangents = [get_ndarray_curve([p]) for p in curve]
+            new_linestrings = sum([linestrings for linestrings, _ in new_linestrings_and_tangents], [])
+            new_tangents = sum([tangents for _, tangents in new_linestrings_and_tangents], [])
         elif isinstance(curve, Curve):
             new_linestrings = curve.geoms
             new_tangents = curve.tangents
@@ -322,7 +327,20 @@ def get_ndarray_curve(curvelike_list: Iterable[Union[float, "Curve", CurveLike, 
     return linestrings, tangents
 
 
-def link(*geoms: Union[Pattern, Curve], front_port: str = 'b0', back_port: str = 'a0'):
+def straight(length: float):
+    """Just a straight line along the x axis, generally this only needs 2 evaluations unless there is a taper.
+
+    Args:
+        length: Length of the straight line.
+
+    Returns:
+        A straight segment.
+
+    """
+    return Curve(CurveTuple(np.vstack(((0, 0), (length, 0))).T, np.vstack(((1, 0), (1, 0))).T))
+
+
+def link(*geoms: Union[Pattern, Curve, float], front_port: str = 'b0', back_port: str = 'a0'):
     """Link many separate curves or paths into a single geometry, assuming each geometry has a front and back port.
 
     Note:
@@ -338,9 +356,10 @@ def link(*geoms: Union[Pattern, Curve], front_port: str = 'b0', back_port: str =
         The resulting geometry (path or curve) after linking many curves together into a single one.
 
     """
+    geoms = [straight(g) if np.isscalar(g) else g for g in geoms]
     port = geoms[0].port
     for geom in geoms[1:]:
-        geom.put(port[front_port], from_port=back_port)
+        geom.to(port[front_port], from_port=back_port)
         port[front_port] = geom.port[front_port]
     if isinstance(geoms[0], Pattern):  # assume all patterns
         pattern = Pattern(*geoms).set_port(port)
@@ -351,4 +370,3 @@ def link(*geoms: Union[Pattern, Curve], front_port: str = 'b0', back_port: str =
         return Curve(*geoms)
     else:
         raise TypeError(f"Geometries must either be a pattern or curve but got {type(geoms[0])}")
-

@@ -67,7 +67,7 @@ def turn_connect(start: Port, end: Port, radius: float, radius_end: Optional[flo
     angles, length = _turn_connect_angle_solve(start.copy.flip(), end.copy.flip(), start_r, end_r)
     curve = link(turn(start_r, angles[0], euler),
                  straight(length),
-                 turn(end_r, angles[1], euler)).put(start)
+                 turn(end_r, angles[1], euler)).to(start)
 
     return curve.path(start.w) if include_width else curve
 
@@ -101,7 +101,7 @@ def manhattan_route(start: Port, lengths: np.ndarray, bezier_evaluations: int = 
         if include_width:
             path = Pattern(path.shapely.buffer(start.w, join_style=2, cap_style=2))
 
-    return path.put(start)
+    return path.to(start)
 
 
 def spiral_delay(n_turns: int, min_radius: float, separation: float, num_evaluations: int = NUM_EVALUATIONS):
@@ -195,13 +195,13 @@ class Interposer(Pattern):
             p = self.final_pitch
             port = Port(dx, dy - p)
             extension = (self.self_coupling_extension, p * (self.n + 1) - 6 * radius)
-            paths.append(loopback(w, radius, self.euler, extension).put())
+            paths.append(loopback(w, radius, self.euler, extension).to())
         if self.self_coupling_init:
             dx, dy = init_pos[0, 0], init_pos[0, 1]
             p = self.init_pitch
             port = Port(dx, dy - p)
             extension = (self.self_coupling_extension, p * (self.n + 1) - 6 * radius)
-            paths.append(loopback(w, radius, self.euler, extension).put())
+            paths.append(loopback(w, radius, self.euler, extension).to())
 
         super().__init__(*paths)
         self.self_coupling_path = None if self.self_coupling_extension_extent is None else paths[-1]

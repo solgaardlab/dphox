@@ -1,9 +1,9 @@
 import numpy as np
 from scipy.special import fresnel
 
-from .path import Curve, link
+from .path import Curve, link, straight
 from .transform import translate2d
-from .typing import Callable, CurveTuple, Float2, Optional, PathWidth, Tuple, Union
+from .typing import Callable, CurveTuple, Float2, Optional, Tuple, Union
 from .utils import NUM_EVALUATIONS
 
 
@@ -53,19 +53,6 @@ def taper(length: float, num_evaluations: int = NUM_EVALUATIONS):
     def _linear(t: np.ndarray):
         return np.hstack((t * length, np.zeros_like(t))), np.hstack((np.ones_like(t), np.zeros_like(t)))
     return parametric_curve(_linear, num_evaluations=num_evaluations)
-
-
-def straight(length: float):
-    """Just a straight line along the x axis, generally this only needs 2 evaluations unless there is a taper.
-
-    Args:
-        length: Length of the straight line.
-
-    Returns:
-        A straight segment.
-
-    """
-    return taper(length, 2)
 
 
 def cubic_bezier(pole_1: np.ndarray, pole_2: np.ndarray, pole_3: np.ndarray,
@@ -174,6 +161,21 @@ def circular_bend(radius: float, angle: float = 90, num_evaluations: int = NUM_E
     return parametric_curve(_bend, num_evaluations=num_evaluations)
 
 
+def elliptic_bend(radius_x: float, radius_y: float, angle: float):
+    """An elliptic bend of specified x and y radii.
+
+    Args:
+        radius_x: The x radius of the ellipse.
+        radius_y: The y radius of the ellipse.
+        angle: The final angle of the elliptic bend.
+
+    Returns:
+        The elliptic bend curve.
+
+    """
+    return circular_bend(1, np.arctan2(np.sin(angle) / radius_y, np.cos(angle) / radius_x)).scale(radius_x, radius_y)
+
+
 def turn(radius: float, angle: float = 90, euler: float = 0, num_evaluations=NUM_EVALUATIONS):
     """Turn (partial Euler) functional for angles between -90 and 90 degrees.
 
@@ -197,7 +199,7 @@ def turn(radius: float, angle: float = 90, euler: float = 0, num_evaluations=NUM
         circular_curve = circular_bend(1 / np.sqrt(2 * np.pi * np.radians(np.abs(euler_angle))), circular_angle,
                                        num_evaluations=int((1 - euler) / 2 * num_evaluations))
 
-        curve = Curve(euler_curve, circular_curve.put(euler_curve.port['b0'])).symmetrize()
+        curve = Curve(euler_curve, circular_curve.to(euler_curve.port['b0'])).symmetrize()
         scale = radius * 2 * np.sin(np.radians(np.abs(angle)) / 2) / np.linalg.norm(curve.points.T[-1])
         return curve.scale(scale, scale, origin=(0, 0))
     else:
@@ -235,41 +237,48 @@ def arc(angle: float, radius: float, radius_y: Optional[float] = None, start_ang
     return parametric_curve(_arc, num_evaluations)
 
 
-def grating_arc(angle: float, neff: float, n0: float, fiber_angle: float, wavelength: float, m: float,
-                num_evaluations: int = NUM_EVALUATIONS):
+def grating_arc(angle: float, duty_cycle: float, n_core: float, n_clad: float,
+                fiber_angle: float, wavelength: float, m: float,
+                num_evaluations: int = NUM_EVALUATIONS, include_width: bool = True):
     """Grating arc.
+
+    See Also:
+        https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7407772/
 
     Args:
         angle: The opening angle of the grating in degrees.
-        neff: effective index of refraction of the grating (this is duty cycle-averaged core/cladding index).
-        n0: cladding index of refraction.
+        duty_cycle: duty cycle for the grating
+        n_clad: clad material index of refraction.
+        n_core: core material index of refraction.
         fiber_angle: angle of the fiber in degrees.
         wavelength: wavelength accepted by the grating.
         m: grating index.
         num_evaluations: Number of evaluations for the curve.
+        include_width: Include the width (paths in the grating arc).
 
     Returns:
         The function mapping 0 to 1 to the curve/tangents for the provided grating parameters.
 
     """
 
-    angle = np.abs(angle / 180 * np.pi)
-    fiber_angle = np.abs(fiber_angle / 180 * np.pi)
+    angle = np.abs(np.radians(angle))
+    fiber_angle = np.abs(np.radians(fiber_angle))
+    n_eff = np.sqrt(duty_cycle * n_core ** 2 + (1 - duty_cycle) * n_clad ** 2)
 
     def _grating_arc(t: np.ndarray):
         angles = angle * t - angle / 2
-        radius = m * wavelength / (neff - n0 * np.cos(fiber_angle) * np.cos(angles))
+        radius = m * wavelength / (n_eff - n_clad * np.cos(fiber_angle) * np.cos(angles))
         x = radius * np.cos(angles)
         y = radius * np.sin(angles)
-        rprime = radius ** 2 * (n0 * np.cos(fiber_angle) * np.sin(angles)) / m * wavelength
-        xprime = -radius * np.sin(angles) + rprime * np.cos(angles)
-        yprime = radius * np.cos(angles) + rprime * np.sin(angles)
-        return np.hstack((x, y)), np.hstack((xprime, yprime))
+        return np.hstack((x, y))
 
-    return parametric_curve(_grating_arc, num_evaluations)
+    width = duty_cycle * wavelength / (n_eff - n_clad * np.cos(fiber_angle))
+
+    curve = parametric_curve(_grating_arc, num_evaluations)
+    return curve.path(width) if include_width else curve
 
 
-def turn_sbend(height: float, radius: float, euler: float, num_evaluations: int = NUM_EVALUATIONS):
+def turn_sbend(height: float, radius: float, euler: float = 0, num_evaluations: int = NUM_EVALUATIONS):
     """Turn-based sbend (as opposed to bezier-based sbend).
 
     Args:
@@ -287,12 +296,12 @@ def turn_sbend(height: float, radius: float, euler: float, num_evaluations: int 
     if h >= 2 * radius:
         angle = 90 * sign
         turn_up = turn(radius, angle, euler, num_evaluations)
-        turn_down = turn(radius, -angle, euler, num_evaluations).put(turn_up.port['b0'])
+        turn_down = turn(radius, -angle, euler, num_evaluations).to(turn_up.port['b0'])
         return Curve(turn_up, turn_down.transform(translate2d((0, (h - 2 * radius) * sign)))).coalesce()
     else:
         angle = 180 / np.pi * np.arccos(1 - h / (2 * radius)) * sign
         turn_up = turn(radius, angle, euler, num_evaluations)
-        turn_down = turn(radius, -angle, euler, num_evaluations).put(turn_up.port['b0'])
+        turn_down = turn(radius, -angle, euler, num_evaluations).to(turn_up.port['b0'])
         return Curve(turn_up, turn_down).coalesce()
 
 
@@ -421,14 +430,44 @@ def polytaper_fn(taper_params: Union[np.ndarray, Tuple[float, ...]]):
 
 
 def linear_taper_fn(init_w: float, change_w: float):
+    """Linear taper function for parametric width/offset.
+
+    Args:
+        init_w: Initial width.
+        change_w: Change in the width.
+
+    Returns:
+        The linear taper function.
+
+    """
     return polytaper_fn((init_w, change_w))
 
 
 def quad_taper_fn(init_w: float, change_w: float):
+    """Quadratic taper function for parametric width/offset.
+
+    Args:
+        init_w: Initial width.
+        change_w: Change in the width.
+
+    Returns:
+        The quadratic taper function.
+
+    """
     return polytaper_fn((init_w, 2 * change_w, -1 * change_w))
 
 
 def cubic_taper_fn(init_w: float, change_w: float):
+    """Cubic taper function for parametric width/offset.
+
+    Args:
+        init_w: Initial width.
+        change_w: Change in the width.
+
+    Returns:
+        The cubic taper function.
+
+    """
     return polytaper_fn((init_w, 0., 3 * change_w, -2 * change_w))
 
 
@@ -443,3 +482,83 @@ def cubic_taper(init_w: float, change_w: float, length: float, taper_length: flo
     else:
         path = link(straight(straight_length), taper(taper_length)).path((init_w, cubic_taper_fn(init_w, change_w)))
     return path.symmetrize() if symmetric else path
+
+
+def right_turn(radius: float, euler: float = 0):
+    return turn(radius, -90, euler=euler)
+
+
+def left_turn(radius: float, euler: float = 0):
+    return turn(radius, euler=euler)
+
+
+def uturn(radius: float, euler: float = 0):
+    return link(left_turn(radius, euler), left_turn(radius, euler))
+
+
+def semicircle(radius: float):
+    """A semicircle pattern.
+
+    Args:
+        radius: The radius of the semicircle.
+
+    Returns:
+        The semicircle pattern.
+
+    """
+    return arc(radius, 180).pattern
+
+
+def ring(radius: float):
+    """A circle or ring curve of specified radius.
+
+    Args:
+        radius: The radius of the circle.
+
+    Returns:
+        The circle or ring curve.
+
+    """
+    return arc(radius, 360)
+
+
+def racetrack(radius: float, length: float, euler: float):
+    """A circle or ring curve of specified radius.
+
+    Args:
+        radius: The radius of the uturn bends of the racetrack.
+        length: The length of the straight section of the racetrack.
+        euler: The Euler turn parameter for the uturns.
+
+    Returns:
+        The racetrack curve.
+
+    """
+    return link(uturn(radius, euler), straight(length), uturn(radius, euler), straight(length))
+
+
+def circle(radius: float):
+    """A circle of specified radius.
+
+    Args:
+        radius: The radius of the circle.
+
+    Returns:
+        The circle pattern.
+
+    """
+    return ring(radius).pattern
+
+
+def ellipse(radius_x: float, radius_y: float):
+    """An ellipse of specified x and y radii.
+
+    Args:
+        radius_x: The x radius of the circle.
+        radius_y: The y radius of the circle.
+
+    Returns:
+        The ellipse pattern.
+
+    """
+    return circle(1).scale(radius_x, radius_y).pattern

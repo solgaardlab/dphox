@@ -164,7 +164,7 @@ class Geometry:
         """
         return self.transform(scale2d((xfact, yfact), self.center if origin is None else origin))
 
-    def put(self, port: Union[Tuple[float, ...], Port], from_port: Optional[Union[str, Port]] = None):
+    def to(self, port: Union[Tuple[float, ...], Port], from_port: Optional[Union[str, Port]] = None):
         port = Port(*port) if isinstance(port, tuple) else port
         from_port = Port(*from_port) if isinstance(from_port, tuple) else from_port
         if from_port is None:
@@ -258,13 +258,10 @@ class Geometry:
         self.refs = [r.reverse() for r in self.refs]
         return self
 
-    def symmetrize(self, geom_idx: int = -1, pt_idx: int = -1,
-                   front_port: str = 'b0', back_port: str = 'a0') -> "Geometry":
+    def symmetrize(self, front_port: str = 'b0', back_port: str = 'a0') -> "Geometry":
         """Symmetrize this curve across a mirror plane decided by one of the curves in the curve set.
 
         Args:
-            geom_idx: The curve index (default to last geometry).
-            pt_idx: The point index of th :code:`geom_idx`'th curve (default to last point).
             front_port: Front port label.
             back_port: Back port label.
 
@@ -272,7 +269,6 @@ class Geometry:
             The symmetrized curve
 
         """
-        pt = self.geoms[geom_idx]
         d = self.port[front_port].tangent()
         final_angle = np.arctan2(*d[::-1])
         mirror = AffineTransform([reflect2d(self.port[front_port].xy),

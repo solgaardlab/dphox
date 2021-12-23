@@ -27,6 +27,10 @@ class Material:
     def __str__(self):
         return self.name
 
+    @property
+    def n(self):
+        return np.sqrt(self.eps)
+
 
 SILICON = Material('si', 3.4784 ** 2, (0.3, 0.3, 0.3))
 POLYSILICON = Material('poly_si', 3.4784 ** 2, (0.5, 0.5, 0.5))

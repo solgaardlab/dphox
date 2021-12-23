@@ -251,11 +251,11 @@ class LateralNemsPS(Device):
 
     def __post_init__(self):
         psw = self.phase_shifter_waveguide.copy
-        top_actuator = self.actuator.copy.put(Port(psw.center[0], psw.bounds[3], 0))
-        bottom_actuator = self.actuator.copy.put(Port(psw.center[0], psw.bounds[1], -180))
+        top_actuator = self.actuator.copy.to(Port(psw.center[0], psw.bounds[3], 0))
+        bottom_actuator = self.actuator.copy.to(Port(psw.center[0], psw.bounds[1], -180))
         clearout = self.clearout.copy.align(psw)
-        left_gnd_waveguide = self.gnd_anchor_waveguide.copy.put(psw.port['a0'])
-        right_gnd_waveguide = self.gnd_anchor_waveguide.copy.put(psw.port['b0'])
+        left_gnd_waveguide = self.gnd_anchor_waveguide.copy.to(psw.port['a0'])
+        right_gnd_waveguide = self.gnd_anchor_waveguide.copy.to(psw.port['b0'])
         pos_metal = Box((self.clearout.size[0] + self.clearout_pos_sep,
                          top_actuator.bounds[3] - bottom_actuator.bounds[1])).hollow(self.trace_w).align(
             clearout.center)
@@ -307,7 +307,7 @@ class MultilayerPath(Device):
         for p in self.sequence:
             if p is not None:
                 d = p if isinstance(p, Device) or isinstance(p, Pattern) else straight(self.waveguide_w, p)
-                waveguided_patterns.append(d.put(Port(0, 0), 'a0') if port is None else d.put(port, 'a0'))
+                waveguided_patterns.append(d.to(Port(0, 0), 'a0') if port is None else d.to(port, 'a0'))
                 port = d.port['b0'].copy
         pattern_to_layer = sum(
             [[(p, self.path_layer)] if isinstance(p, Pattern) else p.pattern_to_layer for p in waveguided_patterns],
@@ -350,19 +350,19 @@ class MZI(Device):
         port = copy(self.coupler.port)
         if self.top_external:
             top_input = MultilayerPath(self.coupler.waveguide_w, self.top_external, self.ridge)
-            top_input.put(self.coupler.port['a1'], 'b0')
+            top_input.to(self.coupler.port['a1'], 'b0')
             port['a1'] = top_input.port['a0'].copy
             patterns.append(top_input)
         if self.bottom_external:
             bottom_input = MultilayerPath(self.coupler.waveguide_w, self.bottom_external, self.ridge)
-            bottom_input.put(self.coupler.port['a0'], 'b0')
+            bottom_input.to(self.coupler.port['a0'], 'b0')
             port['a0'] = bottom_input.port['a0'].copy
             patterns.append(bottom_input)
         if self.top_internal:
-            top_arm = MultilayerPath(self.coupler.waveguide_w, self.top_internal, self.ridge).put(port['b1'])
+            top_arm = MultilayerPath(self.coupler.waveguide_w, self.top_internal, self.ridge).to(port['b1'])
             port['b1'] = top_arm.port['b0'].copy
         if self.bottom_internal:
-            bottom_arm = MultilayerPath(self.coupler.waveguide_w, self.bottom_internal, self.ridge).put(port['b0'])
+            bottom_arm = MultilayerPath(self.coupler.waveguide_w, self.bottom_internal, self.ridge).to(port['b0'])
             port['b0'] = bottom_arm.port['b0'].copy
 
         arm_length_diff = port['b1'].x - port['b0'].x
@@ -371,18 +371,18 @@ class MZI(Device):
             if self.bottom_internal:
                 bottom_arm.append(straight(self.coupler.waveguide_w, arm_length_diff))
             else:
-                bottom_arm = straight(self.coupler.waveguide_w, arm_length_diff).put(port['b0'])
+                bottom_arm = straight(self.coupler.waveguide_w, arm_length_diff).to(port['b0'])
             port['b0'] = bottom_arm.port['b0'].copy
         elif arm_length_diff < 0:
             if self.top_internal:
                 top_arm.append(straight(self.coupler.waveguide_w, arm_length_diff))
             else:
-                top_arm = straight(self.coupler.waveguide_w, arm_length_diff).put(port['b0'])
+                top_arm = straight(self.coupler.waveguide_w, arm_length_diff).to(port['b0'])
             port['b1'] = top_arm.port['b1'].copy
 
         patterns.extend([top_arm, bottom_arm])
 
-        final_coupler = self.coupler.copy.put(port['b0'])
+        final_coupler = self.coupler.copy.to(port['b0'])
         port['b0'] = final_coupler.port['b0'].copy
         port['b1'] = final_coupler.port['b1'].copy
         patterns.append(final_coupler)
@@ -461,11 +461,11 @@ class LocalMesh(Device):
                 else:
                     self.upper_transforms.append((layer * mzi.full_length, idx * mzi.interport_distance))
             self.out_transforms.append((n_layers * mzi.full_length + mzi.input_length, idx * mzi.interport_distance))
-        self.upper_path.set_parent_transform(np.array(self.upper_transforms))
-        self.lower_path.set_parent_transform(np.array(self.lower_transforms))
-        self.mzi_out.set_parent_transform(np.array(self.out_transforms))
 
-        super(LocalMesh, self).__init__(self.name, children=[self.upper_path, self.lower_path, self.mzi_out])
+        super(LocalMesh, self).__init__(self.name)
+        self.place(self.upper_path, np.array(self.upper_transforms))
+        self.place(self.lower_path, np.array(self.lower_transforms))
+        self.place(self.mzi_out, np.array(self.out_transforms))
         self.port = {
             **{f'a{i}': Port(0, i * mzi.interport_distance, 180, mzi.waveguide_w) for i in range(n)},
             **{f'b{i}': Port(n_layers * mzi.full_length + mzi.input_length,
@@ -491,9 +491,9 @@ class LocalMesh(Device):
         upper_polys = self.upper_path.full_layer_to_polys[self.mzi.ridge]
         out_polys = self.mzi_out.full_layer_to_polys[self.mzi.ridge]
 
-        transformed_lower_polys = GDSTransform.from_array(np.array(self.lower_transforms))[0].transform_geoms(lower_polys)
-        transformed_upper_polys = GDSTransform.from_array(np.array(self.upper_transforms))[0].transform_geoms(upper_polys)
-        transformed_out_polys = GDSTransform.from_array(np.array(self.out_transforms))[0].transform_geoms(out_polys)
+        transformed_lower_polys = GDSTransform.parse(np.array(self.lower_transforms))[0].transform_geoms(lower_polys)
+        transformed_upper_polys = GDSTransform.parse(np.array(self.upper_transforms))[0].transform_geoms(upper_polys)
+        transformed_out_polys = GDSTransform.parse(np.array(self.out_transforms))[0].transform_geoms(out_polys)
 
         idx_upper = idx_lower = idx_out = 0
         for idx in range(self.n):

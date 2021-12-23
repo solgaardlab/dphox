@@ -1,11 +1,13 @@
-import numpy as np
+from copy import deepcopy as copy
 from dataclasses import dataclass
-from shapely.geometry import LinearRing, MultiPolygon, Point
+
+import numpy as np
+from shapely.geometry import MultiPolygon
 
 from .device import Device
-from .foundry import CommonLayer
-from .parametric import bezier_dc
-from .pattern import Box, Ellipse, Pattern, Port, Sector
+from .foundry import CommonLayer, OXIDE, SILICON
+from .parametric import bezier_dc, grating_arc, straight
+from .pattern import Box, Pattern, Port
 from .typing import Float2, Int2, Optional, Union
 from .utils import fix_dataclass_init_docs
 
@@ -106,13 +108,13 @@ class Array(Pattern):
     light applications.
 
     Attributes:
-        unit: The box or ellipse to repeat in the array
+        unit: The pattern to repeat in the array
         grid_shape: Number of rows and columns
         pitch: The distance between the circles in the Hole array
         n_points: The number of points in the circle (it can save time to use fewer points).
 
     """
-    unit: Union[Box, Ellipse]
+    unit: Pattern
     grid_shape: Int2
     # orientation: Union[float, np.ndarray]
     pitch: Optional[Union[float, Float2]] = None
@@ -120,35 +122,38 @@ class Array(Pattern):
     def __post_init__(self):
         self.pitch = (self.pitch, self.pitch) if isinstance(self.pitch, float) else self.pitch
         super().__init__(MultiPolygon([self.unit.copy.translate(i * self.pitch, j * self.pitch)
-                                                  for i in range(self.grid_shape[0])
-                                                  for j in range(self.grid_shape[1])
-                                                  ]))
+                                       for i in range(self.grid_shape[0])
+                                       for j in range(self.grid_shape[1])
+                                       ]))
 
 
 @fix_dataclass_init_docs
 @dataclass
 class WaveguideDevice(Device):
-    """Rib waveguide
+    """Waveguide cross section allowing specification of ridge and slab waveguides.
 
     Attributes:
         ridge_waveguide: The ridge waveguide (the thick section of the rib), represented as a :code:`Waveguide` object
             to allow features such as tapering and coupling. Generally this should be smaller than
-            :code:`slab_waveguide`.
+            :code:`slab_waveguide`. The port of this device is defined using the port of the ridge waveguide.
         slab_waveguide: The slab waveguide (the thin section of the rib), represented as a :code:`Waveguide` object
             to allow features such as tapering and coupling. Generally this should be larger than
-            :code:`ridge_waveguide`.
+            :code:`ridge_waveguide`. If not specified, this merely implements a waveguide pattern.
+        ridge: Ridge layer.
+        slab: Slab layer.
         name: The device name.
     """
     ridge_waveguide: Pattern
-    slab_waveguide: Pattern
+    slab_waveguide: Optional[Pattern] = None
     ridge: str = CommonLayer.RIDGE_SI
     slab: str = CommonLayer.RIB_SI
     name: str = "rib_wg"
 
     def __post_init__(self):
-        super().__init__(self.name, [(self.ridge_waveguide, self.ridge),
-                                     (self.slab_waveguide, self.slab)])
-        self.port = self.ridge_waveguide.port
+        pattern_to_layer = [(self.ridge_waveguide, self.ridge)]
+        pattern_to_layer += [(self.slab_waveguide, self.slab)] if self.slab_waveguide is not None else []
+        super().__init__(self.name, pattern_to_layer)
+        self.port = {'a0': self.ridge_waveguide.port['a0'].copy, 'b0': self.ridge_waveguide.port['b0'].copy}
 
 
 @fix_dataclass_init_docs
@@ -162,7 +167,7 @@ class StraightGrating(Device):
         pitch: The pitch between the grating teeth.
         duty_cycle: The fill factor for the grating.
         rib_grow: Offset the rib / slab layer in size (usually positive).
-        n_teeth: The number of teeth (uses maximum given extent and pitch if not specified).
+        num_periods: The number of periods (uses maximum given extent and pitch if not specified).
         name: Name of the device.
         ridge: The ridge layer for the partial etch.
         slab: The slab layer for the partial etch.
@@ -173,7 +178,7 @@ class StraightGrating(Device):
     pitch: float
     duty_cycle: float = 0.5
     rib_grow: float = 0
-    n_teeth: Optional[int] = None
+    num_periods: Optional[int] = None
     name: str = 'straight_grating'
     ridge: CommonLayer = CommonLayer.RIDGE_SI
     slab: CommonLayer = CommonLayer.RIB_SI
@@ -183,7 +188,7 @@ class StraightGrating(Device):
         slab = (Box(self.extent).hstack(self.waveguide).buffer(self.rib_grow), self.slab)
         grating = (Box(self.extent).hstack(self.waveguide).striped(self.stripe_w, (self.pitch, 0)), self.ridge)
         super().__init__(self.name, [slab, grating, (self.waveguide, self.ridge)])
-        self.port['a0'] = self.waveguide.port['a0']
+        self.port['a0'] = self.waveguide.port['a0'].copy
 
 
 @fix_dataclass_init_docs
@@ -192,53 +197,53 @@ class FocusingGrating(Device):
     """Focusing grating with partial etch.
 
     Attributes:
-        radius: The radius of the focusing grating structure
         angle: The opening angle for the focusing grating.
         waveguide: The waveguide for the focusing grating.
-        pitch: The pitch between the grating teeth.
-        duty_cycle: The fill factor for the grating.
+        wavelength: wavelength accepted by the grating.
+        duty_cycle: duty cycle for the grating
+        n_clad: clad material index of refraction (assume oxide by default).
+        n_core: core material index of refraction (assume silicon by default).
+        fiber_angle: angle of the fiber in degrees.
+        num_periods: number of grating periods
+        num_evaluations: Number of evaluations for the curve.
         grating_frac: The fraction of the distance radiating from the center occupied by the grating (otherwise ridge).
-        resolution: Number of evaluations for the arcs.
         rib_grow: Offset the rib / slab layer in size (usually positive).
         name: Name of the device.
         ridge: The ridge layer for the partial etch.
         slab: The slab layer for the partial etch.
 
     """
-    radius: float
     angle: float
-    waveguide: WaveguideDevice
-    pitch: float
+    waveguide_w: float
+    waveguide_l: float
+    n_clad: int = OXIDE.n
+    n_core: int = SILICON.n
+    min_period: int = 15
+    num_periods: int = 30
+    wavelength: float = 1.55
+    fiber_angle: float = 0
     duty_cycle: float = 0.5
     grating_frac: float = 1
-    resolution: int = 16
+    num_evaluations: int = 16
     rib_grow: float = 0
     name: str = 'focusing_grating'
     ridge: CommonLayer = CommonLayer.RIDGE_SI
     slab: CommonLayer = CommonLayer.RIB_SI
 
     def __post_init__(self):
-        self.stripe_w = self.pitch * (1 - self.duty_cycle)
-        grating = Sector(self.radius, self.angle, self.resolution).shapely
-        n_periods = int(self.radius * self.grating_frac / self.pitch) - 1
-        for n in range(n_periods):
-            circle = LinearRing(Point(0, 0).buffer(
-                self.radius - self.pitch * (n + 1) + self.stripe_w / 2).exterior.coords).buffer(self.stripe_w / 2)
-            grating -= circle
-        grating = Pattern(grating).rotate(90).translate(
-            np.abs(self.waveguide.port['b0'].w / np.tan(self.angle / 360 * np.pi))
-        )
-        self.waveguide.slab = self.slab
-        self.waveguide.ridge = self.ridge
-        if n_periods <= 0:
-            raise ValueError(f'Calculated {n_periods} which is <= 0.'
-                             f'Make sure that the pitch is not too big and grating_frac not'
-                             f'too small compared to radius.')
+        grating_arcs = [grating_arc(self.angle, self.duty_cycle, self.n_core, self.n_clad,
+                                    self.fiber_angle, self.wavelength, m, num_evaluations=self.num_evaluations)
+                        for m in range(self.min_period, self.min_period + self.num_periods)]
+        sector = Pattern(np.hstack((np.zeros((2, 1)), grating_arcs[0].curve.geoms[0])))
+        grating = Pattern(grating_arcs, sector)
+        self.waveguide = WaveguideDevice(straight(self.waveguide_l).path(self.waveguide_w),
+                                         slab=self.slab, ridge=self.ridge)
+        self.waveguide.halign(np.abs(self.waveguide.port['b0'].w / np.tan(self.angle / 360 * np.pi)), left=False)
         super().__init__(self.name,
-                         [(grating.buffer(self.rib_grow + self.pitch), self.slab),
+                         [(grating.buffer(self.rib_grow), self.slab),
                           (grating, self.ridge), self.waveguide])
-        self.port['a0'] = self.waveguide.port['b0'].copy
-        self.rotate(180).halign(0)
+        self.port['a0'] = self.waveguide.port['a0'].copy
+        self.halign(0)
 
 
 @fix_dataclass_init_docs
@@ -254,8 +259,8 @@ class TapDC(Pattern):
     grating: Union[StraightGrating, FocusingGrating]
 
     def __post_init__(self):
-        in_grating = self.grating_pad.copy.put(self.dc.port['b1'])
-        out_grating = self.grating_pad.copy.put(self.dc.port['a1'])
+        in_grating = self.grating_pad.copy.to(self.dc.port['b1'])
+        out_grating = self.grating_pad.copy.to(self.dc.port['a1'])
         super().__init__(self.dc, in_grating, out_grating)
         self.port['a0'] = self.dc.port['a0']
         self.port['b0'] = self.dc.port['b0']

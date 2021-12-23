@@ -108,7 +108,7 @@ class GDSTransform(AffineTransform):
                                             translate2d((self.x, self.y))))
 
     @classmethod
-    def from_array(cls, transform: Optional[Union["GDSTransform", Tuple, np.ndarray]]) -> \
+    def parse(cls, transform: Optional[Union["GDSTransform", Tuple, np.ndarray]]) -> \
             Tuple[AffineTransform, List["GDSTransform"]]:
         """Turns representations like :code:`(x, y, angle)` or a numpy array into convenient GDS/affine transforms.
 
@@ -120,8 +120,8 @@ class GDSTransform(AffineTransform):
 
         """
         if transform is None:
-            transform = (0, 0, 0)
-        if isinstance(transform, tuple):
+            transform = (0, 0)
+        if isinstance(transform, tuple) or isinstance(transform, list):
             transform = np.array(transform)
         if transform.ndim == 1:
             gds_transforms = [cls(*transform)]

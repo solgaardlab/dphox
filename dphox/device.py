@@ -12,9 +12,10 @@ from shapely.affinity import rotate
 from shapely.geometry import MultiPolygon, Point, Polygon
 from shapely.ops import unary_union
 
+from .geometry import Geometry
 from .foundry import CommonLayer, FABLESS, fabricate, Foundry
 from .pattern import Box, Pattern, Port
-from .transform import GDSTransform
+from .transform import GDSTransform, rotate2d
 from .typing import Dict, Float2, Float4, Int2, List, Optional, Tuple, Union
 from .utils import fix_dataclass_init_docs, poly_bounds, poly_points, PORT_LABEL_LAYER, PORT_LAYER
 
@@ -22,18 +23,14 @@ try:
     import plotly.graph_objects as go
 except ImportError:
     pass
-try:
-    MEEP_IMPORTED = True
-    import meep as mp
-except ImportError:
-    MEEP_IMPORTED = False
+
 try:
     NAZCA_IMPORTED = True
     import nazca as nd
 except ImportError:
     NAZCA_IMPORTED = False
 
-GDSTransformOrTuple = Union[GDSTransform, Tuple, np.ndarray]
+GDSTransformOrTuple = Union[GDSTransform, Tuple, np.ndarray, Port, List[Port]]
 
 
 class Device:
@@ -44,26 +41,27 @@ class Device:
     :code:`Trimesh` may be used to show a full 3D model of the device. Additionally, a :code:`Device` can be mapped
     to a GDSPY or Nazca cell.
 
+    A :code:`Device` is more or less the same as a GDS cell, including all of the same functionality including
+
+
     Attributes:
         name: Name of the device. This name can be anything you choose, ideally not repeating
             any previously defined :code:`Device`.
-        pattern_to_layer: A list of tuples, each consisting of a :code:`Pattern` or :code:`PolygonLike` followed by
+        devices: A list of devices, either a :code:`Device` OR a :code:`Pattern` or :code:`PolygonLike` followed by
             a layer label (integer or string).
-        parent_transform: The transforms for this device when placed into a parent cell.
-        children: The child devices in the hierarchy, which should be packaged along with all the relevant
-            parent transforms.
+        child_to_device: A map between child names and actual devices (cells)
+        child_to_transform: A map between child names and the GDS-formatted transforms (used for fast GDS generation)
     """
 
-    def __init__(self, name: str, pattern_to_layer: List[Union[Tuple[Pattern, Union[int, str]], "Device"]] = None,
-                 children: Optional[List["Device"]] = None):
+    def __init__(self, name: str, devices: List[Union[Tuple[Pattern, Union[int, str]], "Device"]] = None):
         self.name = name
-        self.pattern_to_layer = [] if pattern_to_layer is None else pattern_to_layer
+        self.pattern_to_layer = [] if devices is None else devices
         self.pattern_to_layer = sum(
             [p.pattern_to_layer if isinstance(p, Device) else [p] for p in self.pattern_to_layer], []
         )
         self.layer_to_polys = self._update_layers()
-        self.children = [] if children is None else children
-        self.parent_transform, self.parent_gds_transforms = GDSTransform.from_array(None)
+        self.child_to_device = {}  # children in this dictionary
+        self.child_to_transform = {}  # dictionary from child name to transform
         self.port = {}
 
     def _update_layers(self) -> Dict[Union[int, str], List[np.ndarray]]:
@@ -75,9 +73,6 @@ class Device:
     def merge_patterns(self):
         self.pattern_to_layer = [(Pattern(*self.layer_to_polys[layer]), layer) for layer in self.layer_to_polys]
         return self
-
-    def set_parent_transform(self, parent_transform: Optional[GDSTransformOrTuple]):
-        self.parent_transform, self.parent_gds_transforms = GDSTransform.from_array(parent_transform)
 
     @classmethod
     def from_pattern(cls, pattern: Pattern, name: str, layer: str):
@@ -133,8 +128,8 @@ class Device:
             bound_list.append(np.reshape(p.bounds, (2, 2)).T)
         bound_list = np.hstack(bound_list) if bound_list else np.array([[], []])
         child_bboxes = []
-        for child in self.children:
-            child_bboxes.extend(child.transformed_bboxes)
+        for child_name, child in self.child_to_device.items():
+            child_bboxes.extend(self.child_to_transform[child_name][0].transform_points(child.bbox))
         child_bboxes = np.hstack(child_bboxes) if child_bboxes else np.array([[], []])
         bound_list = np.hstack([bound_list, child_bboxes])
         return np.array((np.min(bound_list[0]), np.min(bound_list[1]), np.max(bound_list[0]), np.max(bound_list[1])))
@@ -150,16 +145,6 @@ class Device:
         return np.reshape(self.bounds, (2, 2)).T
 
     @property
-    def transformed_bboxes(self):
-        """Transformed bounding boxes according to the parent transform of this device.
-
-        Returns:
-            All of the transformed bounding box diagonals.
-
-        """
-        return self.parent_transform.transform_points(self.bbox)
-
-    @property
     def center(self) -> Float2:
         """Center (x, y) for the device.
 
@@ -170,7 +155,7 @@ class Device:
         b = self.bounds  # (minx, miny, maxx, maxy)
         return (b[2] + b[0]) / 2, (b[3] + b[1]) / 2  # (avgx, avgy)
 
-    def align(self, c: Union[Pattern, "Device", Float2]) -> "Device":
+    def align(self, c: Union[Geometry, "Device", Float2] = (0, 0)) -> "Device":
         """Align center of pattern
 
         Args:
@@ -185,7 +170,7 @@ class Device:
         self.translate(center[0] - old_x, center[1] - old_y)
         return self
 
-    def halign(self, c: Union[Pattern, "Device", float], left: bool = True, opposite: bool = False) -> "Device":
+    def halign(self, c: Union[Geometry, "Device", float] = 0, left: bool = True, opposite: bool = False) -> "Device":
         """Horizontal alignment of device
 
         Args:
@@ -203,8 +188,8 @@ class Device:
         self.translate(dx=p - x)
         return self
 
-    def valign(self, c: Union[Pattern, "Device", float], bottom: bool = True, opposite: bool = False) -> "Device":
-        """Vertical alignment of devie
+    def valign(self, c: Union[Geometry, "Device", float] = 0, bottom: bool = True, opposite: bool = False) -> "Device":
+        """Vertical alignment of device.
 
         Args:
             c: A pattern (vertical align to the pattern's boundary) or a center y for alignment.
@@ -275,7 +260,7 @@ class Device:
         self.layer_to_polys = self._update_layers()
         return self
 
-    def put(self, port: Port, from_port: Optional[str] = None):
+    def to(self, port: Port, from_port: Optional[str] = None):
         """Lego-connect this device's :code:`from_port` (origin if not specified) to another device's port.
 
         Args:
@@ -293,9 +278,43 @@ class Device:
                 port.x - self.port[from_port].x, port.y - self.port[from_port].y
             )
 
+    def place(self, device: "Device", placement: Union[GDSTransformOrTuple],
+              from_port: Optional[Union[str, Port, tuple]] = None):
+        """Place another device into this device at a specified :code:`placement` (location and angle) or list of them.
+
+        Args:
+            device: The child device to place.
+            placement: The transform to apply OR the port to which the device should be connected.
+                Note that the transform to apply can be the form of an xya (x, y, angle) tuple or a port.
+            from_port: The port name corresponding to child device's port that should be connected to :code:`port`.
+
+        Returns:
+            This device, after modifying the children of the device.
+
+        """
+        if device.name not in self.child_to_device:
+            self.child_to_device[device.name] = device
+        if from_port is None:
+            transform = np.array([p.xya if isinstance(p, Port) else p for p in placement])
+        else:
+            if isinstance(from_port, str):
+                from_port = self.port[from_port]
+            elif isinstance(from_port, tuple):
+                from_port = Port(*from_port)
+
+            def transformed_port(xya):
+                rotated_translate = -rotate2d(np.radians(xya[-1] - from_port.a + 180))[:2, :2] @ from_port.xy
+                return xya + np.array((*rotated_translate, -from_port.a + 180))
+
+            if not isinstance(placement, list) and not isinstance(placement, tuple):
+                placement = [placement]
+            transform = np.array([transformed_port(p.xya) if isinstance(p, Port) else transformed_port(p)
+                                  for p in placement])
+        self.child_to_transform[device.name] = GDSTransform.parse(transform)
+
     @property
     def copy(self) -> "Device":
-        """Return a copy of this device for repeated use
+        """Return a copy of this device for repeated use.
 
         Returns:
             A deep copy of this device.
@@ -340,9 +359,9 @@ class Device:
             for pattern, layer in self.pattern_to_layer:
                 for poly in pattern.geoms:
                     nd.Polygon(points=poly,
-                               layer=foundry.layer_to_gds_label[layer]).put()
+                               layer=foundry.layer_to_gds_label[layer]).to()
             for name, port in self.port.items():
-                nd.Pin(name).put(*port.xya)
+                nd.Pin(name).to(*port.xya)
             nd.put_stub()
         return cell
 
@@ -439,13 +458,13 @@ class Device:
 
         """
         layer_to_polys = self.layer_to_polys.copy()
-        for child in self.children:
-            for layer, multipoly in child.full_layer_to_polys.items():  # this recursively goes down the child tre
-                polygons = child.parent_transform.transform_geoms(multipoly)
-                # polygons = polygons.reshape((-1, polygons.shape[-2:]))
-                layer_to_polys[layer].extend(
-                    sum([np.split(p, p.shape[0]) if p.ndim == 3 else [p] for p in polygons], []))
-                layer_to_polys[layer] = [np.squeeze(p) for p in layer_to_polys[layer]]
+        for child_name, child in self.child_to_device.items():
+            # this recursively goes down the child tree
+            for layer, multipoly in child.full_layer_to_polys.items():
+                polygons = self.child_to_transform[child_name][0].transform_geoms(multipoly)
+                new_polys = sum([np.split(p, p.shape[0]) if p.ndim == 3 else [p] for p in polygons], [])
+                new_polys = [np.squeeze(p) for p in new_polys]
+                layer_to_polys[layer].extend(new_polys)
         return layer_to_polys
 
     @property
@@ -624,15 +643,14 @@ class Device:
 
         """
         elements = self.gds_elements(foundry, user_units_per_db_unit)
-        for child in self.children:
+        for child_name, child in self.child_to_device.items():
             child.to_gds_stream(stream, foundry, user_units_per_db_unit)
-            for gds_transform in child.parent_gds_transforms:
+            for gds_transform in self.child_to_transform[child_name][1]:
                 xy = (np.array([[gds_transform.x, gds_transform.y]]) / user_units_per_db_unit).astype(np.int32)
                 elements.append(
                     klamath.elements.Reference(
                         struct_name=child.name.encode('utf-8'),
-                        xy=xy,
-                        angle_deg=gds_transform.angle,
+                        xy=xy, angle_deg=gds_transform.angle,
                         mag=gds_transform.mag,
                         invert_y=False,
                         colrow=None,
