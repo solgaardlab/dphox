@@ -61,5 +61,5 @@ def test_poly(pattern: Pattern, poly_list: List[np.ndarray]):
     ],
 )
 def test_poly_with_hole(pattern: Pattern, poly_list: List[np.ndarray]):
-    for i, poly in enumerate(split_holes(pattern.shapely_union())):
+    for i, poly in enumerate(split_holes(pattern.shapely_union)):
         np.testing.assert_allclose(poly_points(poly).T, poly_list[i], atol=1e-5)

@@ -13,6 +13,7 @@ class Geometry:
         self.geoms = geoms
         self.port = port
         self.refs = refs
+        self.curve = None  # reserved for paths.
         self.tangents = [] if tangents is None else tangents
 
     @property
@@ -81,6 +82,8 @@ class Geometry:
         self.port = {name: port.transform(transform) for name, port in self.port.items()}
         for geom in self.refs:
             geom.transform(transform)
+        if self.curve:
+            self.curve.transform(transform)
         return self
 
     @property
@@ -244,7 +247,7 @@ class Geometry:
             A copy of the Pattern so that changes do not propagate to the original :code:`Pattern`.
 
         """
-        return copy(self)
+        return Geometry(self.geoms, self.port, self.refs, self.tangents)
 
     def reverse(self) -> "Geometry":
         """Reverse the geometry and the direction of the tangents along the path.
@@ -256,9 +259,9 @@ class Geometry:
         self.geoms = [g[:, ::-1] for g in self.geoms[::-1]]
         self.tangents = [-t[:, ::-1] for t in self.tangents[::-1]]
         self.refs = [r.reverse() for r in self.refs]
-        return self
+        return self.flip_ends()
 
-    def symmetrize(self, front_port: str = 'b0', back_port: str = 'a0') -> "Geometry":
+    def symmetrized(self, front_port: str = 'b0') -> "Geometry":
         """Symmetrize this curve across a mirror plane decided by one of the curves in the curve set.
 
         Args:
@@ -274,11 +277,13 @@ class Geometry:
         mirror = AffineTransform([reflect2d(self.port[front_port].xy),
                                   rotate2d(2 * final_angle + np.pi, self.port[front_port].xy)]).transform
         mirrored = self.copy.transform(mirror).reverse()
-        self.geoms += mirrored.geoms
-        self.tangents += mirrored.tangents
-        self.port[front_port] = mirrored.port[back_port].flip()
-        self.refs = [ref.transform(mirror) for ref in self.refs]
-        return self
+        forward = self.copy
+        forward.geoms += mirrored.geoms
+        forward.tangents += mirrored.tangents
+        forward.port[front_port] = mirrored.port[front_port].flip().copy
+        forward.refs.extend(mirrored.refs)
+        forward.curve = self.curve.symmetrized() if self.curve is not None else None
+        return forward
 
     def flip_ends(self, front_port: str = 'b0', back_port: str = 'a0'):
         self.port = {
@@ -286,3 +291,16 @@ class Geometry:
             back_port: self.port[front_port]
         }
         return self
+
+    @property
+    def port_copy(self):
+        """The copy of ports in this device.
+
+        Note:
+            Whenever using the ports of a given geometry in another geometry, it is highly recommended
+            to extract :code:`port_copy`, which creates fresh copies of the ports.
+
+        Returns:
+
+        """
+        return {name: p.copy for name, p in self.port.items()}

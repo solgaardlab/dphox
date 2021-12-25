@@ -2,7 +2,7 @@ from .active import Clearout, GndAnchorWaveguide, LateralNemsPS, MEMSFlexure, Lo
     PullOutNemsActuator, ThermalPS, Via
 from .foundry import CommonLayer
 from .passive import DC, WaveguideDevice
-from .parametric import cubic_taper, straight
+from .prefab import cubic_taper, straight
 from .pattern import Box
 
 ps = ThermalPS(straight(10).path(1), ps_w=4, via=Via((0.4, 0.4), 0.1))

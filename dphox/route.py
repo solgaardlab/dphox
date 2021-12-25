@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from .device import Device
 from .passive import FocusingGrating
-from .parametric import circular_bend, link, loopback, spiral, straight, bent_trombone, trombone, turn
+from .prefab import arc, circular_bend, link, loopback, spiral, straight, bent_trombone, trombone, turn
 from .path import Curve
 from .pattern import Pattern
 from .port import Port
@@ -21,6 +21,11 @@ def _turn_connect_angle_solve(start: Port, end: Port, start_r: float, end_r: flo
     # Get the list of possible angles; we eventually want to find the shortest possible path between the ports.
     possible_angles = []
     possible_lengths = []
+
+    # edge case for circular bend connection
+    # if start_r == end_r and np.linalg.norm(start.xy - end.xy) == 2 * start_r * np.cos(start.a - end.a):
+    #     return (-90, -90), 0
+
     for co in circle_orientations:
         # define the center of the circles
         start_c = start.xy - co[0] * start.normal(start_r)
@@ -34,7 +39,7 @@ def _turn_connect_angle_solve(start: Port, end: Port, start_r: float, end_r: flo
         circle_a = np.arctan2(*diff_c[::-1])
         if np.abs(rr) <= s:
             # angle due to the difference in radii when circles are horizontally aligned)
-            corr_a = np.arcsin(rr / s)
+            corr_a = np.pi / 2 if rr == s == 0 else np.arcsin(rr / s)
             angles = (circle_a - corr_a - np.array((start_a, end_a))) * np.array((-1, 1))
             angles = angles % (2 * np.pi) - (1 + np.array((-1, 1)) * co) * np.pi
             possible_angles.append(-angles)
@@ -67,8 +72,8 @@ def turn_connect(start: Port, end: Port, radius: float, radius_end: Optional[flo
     start_r = radius
     end_r = start_r if radius_end is None else radius_end
     angles, length = _turn_connect_angle_solve(start.copy.flip(), end.copy.flip(), start_r, end_r)
-    curve = link(turn(start_r, angles[0], euler, resolution),
-                 length, turn(end_r, angles[1], euler, resolution)).to(start)
+    curve = link(turn(start_r, angles[0], euler, resolution) if angles[0] % 360 != 0 else None,
+                 length, turn(end_r, angles[1], euler, resolution) if angles[1] % 360 != 0 else None).to(start)
 
     return curve.path(start.w) if include_width else curve
 
@@ -116,13 +121,13 @@ def spiral_delay(n_turns: int, min_radius: float, separation: float,
     spiral_ = spiral(n_turns, min_radius, theta_offset=2 * np.pi,
                      separation_scale=separation, resolution=resolution)
     bend = circular_bend(min_radius, 180, resolution=turn_resolution)
-    curve = link(spiral_.copy.reverse().flip_ends(), bend.copy.reflect(), bend, spiral_)
+    curve = link(spiral_.copy.reverse(), bend.copy.reflect(), bend, spiral_)
     start, end = curve.port['a0'], curve.port['b0']
     start_section = turn_connect(start, Port(start.x - 3 * min_radius, start.y, 0), min_radius,
                                  resolution=turn_resolution, include_width=False)
     end_section = turn_connect(end, Port(end.x + 3 * min_radius, end.y, 180), min_radius,
                                resolution=turn_resolution, include_width=False)
-    return link(start_section.reverse().flip_ends(), curve.reflect(), end_section)
+    return link(start_section.reverse(), curve.reflect(), end_section)
 
 
 def loopify(curve: Curve, radius: float, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
@@ -141,7 +146,21 @@ def loopify(curve: Curve, radius: float, euler: float = 0, resolution: int = DEF
         The loopified curve.
 
     """
-    return link(turn_connect(curve.port['a0'], curve.port['b0'], radius, euler, resolution), curve)
+    return link(curve, turn_connect(curve.port['b0'], curve.port['a0'], radius, euler=euler, resolution=resolution))
+
+
+def semicircle(radius: float, resolution: int = DEFAULT_RESOLUTION):
+    """A semicircle pattern.
+
+    Args:
+        radius: The radius of the semicircle.
+        resolution: Number of evaluations for each turn.
+
+    Returns:
+        The semicircle pattern.
+
+    """
+    return arc(radius, 180, resolution=resolution).pattern
 
 
 @fix_dataclass_init_docs

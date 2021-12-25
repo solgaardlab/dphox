@@ -1,5 +1,8 @@
+from typing import Callable
+
 import numpy as np
 from shapely.geometry import LineString, MultiLineString
+from shapely.ops import unary_union
 
 from .pattern import Pattern
 from .geometry import Geometry
@@ -138,7 +141,7 @@ class Curve(Geometry):
             The multiline string for the geometries.
 
         """
-        return MultiLineString([LineString(p) for p in self.geoms])
+        return MultiLineString([LineString(p.T) for p in self.geoms])
 
     def coalesce(self):
         """Coalesce path segments into a single path
@@ -154,17 +157,28 @@ class Curve(Geometry):
         self.tangents = [np.hstack(self.tangents)]
         return self
 
-    def interpolated(self, distance: float):
-        """Interpolated curve such that all segments have equal length :code:`distance`.
+    @property
+    def interpolated(self):
+        """Interpolated curve such that all segments have equal length.
 
-        Args:
-            distance: The length of segments in the interpolated path.
 
         Returns:
             The interpolated path.
 
         """
-        return Curve([p.interpolate(distance) for p in self.shapely.geoms])
+        lengths = [np.sum(length) for length in self.lengths(path=False)]
+
+        # interpolate, but also ensure endpoints have the correct original tangents
+        def _interp(g: np.ndarray, t: np.ndarray, p: LineString, length: float):
+            ls = LineString([p.interpolate(d * length) for d in np.linspace(0, 1, g.shape[1])])
+            points = linestring_points(ls).T
+            tangents = np.gradient(points, axis=1).T
+            tangents = np.vstack((t.T[0], tangents[1:-1], t.T[-1])).T
+            return CurveTuple(points, tangents)
+
+        return Curve([_interp(g, t, p, length)
+                      for g, t, p, length in zip(self.geoms, self.tangents, self.shapely.geoms, lengths)])
+
 
     def path(self, width: Union[float, Iterable[PathWidth]] = 1, offset: Union[float, Iterable[PathWidth]] = 0,
              decimals: int = DECIMALS) -> Pattern:
@@ -201,17 +215,18 @@ class Curve(Geometry):
 
         path = Pattern(path_patterns).set_port({'a0': path_patterns[0].port['a0'],
                                                 'b0': path_patterns[-1].port['b0']})
-        path.refs.append(self)
         path.curve = self
+        # path.refs.append(path.curve)
         return path
 
-    def hvplot(self, color: str = 'black', name: str = 'curve', bounds: Optional[Float4] = None,
+    def hvplot(self, line_width: float = 2, color: str = 'black', bounds: Optional[Float4] = None, alternate_color: Optional[str] = None,
                plot_ports: bool = True):
         """Plot this device on a matplotlib plot.
 
         Args:
+            line_width: The width of the line for plotting.
             color: The color for plotting the pattern.
-            name: Name of the curve.
+            alternate_color: Plot segments of the curve alternating :code:`color` and :code`alternate_color`.
             bounds: Bounds of the plot.
             plot_ports: Plot the ports of the curve.
 
@@ -221,13 +236,14 @@ class Curve(Geometry):
         """
         import holoviews as hv
         plots_to_overlay = []
+        alternate_color = color if not alternate_color else alternate_color
         b = min_aspect_bounds(self.bounds) if bounds is None else bounds
 
-        for curve in self.geoms:
+        for i, curve in enumerate(self.geoms):
             plots_to_overlay.append(
-                hv.Curve((curve[0], curve[1]), label=name).opts(data_aspect=1, frame_height=200,
-                                                                ylim=(b[1], b[3]), xlim=(b[0], b[2]),
-                                                                color=color, tools=['hover']))
+                hv.Curve((curve[0], curve[1])).opts(data_aspect=1, frame_height=200, line_width=line_width,
+                                                    ylim=(b[1], b[3]), xlim=(b[0], b[2]),
+                                                    color=(color, alternate_color)[i % 2], tools=['hover']))
 
         if plot_ports:
             for name, port in self.port.items():
@@ -238,6 +254,23 @@ class Curve(Geometry):
     @property
     def pattern(self):
         return Pattern(self.geoms)
+
+    @property
+    def segments(self):
+        return [Curve(CurveTuple(g, t)) for g, t in zip(self.geoms, self.tangents)]
+
+    @property
+    def copy(self) -> "Curve":
+        """Copies the pattern using deepcopy.
+
+        Returns:
+            A copy of the Pattern so that changes do not propagate to the original :code:`Pattern`.
+
+        """
+        curve = Curve([CurveTuple(g, t) for g, t in zip(self.geoms, self.tangents)])
+        curve.port = self.port_copy
+        curve.refs = [ref.copy for ref in self.refs]
+        return curve
 
 
 def curve_to_path(points: np.ndarray, widths: Union[float, np.ndarray], tangents: np.ndarray,
@@ -317,12 +350,12 @@ def get_ndarray_curve(curvelike_list: Iterable[Union[float, "Curve", CurveLike, 
                 raise AttributeError("The number of dimensions for the curve must be 2 or 3")
             new_linestrings = [curve] if curve.ndim == 2 else curve.tolist()
         elif isinstance(curve, LineString):
-            new_linestrings = linestring_points(curve).T
+            new_linestrings = [linestring_points(curve).T]
         elif isinstance(curve, MultiLineString):
             new_linestrings = [linestring_points(geom).T for geom in curve.geoms]
         else:
             raise TypeError(f'Pattern does not accept type {type(curve)}')
-        tangents.extend(new_tangents if new_tangents else [np.gradient(p, axis=0) for p in new_linestrings])
+        tangents.extend(new_tangents if new_tangents else [np.gradient(p, axis=1) for p in new_linestrings])
         linestrings.extend(new_linestrings)
     return linestrings, tangents
 
@@ -357,14 +390,13 @@ def link(*geoms: Union[Pattern, Curve, float], front_port: str = 'b0', back_port
 
     """
     geoms = [straight(g) if np.isscalar(g) else g for g in geoms]
-    port = geoms[0].port
+    port = geoms[0].port_copy
     for geom in geoms[1:]:
         geom.to(port[front_port], from_port=back_port)
-        port[front_port] = geom.port[front_port]
+        port[front_port] = geom.port[front_port].copy
     if isinstance(geoms[0], Pattern):  # assume all patterns
         pattern = Pattern(*geoms).set_port(port)
-        pattern.curve = Curve(*[path.curve for path in geoms])
-        pattern.refs.append(pattern.curve)
+        pattern.curve = Curve([path.curve.copy for path in geoms])
         return pattern
     elif isinstance(geoms[0], Curve):  # assume all curves
         return Curve(*geoms)

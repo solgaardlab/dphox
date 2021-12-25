@@ -6,7 +6,7 @@ import numpy as np
 
 from .device import Device, Via
 from .foundry import CommonLayer
-from .parametric import straight
+from .prefab import straight
 from .passive import DC, TapDC, WaveguideDevice
 from .pattern import Box, MEMSFlexure, Pattern, Port
 from .route import Interposer
@@ -258,18 +258,15 @@ class LateralNemsPS(Device):
         left_gnd_waveguide = self.gnd_anchor_waveguide.copy.to(psw.port['a0'])
         right_gnd_waveguide = self.gnd_anchor_waveguide.copy.to(psw.port['b0'])
         pos_metal = Box((self.clearout.size[0] + self.clearout_pos_sep,
-                         top_actuator.bounds[3] - bottom_actuator.bounds[1])).hollow(self.trace_w).align(
-            clearout.center)
+                         top_actuator.bounds[3] - bottom_actuator.bounds[1])).hollow(self.trace_w).align(clearout.center)
         gnd_metal = Box((right_gnd_waveguide.port['e0'].x - left_gnd_waveguide.port['e0'].x,
                          self.gnd_anchor_waveguide.size[1] + self.clearout_gnd_sep)).cup(self.trace_w).halign(
             left_gnd_waveguide.port['e0'].x).valign(left_gnd_waveguide.port['e1'].y)
 
         super(LateralNemsPS, self).__init__(self.name, [(psw, self.ridge), (pos_metal, self.pos_metal_layer),
-                                                        (gnd_metal,
-                                                         self.gnd_metal_layer)] + top_actuator.pattern_to_layer
-                                            + bottom_actuator.pattern_to_layer + clearout.pattern_to_layer
-                                            + left_gnd_waveguide.pattern_to_layer
-                                            + right_gnd_waveguide.pattern_to_layer)
+                                                        (gnd_metal, self.gnd_metal_layer), top_actuator,
+                                                        bottom_actuator, clearout, left_gnd_waveguide,
+                                                        right_gnd_waveguide])
         self.merge_patterns()
         self.port = {
             'a0': left_gnd_waveguide.port['b0'],

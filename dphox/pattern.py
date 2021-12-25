@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from shapely.affinity import rotate
 from shapely.geometry import box, GeometryCollection, LineString, Point, JOIN_STYLE, CAP_STYLE
 from shapely.ops import split, unary_union
+from copy import deepcopy as copy
 
 from .foundry import CommonLayer, fabricate, Foundry, FABLESS
 from .geometry import Geometry
@@ -54,13 +55,13 @@ class Pattern(Geometry):
             decimals: decimal places for rounding (in case of tiny errors in polygons)
         """
         self.decimals = decimals
-        self.curve: Optional["Curve"] = None  # reserved for paths.
         super().__init__(get_ndarray_polygons(patterns), {}, [])
 
     @property
     def shapely(self) -> MultiPolygon:
         return MultiPolygon([Polygon(np.around(p.T, decimals=self.decimals)) for p in self.geoms])
 
+    @property
     def shapely_union(self) -> MultiPolygon:
         pattern = unary_union(self.shapely.geoms)
         return pattern if isinstance(pattern, MultiPolygon) else MultiPolygon([pattern])
@@ -81,7 +82,7 @@ class Pattern(Geometry):
         if not SHAPELYVEC_IMPORTED:
             raise NotImplementedError('shapely.vectorized is not imported, but this relies on its contains method.')
         x_, y_ = np.mgrid[0:spacing[0] * shape[0]:spacing[0], 0:spacing[1] * shape[1]:spacing[1]]
-        geom = self.shapely_union()
+        geom = self.shapely_union
         if smooth_feature:
             # erode
             geom = geom.buffer(-smooth_feature, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.square)
@@ -106,7 +107,7 @@ class Pattern(Geometry):
             The new intersected pattern
 
         """
-        return Pattern(self.shapely.intersection(other_pattern.shapely))
+        return Pattern(self.shapely_union.intersection(other_pattern.shapely_union))
 
     def difference(self, other_pattern: "Pattern") -> "Pattern":
         """Difference between this pattern and provided pattern.
@@ -124,7 +125,7 @@ class Pattern(Geometry):
             The new differenced pattern
 
         """
-        return Pattern(self.shapely.difference(other_pattern.shapely))
+        return Pattern(self.shapely_union.difference(other_pattern.shapely_union))
 
     def union(self, other_pattern: "Pattern") -> "Pattern":
         """Union between this pattern and provided pattern.
@@ -141,7 +142,7 @@ class Pattern(Geometry):
             The new union pattern
 
         """
-        return Pattern(self.shapely.union(other_pattern.shapely))
+        return Pattern(self.shapely_union.union(other_pattern.shapely_union))
 
     def symmetric_difference(self, other_pattern: "Pattern") -> "Pattern":
         """Union between this pattern and provided pattern.
@@ -158,7 +159,7 @@ class Pattern(Geometry):
             The new symmetric difference pattern
 
         """
-        return Pattern(self.shapely.symmetric_difference(other_pattern.shapely))
+        return Pattern(self.shapely_union.symmetric_difference(other_pattern.shapely_union))
 
     def to_gdspy(self, cell: gy.Cell):
         """Add to an existing GDSPY cell.
@@ -202,14 +203,14 @@ class Pattern(Geometry):
         if ax is None:
             import matplotlib.pyplot as plt
             ax = plt.gca()
-        ax.add_patch(PolygonPatch(self.shapely_union(), facecolor=color, edgecolor='none'))
-        b = self.bounds
+        ax.add_patch(PolygonPatch(self.shapely_union, facecolor=color, edgecolor='none'))
+        b = min_aspect_bounds(self.bounds)
         ax.set_xlim((b[0], b[2]))
         ax.set_ylim((b[1], b[3]))
         ax.set_aspect('equal')
 
     def buffer(self, distance: float, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.square) -> "Pattern":
-        pattern = self.shapely_union().buffer(distance, join_style=join_style, cap_style=cap_style)
+        pattern = self.shapely_union.buffer(distance, join_style=join_style, cap_style=cap_style)
         return Pattern(pattern if isinstance(pattern, MultiPolygon) else pattern)
 
     def smooth(self, distance: float, min_area: float = None,
@@ -217,7 +218,7 @@ class Pattern(Geometry):
         smoothed = self.buffer(distance,
                                join_style=join_style,
                                cap_style=cap_style).buffer(-distance, join_style=join_style, cap_style=cap_style)
-        smoothed_exclude = Pattern(smoothed.shapely_union().union(self.shapely_union()) - self.shapely_union())
+        smoothed_exclude = Pattern(smoothed.shapely_union.union(self.shapely_union) - self.shapely_union)
         min_area = distance ** 2 / 4 if min_area is None else min_area
         self.geoms += [p for p in smoothed_exclude.geoms if Polygon(p.T).area > min_area]
         return self
@@ -239,7 +240,9 @@ class Pattern(Geometry):
 
         Args:
             color: The color for plotting the pattern.
+            name: Name of the pattern / label of the plot.
             alpha: The transparency factor for the plot (to see overlay of structures from many layers).
+            plot_ports: Plot the ports (triangle indicators and text labels).
 
         Returns:
             The holoviews Overlay for displaying all of the polygons.
@@ -248,15 +251,15 @@ class Pattern(Geometry):
         import holoviews as hv
         plots_to_overlay = []
         b = min_aspect_bounds(self.bounds) if bounds is None else bounds
-        geom = self.shapely_union()
+        geom = self.shapely_union
 
         def _holoviews_poly(shapely_poly):
             x, y = poly_points(shapely_poly).T
             holes = [[np.array(hole.coords.xy).T for hole in shapely_poly.interiors]]
             return {'x': x, 'y': y, 'holes': holes}
 
-        polys = [_holoviews_poly(poly) for poly in geom.geoms] if isinstance(geom, MultiPolygon) else [
-            _holoviews_poly(geom)]
+        polys = [_holoviews_poly(poly) for poly in geom.geoms] if isinstance(geom, MultiPolygon) \
+            else [_holoviews_poly(geom)]
 
         plots_to_overlay.append(
             hv.Polygons(polys, label=name).opts(data_aspect=1, frame_height=200, fill_alpha=alpha,
@@ -301,6 +304,10 @@ class Pattern(Geometry):
 
     def __truediv__(self, other: "Pattern"):
         return self.symmetric_difference(other)
+
+    @property
+    def copy(self) -> "Pattern":
+        return copy(self)
 
 
 def get_ndarray_polygons(polylike_list: Iterable[Union["Pattern", PolygonLike, List[PolygonLike]]],
@@ -424,25 +431,30 @@ class Box(Pattern):
             self.difference(Box((self.extent[0], self.extent[1] - thickness)).align(self).valign(self)),
         )
 
-    def striped(self, stripe_w: float, pitch: Optional[Float2] = None) -> Pattern:
+    def striped(self, stripe_w: float, pitch: Optional[Float2] = None,
+                along_x: bool = True, along_y: bool = True, include_boundary: bool = True) -> Pattern:
         """A stripe hatch pattern in the confines of the box, useful for etching and arrays of square holes.
 
         Args:
             stripe_w: Stripe width (useful for etch holes).
             pitch: Pitch of the stripes
+            along_x: Stripes / grating along x
+            along_y: Stripes / grating along y
 
         Returns:
             The striped :code:`Pattern`
 
         """
         pitch = (stripe_w * 2, stripe_w * 2) if pitch is None else pitch
-        patterns = [self.hollow(stripe_w)] if pitch[0] > 0 and pitch[1] > 0 else []
-        if pitch[0] > 0 and not 3 * pitch[1] >= self.size[0]:
+        patterns = []
+        if include_boundary:
+            patterns = [self.hollow(stripe_w)] if pitch[0] > 0 and pitch[1] > 0 else []
+        if pitch[0] > 0 and not 3 * pitch[1] >= self.size[0] and along_x:
             xs = np.mgrid[self.bounds[0] + pitch[0]:self.bounds[2]:pitch[0]]
             patterns.append(
                 Pattern(*[Box(extent=(stripe_w, self.size[1])).halign(x) for x in xs]).align(
                     self.center))
-        if pitch[1] > 0 and not 3 * pitch[1] >= self.size[1]:
+        if pitch[1] > 0 and not 3 * pitch[1] >= self.size[1] and along_y:
             ys = np.mgrid[self.bounds[1] + pitch[1]:self.bounds[3]:pitch[1]]
             patterns.append(
                 Pattern(*[Box(extent=(self.size[0], stripe_w)).valign(y) for y in ys]).align(

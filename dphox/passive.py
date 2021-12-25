@@ -5,10 +5,10 @@ from shapely.geometry import MultiPolygon
 
 from .device import Device
 from .foundry import AIR, CommonLayer, SILICON
-from .parametric import dc, grating_arc, straight
+from .prefab import dc, grating_arc, straight, ring
 from .pattern import Box, Pattern, Port
 from .typing import Float2, Int2, Optional, Union
-from .utils import fix_dataclass_init_docs
+from .utils import DEFAULT_RESOLUTION, fix_dataclass_init_docs
 
 try:
     import plotly.graph_objects as go
@@ -88,8 +88,8 @@ class Cross(Pattern):
     waveguide: Pattern
 
     def __post_init__(self):
-        horizontal = self.waveguide.align()
-        vertical = self.waveguide.align().copy.rotate(90)
+        horizontal = self.waveguide
+        vertical = self.waveguide.copy.rotate(90, self.waveguide.center)
         super().__init__(horizontal, vertical)
         self.port['a0'] = horizontal.port['a0']
         self.port['a1'] = vertical.port['a0']
@@ -235,7 +235,7 @@ class FocusingGrating(Device):
                         for m in range(self.min_period, self.min_period + self.num_periods)]
         sector = Pattern(np.hstack((np.zeros((2, 1)), grating_arcs[0].curve.geoms[0])))
         grating = Pattern(grating_arcs, sector)
-        min_waveguide_l = np.abs(self.waveguide.port['b0'].w / np.tan(np.radians(self.angle)))
+        min_waveguide_l = np.abs(self.waveguide_w / np.tan(np.radians(self.angle)))
         self.waveguide = WaveguideDevice(straight(self.waveguide_extra_l + min_waveguide_l).path(self.waveguide_w),
                                          slab=self.slab, ridge=self.ridge)
         self.waveguide.halign(min_waveguide_l, left=False)
@@ -266,3 +266,32 @@ class TapDC(Pattern):
         self.port['b0'] = self.dc.port['b0']
         self.refs.append(self.dc)
         self.wg_path = self.dc.lower_path
+
+
+def circle(radius: float, resolution: int = DEFAULT_RESOLUTION):
+    """A circle of specified radius.
+
+    Args:
+        radius: The radius of the circle.
+        resolution: Number of evaluations for each turn.
+
+    Returns:
+        The circle pattern.
+
+    """
+    return ring(radius, resolution).pattern
+
+
+def ellipse(radius_x: float, radius_y: float, resolution: int = DEFAULT_RESOLUTION):
+    """An ellipse of specified x and y radii.
+
+    Args:
+        radius_x: The x radius of the circle.
+        radius_y: The y radius of the circle.
+        resolution: Number of evaluations for each turn.
+
+    Returns:
+        The ellipse pattern.
+
+    """
+    return circle(1, resolution).scale(radius_x, radius_y).pattern

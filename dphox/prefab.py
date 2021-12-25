@@ -177,7 +177,7 @@ def elliptic_bend(radius_x: float, radius_y: float, angle: float):
     return circular_bend(1, np.arctan2(np.sin(angle) / radius_y, np.cos(angle) / radius_x)).scale(radius_x, radius_y)
 
 
-def turn(radius: float, angle: float = 90, euler: float = 0, resolution=DEFAULT_RESOLUTION):
+def turn(radius: float, angle: float = 90, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
     """Turn (partial Euler) functional for angles between -90 and 90 degrees.
 
     Args:
@@ -200,15 +200,14 @@ def turn(radius: float, angle: float = 90, euler: float = 0, resolution=DEFAULT_
         circular_curve = circular_bend(1 / np.sqrt(2 * np.pi * np.radians(np.abs(euler_angle))), circular_angle,
                                        resolution=int((1 - euler) / 2 * resolution))
 
-        curve = Curve(euler_curve, circular_curve.to(euler_curve.port['b0'])).symmetrize()
+        curve = Curve(euler_curve, circular_curve.to(euler_curve.port['b0'])).symmetrized()
         scale = radius * 2 * np.sin(np.radians(np.abs(angle)) / 2) / np.linalg.norm(curve.points.T[-1])
         return curve.scale(scale, scale, origin=(0, 0))
     else:
         return circular_bend(radius, angle, resolution)
 
 
-def arc(angle: float, radius: float, radius_y: Optional[float] = None, start_angle: float = None,
-        resolution: int = DEFAULT_RESOLUTION):
+def arc(angle: float, radius: float, start_angle: float = None, resolution: int = DEFAULT_RESOLUTION):
     """Arc.
 
     Notes:
@@ -216,8 +215,7 @@ def arc(angle: float, radius: float, radius_y: Optional[float] = None, start_ang
 
     Args:
         angle: The angle of the arc in degrees.
-        radius: The radius along the x-axis.
-        radius_y: The radius along the y-axis (default to the radius if None).
+        radius: The radius.
         start_angle: Start angle for the arc (default to -angle / 2 if None).
         resolution: Number of evaluations for the curve.
 
@@ -225,14 +223,13 @@ def arc(angle: float, radius: float, radius_y: Optional[float] = None, start_ang
         The function mapping 0 to 1 to the curve/tangents for the arc.
 
     """
-    radius_y = radius if radius_y is None else radius_y
     angle = np.abs(angle / 180 * np.pi)
     start_angle = -angle / 2 if start_angle is None else start_angle
 
     def _arc(t: np.ndarray):
         angles = angle * t + start_angle
         x = radius * np.cos(angles)
-        y = radius_y * np.sin(angles)
+        y = radius * np.sin(angles)
         return np.hstack((x, y)), np.hstack((-np.sin(angles), np.cos(angles)))
 
     return parametric_curve(_arc, resolution)
@@ -437,91 +434,6 @@ def bent_trombone(radius: float, length: float, euler: float = 0, resolution: in
     )
 
 
-def polytaper_fn(taper_params: Union[np.ndarray, Tuple[float, ...]]):
-    """Polynomial taper functional.
-
-    Args:
-        taper_params: Polynomial taper parameter function of the form :math:`f(t; \\mathbf{x}) = \\sum_{n = 1}^N x_nt^n`
-
-    Returns:
-         A function mapping 0 to 1 to the width of the taper along the path linestring.
-
-    """
-    poly_exp = np.arange(len(taper_params), dtype=float)
-    return lambda u: np.sum(taper_params * u ** poly_exp, axis=1)
-
-
-def linear_taper_fn(init_w: float, change_w: float):
-    """Linear taper function for parametric width/offset.
-
-    Args:
-        init_w: Initial width.
-        change_w: Change in the width.
-
-    Returns:
-        The linear taper function.
-
-    """
-    return polytaper_fn((init_w, change_w))
-
-
-def quad_taper_fn(init_w: float, change_w: float):
-    """Quadratic taper function for parametric width/offset.
-
-    Args:
-        init_w: Initial width.
-        change_w: Change in the width.
-
-    Returns:
-        The quadratic taper function.
-
-    """
-    return polytaper_fn((init_w, 2 * change_w, -1 * change_w))
-
-
-def cubic_taper_fn(init_w: float, change_w: float):
-    """Cubic taper function for parametric width/offset.
-
-    Args:
-        init_w: Initial width.
-        change_w: Change in the width.
-
-    Returns:
-        The cubic taper function.
-
-    """
-    return polytaper_fn((init_w, 0., 3 * change_w, -2 * change_w))
-
-
-def cubic_taper(init_w: float, change_w: float, length: float, taper_length: float,
-                symmetric: bool = True, taper_first: bool = True, resolution: int = DEFAULT_RESOLUTION):
-    """A cubic taper waveguide pattern.
-
-    Args:
-        init_w: Initial width of the waveguide
-        change_w: Change in the waveguide width.
-        length: Length of the overall waveguide.
-        taper_length: Length of just the waveguide portion.
-        symmetric: Whether to symmetrize the waveguide.
-        taper_first: Whether to taper first.
-        resolution: Number of evaluations for each turn.
-
-    Returns:
-        The cubic taper waveguide.
-
-    """
-    if 2 * taper_length > length:
-        raise ValueError(f"Require 2 * taper_length <= length, but got {2 * taper_length} >= {length}.")
-    straight_length = length / (1 + symmetric) - taper_length
-    if taper_first:
-        path = link(taper(taper_length, resolution), straight_length).path((cubic_taper_fn(init_w, change_w),
-                                                                                 init_w + change_w))
-    else:
-        path = link(straight_length, taper(taper_length, resolution)).path(
-            (init_w, cubic_taper_fn(init_w, change_w)))
-    return path.symmetrize() if symmetric else path
-
-
 def right_turn(radius: float, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
     """Right turn curve from the perspective of the output port of the curve.
 
@@ -585,34 +497,6 @@ def right_uturn(radius: float, length: float = 0, euler: float = 0, resolution: 
                 right_turn(radius, euler, resolution)).coalesce()
 
 
-def semicircle(radius: float, resolution: int = DEFAULT_RESOLUTION):
-    """A semicircle pattern.
-
-    Args:
-        radius: The radius of the semicircle.
-        resolution: Number of evaluations for each turn.
-
-    Returns:
-        The semicircle pattern.
-
-    """
-    return arc(radius, 180, resolution=resolution).pattern
-
-
-def ring(radius: float, resolution: int = DEFAULT_RESOLUTION):
-    """A circle or ring curve of specified radius.
-
-    Args:
-        radius: The radius of the circle.
-        resolution: Number of evaluations for each turn.
-
-    Returns:
-        The circle or ring curve.
-
-    """
-    return arc(radius, 360, resolution=resolution)
-
-
 def racetrack(radius: float, length: float, euler: float, resolution: int = DEFAULT_RESOLUTION):
     """A circle or ring curve of specified radius.
 
@@ -629,30 +513,104 @@ def racetrack(radius: float, length: float, euler: float, resolution: int = DEFA
     return link(left_uturn(radius, euler, resolution), length, left_uturn(radius, euler, resolution), length)
 
 
-def circle(radius: float, resolution: int = DEFAULT_RESOLUTION):
-    """A circle of specified radius.
+def polytaper_fn(taper_params: Union[np.ndarray, Tuple[float, ...]]):
+    """Polynomial taper functional.
+
+    Args:
+        taper_params: Polynomial taper parameter function of the form :math:`f(t; \\mathbf{x}) = \\sum_{n = 1}^N x_nt^n`
+
+    Returns:
+         A function mapping 0 to 1 to the width of the taper along the path linestring.
+
+    """
+    poly_exp = np.arange(len(taper_params), dtype=float)
+    return lambda u: np.sum(taper_params * u ** poly_exp, axis=1)
+
+
+def linear_taper_fn(init_w: float, final_w: float):
+    """Linear taper function for parametric width/offset.
+
+    Args:
+        init_w: Initial width.
+        final_w: Final width.
+
+    Returns:
+        The linear taper function.
+
+    """
+    change_w = final_w - init_w
+    return polytaper_fn((init_w, change_w))
+
+
+def quad_taper_fn(init_w: float, final_w: float):
+    """Quadratic taper function for parametric width/offset.
+
+    Args:
+        init_w: Initial width.
+        final_w: Final width.
+
+    Returns:
+        The quadratic taper function.
+
+    """
+    change_w = final_w - init_w
+    return polytaper_fn((init_w, 2 * change_w, -1 * change_w))
+
+
+def cubic_taper_fn(init_w: float, final_w: float):
+    """Cubic taper function for parametric width/offset.
+
+    Args:
+        init_w: Initial width.
+        final_w: Final width.
+
+    Returns:
+        The cubic taper function.
+
+    """
+    change_w = final_w - init_w
+    return polytaper_fn((init_w, 0., 3 * change_w, -2 * change_w))
+
+
+def cubic_taper(init_w: float, change_w: float, length: float, taper_length: float,
+                symmetric: bool = True, taper_first: bool = True, resolution: int = DEFAULT_RESOLUTION):
+    """A cubic taper waveguide pattern.
+
+    Args:
+        init_w: Initial width of the waveguide
+        change_w: Change in the waveguide width.
+        length: Length of the overall waveguide.
+        taper_length: Length of just the waveguide portion.
+        symmetric: Whether to symmetrize the waveguide.
+        taper_first: Whether to taper first.
+        resolution: Number of evaluations for each turn.
+
+    Returns:
+        The cubic taper waveguide.
+
+    """
+    if 2 * taper_length > length:
+        raise ValueError(f"Require 2 * taper_length <= length, but got {2 * taper_length} >= {length}.")
+    straight_length = length / (1 + symmetric) - taper_length
+    if taper_first:
+        path = link(taper(taper_length, resolution), straight_length).path((cubic_taper_fn(init_w, init_w + change_w),
+                                                                            init_w + change_w))
+    else:
+        path = link(straight_length, taper(taper_length, resolution)).path(
+            (init_w, cubic_taper_fn(init_w, init_w + change_w)))
+    return path.symmetrized() if symmetric else path
+
+
+def ring(radius: float, resolution: int = DEFAULT_RESOLUTION):
+    """A circle or ring curve of specified radius.
 
     Args:
         radius: The radius of the circle.
         resolution: Number of evaluations for each turn.
 
     Returns:
-        The circle pattern.
+        The circle or ring curve.
 
     """
-    return ring(radius, resolution).pattern
+    return arc(radius, 360, resolution=resolution)
 
-
-def ellipse(radius_x: float, radius_y: float, resolution: int = DEFAULT_RESOLUTION):
-    """An ellipse of specified x and y radii.
-
-    Args:
-        radius_x: The x radius of the circle.
-        radius_y: The y radius of the circle.
-        resolution: Number of evaluations for each turn.
-
-    Returns:
-        The ellipse pattern.
-
-    """
-    return circle(1, resolution).scale(radius_x, radius_y).pattern

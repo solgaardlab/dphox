@@ -17,7 +17,7 @@ from .foundry import CommonLayer, FABLESS, fabricate, Foundry
 from .pattern import Box, Pattern, Port
 from .transform import GDSTransform, rotate2d
 from .typing import Dict, Float2, Float4, Int2, List, Optional, Tuple, Union
-from .utils import fix_dataclass_init_docs, poly_bounds, poly_points, PORT_LABEL_LAYER, PORT_LAYER
+from .utils import fix_dataclass_init_docs, min_aspect_bounds, poly_bounds, poly_points, PORT_LABEL_LAYER, PORT_LAYER
 
 try:
     import plotly.graph_objects as go
@@ -434,7 +434,7 @@ class Device:
                     ax.add_patch(PolygonPatch(port.shapely,
                                               facecolor='red', edgecolor='none', alpha=alpha))
                     ax.text(*port_xy, name)
-        b = self.bounds
+        b = min_aspect_bounds(self.bounds)
         ax.set_xlim((b[0], b[2]))
         ax.set_ylim((b[1], b[3]))
         ax.set_xlabel(r'$x$ ($\mu$m)')
@@ -455,7 +455,7 @@ class Device:
         """
         # import locally since this import takes a while to import globally.
         import holoviews as hv
-        b = self.bounds
+        b = min_aspect_bounds(self.bounds)
         plots_to_overlay = []
         exclude_layer = [] if exclude_layer is None else exclude_layer
         for layer, multipoly in self.full_layer_to_polys.items():
