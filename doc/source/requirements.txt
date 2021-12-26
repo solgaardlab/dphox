@@ -9,4 +9,5 @@ klamath==1.1
 sphinx-autodoc-typehints
 sphinx-autodoc-annotation
 myst-parser
-autodoc_pydantic
+nbsphinx
+furo

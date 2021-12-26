@@ -459,7 +459,7 @@ class LocalMesh(Device):
                     self.flip_array[idx, layer] = 1
                 else:
                     self.upper_transforms.append((layer * mzi.full_length, idx * mzi.interport_distance))
-            self.out_transforms.append((n_layers * mzi.full_length + mzi.input_length, idx * mzi.interport_distance))
+            self.out_transforms.append((n_layers * mzi.full_length, idx * mzi.interport_distance))
 
         super(LocalMesh, self).__init__(self.name)
         self.place(self.upper_path, np.array(self.upper_transforms))
