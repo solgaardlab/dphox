@@ -6,6 +6,7 @@ shapely==1.7.0
 gdspy==1.6.8
 descartes==1.1.0
 klamath==1.1
+holoviews
 sphinx-autodoc-typehints
 sphinx-autodoc-annotation
 myst-parser
