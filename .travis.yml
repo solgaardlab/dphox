@@ -14,9 +14,8 @@ before_install:
 - conda info -a
 - conda create -q -n test-environment
 - source activate test-environment
-- conda install numpy matplotlib
-- conda install -c anaconda xarray
-- pip install pydantic gdspy trimesh klamath
+- conda install numpy matplotlib scipy
+- pip install pydantic trimesh klamath
 - conda install shapely descartes
 install: pip install codecov && pip install pytest
 script: coverage run -m pytest tests

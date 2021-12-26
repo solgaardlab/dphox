@@ -43,13 +43,10 @@ provides a clean implementation of GDS I/O
 - Plotting using [`holoviews`](https://holoviews.org/) and [`bokeh`](http://docs.bokeh.org/en/latest/),
 allowing zoom in/out in a notebook.
 - More intuitive representation of GDS cell hierarchy (via `Device`).
-- Interface to photonic simulation (see our `simphox` and `MEEP` examples).
-- Inverse-designed devices may be incorporated via a `replace` function.
+- Interface to photonic simulation (such as [`simphox`](https://github.com/fancompute/simphox)
+and [`MEEP`](meep.readthedocs.io/)).
+- Inverse-designed devices may be incorporated via the `Pattern.replace` function.
 - Read and interface with foundry PDKs automatically, even if provided via GDS.
-
-## Lessons learned
-
-Here are some lessons we learned during development
 
 ## Installation
 
@@ -90,7 +87,6 @@ You will need `python>=3.8` as well as the following (note these requirements ar
 numpy==1.21.2
 scipy==1.7.1
 shapely==1.7.0
-gdspy==1.6.8
 klamath==1.1
 ```
 
@@ -106,4 +102,8 @@ holoviews==1.14.6
 trimesh==3.9.30
 triangle==20200424
 matplotlib==3.4.3
+networkx
 ```
+
+You can also install libraries such as `nazca` and `gdspy`, which can be converted to 
+`dphox` objects.
