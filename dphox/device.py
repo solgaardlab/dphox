@@ -5,7 +5,6 @@ from typing import BinaryIO
 
 import klamath
 import numpy as np
-import gdspy as gy
 from klamath.library import FileHeader
 from dataclasses import dataclass
 from shapely.affinity import rotate
@@ -18,11 +17,6 @@ from .pattern import Box, Pattern, Port
 from .transform import GDSTransform, rotate2d
 from .typing import Dict, Float2, Float4, Int2, List, Optional, Tuple, Union
 from .utils import fix_dataclass_init_docs, min_aspect_bounds, poly_bounds, poly_points, PORT_LABEL_LAYER, PORT_LAYER
-
-try:
-    import plotly.graph_objects as go
-except ImportError:
-    pass
 
 try:
     NAZCA_IMPORTED = True
@@ -390,7 +384,7 @@ class Device:
         return copy(self)
 
     @property
-    def gdspy_cell(self, foundry: Foundry = FABLESS) -> gy.Cell:
+    def gdspy_cell(self, foundry: Foundry = FABLESS):
         """Turn this multilayer into a gdspy cell.
 
         Args:
@@ -400,6 +394,7 @@ class Device:
             A GDSPY cell.
 
         """
+        import gdspy as gy
         cell = gy.Cell(self.name)
         for pattern, layer in self.pattern_to_layer:
             for poly in self.layer_to_polys[layer]:

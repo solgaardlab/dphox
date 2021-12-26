@@ -10,11 +10,6 @@ from .pattern import Box, Pattern, Port
 from .typing import Float2, Int2, Optional, Union
 from .utils import DEFAULT_RESOLUTION, fix_dataclass_init_docs
 
-try:
-    import plotly.graph_objects as go
-except ImportError:
-    pass
-
 
 @fix_dataclass_init_docs
 @dataclass

@@ -1,4 +1,3 @@
-import gdspy as gy
 import numpy as np
 from dataclasses import dataclass
 
@@ -10,23 +9,12 @@ from copy import deepcopy as copy
 from .foundry import CommonLayer, fabricate, Foundry, FABLESS
 from .geometry import Geometry
 from .port import Port
-from .typing import Dict, Float2, Float4, List, MultiPolygon, Optional, Polygon, PolygonLike, Shape, Spacing, \
+from .typing import Float2, Float4, List, MultiPolygon, Optional, Polygon, PolygonLike, Shape, Spacing, \
     Union, Iterable
 from .utils import DECIMALS, fix_dataclass_init_docs, min_aspect_bounds, poly_points, split_holes
 
-NAZCA_IMPORTED = True
-PLOTLY_IMPORTED = True
 SHAPELYVEC_IMPORTED = True
 
-try:
-    import plotly.graph_objects as go
-except ImportError:
-    PLOTLY_IMPORTED = False
-
-try:
-    import nazca as nd
-except ImportError:
-    NAZCA_IMPORTED = False
 
 try:
     from shapely.vectorized import contains
@@ -162,7 +150,7 @@ class Pattern(Geometry):
         """
         return Pattern(self.shapely_union.symmetric_difference(other_pattern.shapely_union))
 
-    def to_gdspy(self, cell: gy.Cell):
+    def to_gdspy(self, cell):
         """Add to an existing GDSPY cell.
 
         Args:
@@ -172,6 +160,7 @@ class Pattern(Geometry):
             The GDSPY cell corresponding to the :code:`Pattern`
 
         """
+        import gdspy as gy
         for poly in self.geoms:
             cell.add(gy.Polygon(poly) if isinstance(poly, Polygon) else cell.add(poly))
 
@@ -224,8 +213,10 @@ class Pattern(Geometry):
         self.geoms += [p for p in smoothed_exclude.geoms if Polygon(p.T).area > min_area]
         return self
 
-    def nazca_cell(self, cell_name: str, layer: Union[int, str]) -> "nd.Cell":
-        if not NAZCA_IMPORTED:
+    def nazca_cell(self, cell_name: str, layer: Union[int, str]):
+        try:
+            import nazca as nd
+        except ImportError:
             raise ImportError('Nazca not installed! Please install nazca prior to running nazca_cell().')
         with nd.Cell(cell_name) as cell:
             for poly in self.geoms:
@@ -341,12 +332,12 @@ def get_ndarray_polygons(polylike_list: Iterable[Union["Pattern", PolygonLike, L
             polygons.extend([poly_points(geom).T for geom in pattern.geoms])
         elif isinstance(pattern, MultiPolygon):
             polygons.extend([poly_points(geom).T for geom in split_holes(pattern).geoms])
-        elif isinstance(pattern, gy.FlexPath):
-            polygons.extend(pattern.get_polygons())
+        # elif isinstance(pattern, gy.FlexPath):
+        #     polygons.extend(pattern.get_polygons())
+        # elif isinstance(pattern, gy.Path):
+        #     polygons.extend(pattern.geoms)
         elif isinstance(pattern, GeometryCollection):
             polygons.extend([poly_points(geom).T for geom in split_holes(pattern).geoms])
-        elif isinstance(pattern, gy.Path):
-            polygons.extend(pattern.geoms)
         else:
             raise TypeError(f'Pattern does not accept type {type(pattern)}')
     return [np.around(p, decimals=decimals) for p in polygons]

@@ -2,7 +2,6 @@ from collections import namedtuple
 from typing import Union, Tuple, List, Optional, Dict, Callable, Iterable
 import numpy as np
 from shapely.geometry import Polygon, MultiPolygon, LineString
-import gdspy as gy
 
 CurveTuple = namedtuple("CurveTuple", "points tangents")
 
