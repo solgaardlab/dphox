@@ -11,3 +11,4 @@ sphinx-autodoc-annotation
 myst-parser
 nbsphinx
 furo
+ipykernel
