@@ -5,14 +5,14 @@ project_name = "dphox"
 
 setup(
     name=project_name,
-    version="0.0.1",
+    version="0.0.2",
     packages=find_packages(),
     install_requires=[
         'numpy>=1.19',
         'scipy==1.7.1',
         'shapely>=1.7.1',
         'descartes==1.1.0',
-        'klamath==1.1'
+        'klamath>=1.2'
     ],
     extras_require={
         'all': [
