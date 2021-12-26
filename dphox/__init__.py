@@ -6,8 +6,8 @@ from .prefab import straight, bezier_sbend, bezier_dc, turn_sbend, turn, taper, 
     elliptic_bend, cubic_bezier
 from .route import manhattan_route, turn_connect, loopify, spiral_delay
 from .passive import DC, TapDC, WaveguideDevice, FocusingGrating, StraightGrating, Cross
-from .pattern import Pattern, Circle, Ellipse, Box, Sector, Port
+from .pattern import Pattern, Circle, Ellipse, Box, Sector, Port, text
 from .device import Device
 from .foundry import Foundry, FABLESS, fabricate, ProcessOp, CommonLayer, ProcessStep, SILICON, POLYSILICON, AIR, \
     N_SILICON, P_SILICON, NN_SILICON, PP_SILICON, NNN_SILICON, PPP_SILICON, OXIDE, NITRIDE, LS_NITRIDE, LT_OXIDE, \
-    ALUMINUM, ALCU, ALUMINA, HEATER, ETCH, DUMMY
+    ALUMINUM, ALCU, ALUMINA, HEATER, ETCH, DUMMY, COPPER

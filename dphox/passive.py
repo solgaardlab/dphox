@@ -5,7 +5,7 @@ from shapely.geometry import MultiPolygon
 
 from .device import Device
 from .foundry import AIR, CommonLayer, SILICON
-from .prefab import dc, grating_arc, straight, ring
+from .prefab import dc, grating_arc, straight, ring, turn
 from .pattern import Box, Pattern, Port
 from .typing import Float2, Int2, Optional, Union
 from .utils import DEFAULT_RESOLUTION, fix_dataclass_init_docs
@@ -74,6 +74,13 @@ class DC(Pattern):
     @property
     def path_array(self):
         return np.array([self.polygons[:3], self.polygons[3:]])
+
+    def device(self, layer: str = CommonLayer.RIDGE_SI):
+        device = Device('dc', [(self, layer)])
+        device.port = self.port_copy
+        device.lower_path = self.lower_path
+        device.upper_path = self.upper_path
+        return device
 
 
 @fix_dataclass_init_docs
@@ -243,7 +250,7 @@ class FocusingGrating(Device):
                          [(grating.buffer(self.rib_grow), self.slab),
                           (grating, self.ridge), self.waveguide])
         self.port['a0'] = self.waveguide.port['a0'].copy
-        self.halign(0)
+        self.translate(*(-self.port['a0'].xy))  # put the a0 port at 0, 0
 
 
 @fix_dataclass_init_docs
@@ -254,18 +261,31 @@ class TapDC(Pattern):
     Attributes:
         dc: the directional coupler that acts as a tap coupler
         grating_pad: the grating pad for the tap
+        turn_radius: The turn radius for the tap DC
     """
     dc: DC
-    grating: Union[StraightGrating, FocusingGrating]
+    radius: float
+    angle: float = 90
+    euler: float = 0
+    ridge: str = CommonLayer.RIDGE_SI
+    name: str = 'tap'
 
     def __post_init__(self):
-        in_grating = self.grating_pad.copy.to(self.dc.port['b1'])
-        out_grating = self.grating_pad.copy.to(self.dc.port['a1'])
-        super().__init__(self.dc, in_grating, out_grating)
+        tap_turns = [turn(self.radius, -self.angle, self.euler).path(self.dc.waveguide_w).to(self.dc.port['a1']),
+                     turn(self.radius, self.angle, self.euler).path(self.dc.waveguide_w).to(self.dc.port['b1'])]
+        super().__init__(self.dc, tap_turns)
         self.port['a0'] = self.dc.port['a0']
         self.port['b0'] = self.dc.port['b0']
-        self.refs.append(self.dc)
+        self.port['a1'] = tap_turns[0].port['b0']
+        self.port['b1'] = tap_turns[1].port['b0']
         self.wg_path = self.dc.lower_path
+
+    def with_gratings(self, grating: Union[StraightGrating, FocusingGrating]):
+        device = Device('tap_dc_with_grating', [(self, grating.ridge)])
+        device.port = self.port_copy
+        device.place(grating, self.port['a1'])
+        device.place(grating, self.port['b1'])
+        return device
 
 
 def circle(radius: float, resolution: int = DEFAULT_RESOLUTION):

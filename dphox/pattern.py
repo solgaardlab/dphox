@@ -1,9 +1,10 @@
 import gdspy as gy
 import numpy as np
 from dataclasses import dataclass
+
 from shapely.affinity import rotate
-from shapely.geometry import box, GeometryCollection, LineString, Point, JOIN_STYLE, CAP_STYLE
-from shapely.ops import split, unary_union
+from shapely.geometry import box, GeometryCollection, LineString, LinearRing, Point, JOIN_STYLE, CAP_STYLE
+from shapely.ops import split, unary_union, polygonize
 from copy import deepcopy as copy
 
 from .foundry import CommonLayer, fabricate, Foundry, FABLESS
@@ -296,13 +297,16 @@ class Pattern(Geometry):
     def __sub__(self, other: "Pattern"):
         return self.difference(other)
 
-    def __add__(self, other: "Pattern"):
+    def __or__(self, other: "Pattern"):
         return self.union(other)
 
-    def __mul__(self, other: "Pattern"):
+    def __add__(self, other: "Pattern"):
+        return self.union(other)  # TODO: switch to Pattern(self.geoms + other.geoms) after testing
+
+    def __and__(self, other: "Pattern"):
         return self.intersection(other)
 
-    def __truediv__(self, other: "Pattern"):
+    def __xor__(self, other: "Pattern"):
         return self.symmetric_difference(other)
 
     @property
@@ -547,7 +551,8 @@ class Sector(Pattern):
         circle = Point(0, 0).buffer(self.radius, resolution=self.resolution)
         top_splitter = rotate(LineString([(0, self.radius), (0, 0)]), angle=self.angle / 2, origin=(0, 0))
         bottom_splitter = rotate(LineString([(0, 0), (0, self.radius)]), angle=-self.angle / 2, origin=(0, 0))
-        super(Sector, self).__init__(split(circle, LineString([*top_splitter.coords, (0, 0), *bottom_splitter.coords]))[1])
+        super(Sector, self).__init__(
+            split(circle, LineString([*top_splitter.coords, (0, 0), *bottom_splitter.coords]))[1])
 
 
 @fix_dataclass_init_docs
@@ -587,3 +592,36 @@ class Quad(Pattern):
     def __post_init__(self):
         super(Quad, self).__init__(Pattern(np.hstack((self.start.line, self.end.line))))
         self.port = {'a0': self.start.copy, 'b0': self.end.copy}
+
+
+def text(string: str, size: float = 12):
+    """A simple function to generate text pattern from a string.
+
+    Args:
+        string: The string to turn into a pattern
+        size: The fontsize size of the string.
+
+    Returns:
+        The text :code:`Pattern`.
+
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.textpath import TextPath
+    plt.rc('text.latex', preamble=r'\usepackage{sfmath}')
+
+    try:
+        usetex = True
+        path = TextPath((0, 0), string, size=size, usetex=True)
+    except FileNotFoundError:
+        usetex = False
+        path = TextPath((0, 0), string, size=size, usetex=False)
+    rings = [LinearRing(p) for i, p in enumerate(path.to_polygons())]
+    multipoly = MultiPolygon(polygonize(rings))
+
+    filtered_polys = []
+    for ring in rings:
+        for poly in multipoly.geoms:
+            if (Polygon(poly.exterior) ^ Polygon(ring)).area < 1e-6 and ring.is_ccw == usetex:
+                filtered_polys.append(poly)
+
+    return Pattern(filtered_polys)

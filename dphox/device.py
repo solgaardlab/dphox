@@ -1,6 +1,6 @@
 import datetime
 from collections import defaultdict
-from copy import deepcopy as copy
+from copy import deepcopy as copy, deepcopy
 from typing import BinaryIO
 
 import klamath
@@ -9,7 +9,7 @@ import gdspy as gy
 from klamath.library import FileHeader
 from dataclasses import dataclass
 from shapely.affinity import rotate
-from shapely.geometry import MultiPolygon, Point, Polygon
+from shapely.geometry import box, MultiPolygon, Point, Polygon
 from shapely.ops import unary_union
 
 from .geometry import Geometry
@@ -48,7 +48,8 @@ class Device:
         name: Name of the device. This name can be anything you choose, ideally not repeating
             any previously defined :code:`Device`.
         devices: A list of devices, either a :code:`Device` OR a :code:`Pattern` or :code:`PolygonLike` followed by
-            a layer label (integer or string).
+            a layer label (integer or string). None of these devices should have existing children (will throw
+            and error if they do, since these should be added via `place` not this contructor).
         child_to_device: A map between child names and actual devices (cells)
         child_to_transform: A map between child names and the GDS-formatted transforms (used for fast GDS generation)
     """
@@ -62,6 +63,13 @@ class Device:
         self.layer_to_polys = self._update_layers()
         self.child_to_device = {}  # children in this dictionary
         self.child_to_transform = {}  # dictionary from child name to transform
+
+        # check to see if the original devices
+        if devices is not None:
+            for p in devices:
+                if isinstance(p, Device) and p.child_to_device != {}:
+                    raise AttributeError(f'Device {p.name} has child devices {p.child_to_device}'
+                                         f'and should be added via `place` method.')
         self.port = {}
 
     def _update_layers(self) -> Dict[Union[int, str], List[np.ndarray]]:
@@ -132,7 +140,12 @@ class Device:
             child_bboxes.extend(self.child_to_transform[child_name][0].transform_points(child.bbox))
         child_bboxes = np.hstack(child_bboxes) if child_bboxes else np.array([[], []])
         bound_list = np.hstack([bound_list, child_bboxes])
-        return np.array((np.min(bound_list[0]), np.min(bound_list[1]), np.max(bound_list[0]), np.max(bound_list[1])))
+        if bound_list.size > 0:
+            return np.array((np.min(bound_list[0]), np.min(bound_list[1]),
+                             np.max(bound_list[0]), np.max(bound_list[1])))
+        else:
+            return np.array((0, 0, 0, 0))
+
 
     @property
     def bbox(self) -> np.ndarray:
@@ -143,6 +156,28 @@ class Device:
 
         """
         return np.reshape(self.bounds, (2, 2)).T
+
+    @property
+    def bbox_pattern(self) -> Box:
+        """
+
+        Returns:
+            The linestring along the diagonal of the bbox
+
+        """
+        bbox = Box(self.size).align(self.center)
+        bbox.port = self.port_copy
+        return bbox
+
+    @property
+    def dummy_port_pattern(self) -> Box:
+        """
+
+        Returns:
+            The linestring along the diagonal of the bbox
+
+        """
+        return Pattern().set_port(self.port_copy)
 
     @property
     def center(self) -> Float2:
@@ -217,6 +252,10 @@ class Device:
             The translated device.
 
         """
+        if self.child_to_device:
+            raise NotImplementedError("We do not yet support transforming cells with children."
+                                      "This should in principle not be required though: you can place this cell"
+                                      "in a parent cell, i.e. dp.Device('transformed').place(device, transform).")
         for pattern, _ in self.pattern_to_layer:
             pattern.translate(dx, dy)
         self.layer_to_polys = self._update_layers()
@@ -225,7 +264,7 @@ class Device:
         return self
 
     def rotate(self, angle: float, origin: Float2 = (0, 0)) -> "Device":
-        """Rotate the device by rotating all of the patterns within it.
+        """Rotate the device by rotating all the patterns within it.
 
         Args:
             angle: rotation angle in degrees.
@@ -235,6 +274,10 @@ class Device:
             The rotated device.
 
         """
+        if self.child_to_device:
+            raise NotImplementedError("We do not yet support transforming cells with children."
+                                      "This should in principle not be required though: you can place this cell"
+                                      "in a parent cell, i.e. dp.Device('transformed').place(device, transform).")
         if angle % 360 != 0:  # to save time, only rotate if the angle is nonzero
             for pattern, _ in self.pattern_to_layer:
                 pattern.rotate(angle, origin)
@@ -255,6 +298,10 @@ class Device:
             Reflected pattern.
 
         """
+        if self.child_to_device:
+            raise NotImplementedError("We do not yet support transforming cells with children."
+                                      "This should in principle not be required though: you can place this cell"
+                                      "in a parent cell, i.e. dp.Device('transformed').place(device, transform).")
         for pattern, _ in self.pattern_to_layer:
             pattern.reflect(center, horiz)
         self.layer_to_polys = self._update_layers()
@@ -479,7 +526,7 @@ class Device:
             The full layer to polygon representation of this device hierarchy (call this on-demand).
 
         """
-        layer_to_polys = self.layer_to_polys.copy()
+        layer_to_polys = deepcopy(self.layer_to_polys)
         for child_name, child in self.child_to_device.items():
             # this recursively goes down the child tree
             for layer, multipoly in child.full_layer_to_polys.items():
@@ -553,6 +600,24 @@ class Device:
             if _layer == layer:
                 pattern.smooth(distance)
         self.layer_to_polys = self._update_layers()
+        return self
+
+    @property
+    def port_copy(self):
+        """The copy of ports in this device.
+
+        Note:
+            Whenever using the ports of a given geometry in another geometry, it is highly recommended
+            to extract :code:`port_copy`, which creates fresh copies of the ports.
+
+        Returns:
+            The port dictionary copy.
+
+        """
+        return {name: p.copy for name, p in self.port.items()}
+
+    def set_port(self, port: Dict[str, Port]):
+        self.port = port
         return self
 
     def _pdk_ports(self, labels: List[klamath.elements.Text], foundry: Foundry,
@@ -725,6 +790,7 @@ class Via(Device):
     via: Union[str, List[str]] = CommonLayer.VIA_1_2
     pitch: float = 0
     shape: Optional[Int2] = None
+    decimals: int = 2
     name: str = 'via'
 
     def __post_init__(self):
@@ -733,13 +799,13 @@ class Via(Device):
             else tuple([self.boundary_grow] * len(self.metal))
 
         max_boundary_grow = max(self.boundary_grow)
-        via_pattern = Box(self.via_extent, decimals=2)
+        via_pattern = Box(self.via_extent, decimals=self.decimals)
         if self.pitch > 0 and self.shape is not None:
             patterns = []
             x, y = np.meshgrid(np.arange(self.shape[0]) * self.pitch, np.arange(self.shape[1]) * self.pitch)
             for x, y in zip(x.flatten(), y.flatten()):
                 patterns.append(via_pattern.copy.translate(x, y))
-            via_pattern = Pattern(*patterns, decimals=2)
+            via_pattern = Pattern(*patterns, decimals=self.decimals)
         boundary = Box((via_pattern.size[0] + 2 * max_boundary_grow,
                         via_pattern.size[1] + 2 * max_boundary_grow), decimals=2).align((0, 0)).halign(0)
         via_pattern.align(boundary)
@@ -753,9 +819,9 @@ class Via(Device):
                    for layer, bg in zip(self.metal, self.boundary_grow)]
         super(Via, self).__init__(self.name, layers)
         self.port = {
-            'w': Port(self.bounds[0], 0, -180),
-            'e': Port(self.bounds[2], 0),
-            's': Port(0, self.bounds[1], -90),
-            'n': Port(0, self.bounds[3], 90),
-            'c': Port(0, 0)
+            'w': Port(self.bounds[0], self.center[1], -180),
+            'e': Port(self.bounds[2], self.center[1]),
+            's': Port(self.center[0], self.bounds[1], -90),
+            'n': Port(self.center[0], self.bounds[3], 90),
+            'c': Port(*self.center)
         }

@@ -1,16 +1,17 @@
+from dataclasses import dataclass
 from typing import Union
 
 import numpy as np
-from dataclasses import dataclass
 
+from .foundry import CommonLayer
 from .device import Device
 from .passive import FocusingGrating
-from .prefab import arc, circular_bend, link, loopback, spiral, straight, bent_trombone, trombone, turn
 from .path import Curve
 from .pattern import Pattern
 from .port import Port
+from .prefab import arc, circular_bend, link, loopback, spiral, trombone, turn
 from .typing import Optional
-from .utils import fix_dataclass_init_docs, DEFAULT_RESOLUTION
+from .utils import DEFAULT_RESOLUTION, fix_dataclass_init_docs
 
 
 def _turn_connect_angle_solve(start: Port, end: Port, start_r: float, end_r: float):
@@ -263,8 +264,11 @@ class Interposer(Pattern):
         self.final_pos = final_pos
         self.port = port
 
-    def with_gratings(self, grating: FocusingGrating):
-        interposer = Device('interposer', [(self, 'ridge_si')])
+    def device(self, layer: str = CommonLayer.RIDGE_SI):
+        return Device('interposer', [(self, layer)]).set_port(self.port_copy)
+
+    def with_gratings(self, grating: FocusingGrating, layer: str = CommonLayer.RIDGE_SI):
+        interposer = self.device(layer)
         interposer.port = self.port
         for idx in range(6):
             interposer.place(grating, self.port[f'b{idx}'], from_port=grating.port['a0'])

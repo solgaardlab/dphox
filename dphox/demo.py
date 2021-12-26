@@ -1,14 +1,24 @@
-from .active import Clearout, GndAnchorWaveguide, LateralNemsPS, MEMSFlexure, LocalMesh, MZI, PullInNemsActuator, \
+from .active import Clearout, GndAnchorWaveguide, LateralNemsPS, LocalMesh, MEMSFlexure, MZI, PullInNemsActuator, \
     PullOutNemsActuator, ThermalPS, Via
-from .foundry import CommonLayer
-from .passive import DC, WaveguideDevice
-from .prefab import cubic_taper, straight
+from .foundry import AIR, CommonLayer, SILICON
+from .passive import DC, FocusingGrating, WaveguideDevice
 from .pattern import Box
+from .prefab import cubic_taper, straight
 
 ps = ThermalPS(straight(10).path(1), ps_w=4, via=Via((0.4, 0.4), 0.1))
 dc = DC(waveguide_w=1, interaction_l=2, bend_radius=2.5, interport_distance=10, gap_w=0.5)
 mzi = MZI(dc, top_internal=[ps.copy], bottom_internal=[ps.copy], top_external=[ps.copy], bottom_external=[ps.copy])
 mesh = LocalMesh(mzi, 6)
+grating = FocusingGrating(
+    n_env=AIR.n,
+    n_core=SILICON.n,
+    min_period=10,
+    num_periods=10,
+    wavelength=1.55,
+    fiber_angle=82,
+    duty_cycle=0.5,
+    waveguide_w=0.5
+)
 
 
 def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_height=12, via_extent=(0.5, 0.5),

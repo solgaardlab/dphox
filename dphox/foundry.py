@@ -45,10 +45,11 @@ OXIDE = Material('sio2', 1.4442 ** 2, (0.6, 0, 0))
 NITRIDE = Material('si3n4', 1.996 ** 2, (0, 0, 0.7))
 LS_NITRIDE = Material('ls_sin', color=(0, 0.4, 1))
 LT_OXIDE = Material('lto', 1.4442 ** 2, (0.8, 0.2, 0.2))
+COPPER = Material('cu', color=(1, 0.6, 0))
 ALUMINUM = Material('al', color=(0, 0.5, 0))  # (1.5785 + 15.658 * 1j) ** 2,
 ALCU = Material('alcu', color=(0.2, 0.4, 0))
 ALUMINA = Material('al2o3', 1.75, (0.2, 0, 0.2))
-HEATER = Material('tin', color=(0.7, 0.7, 0))  # (3.1477 + 5.8429 * 1j) ** 2,
+HEATER = Material('tin', color=(0.8, 0.8, 0))  # (3.1477 + 5.8429 * 1j) ** 2,
 ETCH = Material('etch')
 DUMMY = Material('dummy', color=(0.7, 0.7, 0.7))
 
@@ -316,15 +317,15 @@ FABLESS = Foundry(
         ProcessStep(ProcessOp.GROW, 0.2, NITRIDE, CommonLayer.RIDGE_SIN, (300, 0), 2.5),
         ProcessStep(ProcessOp.GROW, 0.1, ALUMINA, CommonLayer.ALUMINA, (200, 0), 2.5),
         # 2. Then define the metal connections (zranges).
-        ProcessStep(ProcessOp.GROW, 1, ALUMINUM, CommonLayer.VIA_SI_1, (500, 0), 2.2),
-        ProcessStep(ProcessOp.GROW, 0.2, ALUMINUM, CommonLayer.METAL_1, (501, 0)),
-        ProcessStep(ProcessOp.GROW, 0.5, ALUMINUM, CommonLayer.VIA_1_2, (502, 0)),
-        ProcessStep(ProcessOp.GROW, 0.2, ALUMINUM, CommonLayer.METAL_2, (503, 0)),
+        ProcessStep(ProcessOp.GROW, 1, COPPER, CommonLayer.VIA_SI_1, (500, 0), 2.2),
+        ProcessStep(ProcessOp.GROW, 0.2, COPPER, CommonLayer.METAL_1, (501, 0)),
+        ProcessStep(ProcessOp.GROW, 0.5, COPPER, CommonLayer.VIA_1_2, (502, 0)),
+        ProcessStep(ProcessOp.GROW, 0.2, COPPER, CommonLayer.METAL_2, (503, 0)),
         ProcessStep(ProcessOp.GROW, 0.5, ALUMINUM, CommonLayer.VIA_2_PAD, (504, 0)),
         # Note: negative means grow downwards (below the ceiling of the device).
-        ProcessStep(ProcessOp.GROW, -0.3, ALUMINUM, CommonLayer.METAL_PAD, (600, 0), 4),
+        ProcessStep(ProcessOp.GROW, 0.3, ALUMINUM, CommonLayer.METAL_PAD, (600, 0)),
         ProcessStep(ProcessOp.GROW, 0.2, HEATER, CommonLayer.HEATER, (700, 0), 3.2),
-        ProcessStep(ProcessOp.GROW, 0.5, ALUMINUM, CommonLayer.VIA_HEATER_2, (505, 0)),
+        ProcessStep(ProcessOp.GROW, 0.5, COPPER, CommonLayer.VIA_HEATER_2, (505, 0)),
         # 3. Finally specify the clearout (needed for MEMS).
         ProcessStep(ProcessOp.SAC_ETCH, 4, ETCH, CommonLayer.CLEAROUT, (800, 0)),
         ProcessStep(ProcessOp.DUMMY, 4, DUMMY, CommonLayer.TRENCH, (41, 0)),

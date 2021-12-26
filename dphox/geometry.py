@@ -76,7 +76,8 @@ class Geometry:
 
     def transform(self, transform: Union[AffineTransform, np.ndarray]):
         transformer = transform if isinstance(transform, AffineTransform) else AffineTransform(transform)
-        self.geoms = transformer.transform_geoms(self.geoms)
+        if self.geoms:
+            self.geoms = transformer.transform_geoms(self.geoms)
         if self.tangents:
             self.tangents = transformer.transform_geoms(self.tangents, tangents=True)
         self.port = {name: port.transform(transform) for name, port in self.port.items()}
@@ -301,6 +302,7 @@ class Geometry:
             to extract :code:`port_copy`, which creates fresh copies of the ports.
 
         Returns:
+            The port dictionary copy.
 
         """
         return {name: p.copy for name, p in self.port.items()}

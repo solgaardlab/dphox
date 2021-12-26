@@ -1,4 +1,4 @@
-from copy import deepcopy as copy
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Tuple
 
@@ -6,10 +6,9 @@ import numpy as np
 
 from .device import Device, Via
 from .foundry import CommonLayer
-from .prefab import straight
-from .passive import DC, TapDC, WaveguideDevice
+from .passive import DC, WaveguideDevice
 from .pattern import Box, MEMSFlexure, Pattern, Port
-from .route import Interposer
+from .prefab import straight
 from .transform import GDSTransform
 from .typing import List, Union
 from .utils import fix_dataclass_init_docs
@@ -35,7 +34,7 @@ class ThermalPS(Device):
     name: str = "thermal_ps"
 
     def __post_init__(self):
-        ps = self.waveguide.curve.path(self.ps_w)
+        ps = self.waveguide.curve.coalesce().path(self.ps_w)
         left_via = self.via.copy.align(self.waveguide.port['a0'].xy)
         right_via = self.via.copy.align(self.waveguide.port['b0'].xy)
 
@@ -276,7 +275,7 @@ class LateralNemsPS(Device):
         self.wg_path = self.phase_shifter_waveguide
 
 
-PathComponent = Union[DC, TapDC, Pattern, ThermalPS, LateralNemsPS, "MultilayerPath", float]
+PathComponent = Union[Pattern, Device, "MultilayerPath", float]
 
 
 @fix_dataclass_init_docs
@@ -296,35 +295,62 @@ class MultilayerPath(Device):
     sequence: List[PathComponent]
     path_layer: str
     name: str = 'multilayer_path'
+    start_port: Port = Port()
 
     def __post_init__(self):
         waveguided_patterns = []
-        if not len(self.sequence):
-            raise ValueError('Require a nonzero multilayer sequence length')
-        port = None
+        if not self.sequence or isinstance(self.sequence[0], float):
+            port = self.start_port
+        else:
+            start = self.sequence[0].port['a0']
+            port = Port(*start.xy, start.a - 180)
+        child_to_device = {}
+        child_to_ports = defaultdict(list)
         for p in self.sequence:
             if p is not None:
-                d = p if isinstance(p, Device) or isinstance(p, Pattern) else straight(self.waveguide_w, p)
-                waveguided_patterns.append(d.to(Port(0, 0), 'a0') if port is None else d.to(port, 'a0'))
-                port = d.port['b0'].copy
+                d = p.copy if isinstance(p, Device) or isinstance(p, Pattern) else straight(p).path(self.waveguide_w)
+                if isinstance(d, Device) and d.child_to_device:
+                    child_to_device[d.name] = d
+                    child_to_ports[d.name].append(port.copy)
+                    port = d.dummy_port_pattern.to(port, 'a0').port['b0'].copy
+                else:
+                    waveguided_patterns.append(d.to(port, 'a0'))
+                    port = d.port['b0'].copy
         pattern_to_layer = sum(
-            [[(p, self.path_layer)] if isinstance(p, Pattern) else p.pattern_to_layer for p in waveguided_patterns],
+            [[(p, self.path_layer)] if isinstance(p, Pattern) else [p] for p in waveguided_patterns],
             [])
         super(MultilayerPath, self).__init__(self.name, pattern_to_layer)
-        self.wg_path = self.layer_to_polys[self.path_layer]
-        self.port['a0'] = Port(0, 0, -180)
+        for child in child_to_device:
+            self.place(child_to_device[child], child_to_ports[child], 'a0')
+        self.port['a0'] = waveguided_patterns[0].port['a0'].copy if waveguided_patterns else Port(*port.xy, 180)
         self.port['b0'] = port
+        self.x_length = self.port['b0'].x - self.port['a0'].x
 
-    def append(self, element: PathComponent):
-        self.sequence.append(element)
-        self.__post_init__()
+    def extend(self, path: Union[float, Pattern]):
+        """Extend this multilayer path using a path in the :code:`path_layer`.
+
+        Args:
+            path: The path to add (either a float for straight segment or a path pattern)
+
+        Returns:
+            The updated multilayer path.
+
+        """
+        self.sequence.append(path)
+        path = straight(path).path(self.waveguide_w) if isinstance(path, float) else path
+        segment = path.to(self.port['b0'])
+        self.add(segment, self.path_layer)
+        self.port['b0'] = segment.port['b0']
         return self
 
 
 @fix_dataclass_init_docs
 @dataclass
 class MZI(Device):
-    """An MZI with multilayer devices in the arms (e.g., phase shifters and/or grating taps)
+    """An MZI with multilayer devices in the arms (e.g., phase shifters and/or grating taps).
+
+    Note:
+        This class assumes that the arms begin and end along the horizontal (:math:`x`-axis).
 
     Attributes:
         coupler: Directional coupler or MMI for MZI
@@ -344,70 +370,45 @@ class MZI(Device):
     name: str = "mzi"
 
     def __post_init__(self):
-        patterns = [self.coupler]
-        port = copy(self.coupler.port)
-        if self.top_external:
-            top_input = MultilayerPath(self.coupler.waveguide_w, self.top_external, self.ridge)
-            top_input.to(self.coupler.port['a1'], 'b0')
-            port['a1'] = top_input.port['a0'].copy
-            patterns.append(top_input)
-        if self.bottom_external:
-            bottom_input = MultilayerPath(self.coupler.waveguide_w, self.bottom_external, self.ridge)
-            bottom_input.to(self.coupler.port['a0'], 'b0')
-            port['a0'] = bottom_input.port['a0'].copy
-            patterns.append(bottom_input)
-        if self.top_internal:
-            top_arm = MultilayerPath(self.coupler.waveguide_w, self.top_internal, self.ridge).to(port['b1'])
-            port['b1'] = top_arm.port['b0'].copy
-        if self.bottom_internal:
-            bottom_arm = MultilayerPath(self.coupler.waveguide_w, self.bottom_internal, self.ridge).to(port['b0'])
-            port['b0'] = bottom_arm.port['b0'].copy
-
-        arm_length_diff = port['b1'].x - port['b0'].x
-
-        if arm_length_diff > 0:
-            if self.bottom_internal:
-                bottom_arm.append(straight(arm_length_diff))
-            else:
-                bottom_arm = straight(arm_length_diff).to(port['b0'])
-            port['b0'] = bottom_arm.port['b0'].copy
-        elif arm_length_diff < 0:
-            if self.top_internal:
-                top_arm.append(straight(arm_length_diff))
-            else:
-                top_arm = straight(arm_length_diff).to(port['b0'])
-            port['b1'] = top_arm.port['b1'].copy
-
-        patterns.extend([top_arm, bottom_arm])
-
-        final_coupler = self.coupler.copy.to(port['b0'])
-        port['b0'] = final_coupler.port['b0'].copy
-        port['b1'] = final_coupler.port['b1'].copy
-        patterns.append(final_coupler)
-
-        pattern_to_layer = sum([[(p, self.ridge)]
-                                if isinstance(p, Pattern) else p.pattern_to_layer for p in patterns], [])
-
-        super(MZI, self).__init__(self.name, pattern_to_layer)
-
-        self.init_coupler = self.coupler
-        self.final_coupler = final_coupler
-        self.top_arm = top_arm
-        self.bottom_arm = bottom_arm
-        self.top_input = top_input if self.top_external else None
-        self.bottom_input = bottom_input if self.bottom_external else None
-        self.port = port
-        self.interport_distance = self.init_coupler.interport_distance
+        dc_device = self.coupler.device(self.ridge)
+        w = self.coupler.waveguide_w
+        self.top_input = MultilayerPath(w, self.top_external, self.ridge, name=f'{self.name}_top_input')
+        self.bottom_input = MultilayerPath(w, self.bottom_external, self.ridge, name=f'{self.name}_bottom_input')
+        self.top_arm = MultilayerPath(w, self.top_internal, self.ridge, name=f'{self.name}_top_arm')
+        self.bottom_arm = MultilayerPath(w, self.bottom_internal, self.ridge, name=f'{self.name}_bottom_arm')
+        arm_length_diff = self.top_arm.x_length - self.bottom_arm.x_length
+        if self.top_arm.x_length > self.bottom_arm.x_length:
+            self.bottom_arm.extend(arm_length_diff)
+        else:
+            self.top_arm.extend(arm_length_diff)
+        super(MZI, self).__init__(self.name)
+        self.place(self.bottom_input, Port(), 'a0')
+        self.place(self.top_input, Port(0, self.coupler.interport_distance), 'a0')
+        dc_port = dc_device.dummy_port_pattern.to(self.bottom_input.port['b0'], 'a0').port
+        self.place(dc_device, self.top_input.port['b0'])
+        self.place(self.bottom_arm, dc_port['b0'], 'a0')
+        self.place(self.top_arm, dc_port['b1'], 'a0')
+        bottom_arm_port = self.bottom_arm.dummy_port_pattern.to(dc_port['b0'], 'a0').port['b0']
+        self.place(dc_device, bottom_arm_port, 'a0')
+        self.init_coupler = dc_device
+        self.final_coupler = dc_device.copy.to(bottom_arm_port, 'a0')
+        self.port = {
+            'a0': Port(0, 0, 180),
+            'a1': Port(0, self.coupler.interport_distance, 180),
+            'b0': self.final_coupler.port['b0'].copy,
+            'b1': self.final_coupler.port['b1'].copy
+        }
+        self.interport_distance = self.coupler.interport_distance
         self.waveguide_w = self.coupler.waveguide_w
-        self.input_length = self.coupler.port['a0'].x - self.top_input.port['a0'].x
-        self.arm_length = self.final_coupler.port['a0'].x - self.coupler.port['b0'].x
+        self.input_length = self.top_input.x_length
+        self.arm_length = self.top_arm.x_length
         self.full_length = self.port['b0'].x - self.port['a0'].x
 
     def path(self, flip: bool = False):
         first = self.init_coupler.lower_path.copy.reflect() if flip else self.init_coupler.lower_path
         second = self.final_coupler.lower_path.copy.reflect() if flip else self.final_coupler.lower_path
         return MultilayerPath(
-            waveguide_w=self.init_coupler.waveguide_w,
+            waveguide_w=self.coupler.waveguide_w,
             sequence=[self.bottom_input.copy, first.copy, self.bottom_arm.copy, second.copy],
             path_layer=self.ridge
         )
