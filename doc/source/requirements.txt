@@ -13,3 +13,5 @@ myst-parser
 nbsphinx
 furo
 ipykernel
+trimesh
+triangle
