@@ -3,12 +3,12 @@ from dataclasses import dataclass
 import numpy as np
 from shapely.geometry import MultiPolygon
 
-from .device import Device
-from .foundry import AIR, CommonLayer, SILICON
-from .prefab import dc, grating_arc, straight, ring, turn
-from .pattern import Box, Pattern, Port
-from .typing import Float2, Int2, Optional, Union
-from .utils import DEFAULT_RESOLUTION, fix_dataclass_init_docs
+from ..device import Device
+from ..foundry import AIR, CommonLayer, SILICON
+from ..parametric import cubic_taper_fn, dc_path, grating_arc, link, loopback, straight, trombone, turn
+from ..pattern import Box, Pattern, Port
+from ..typing import Float2, Int2, Optional, Union
+from ..utils import fix_dataclass_init_docs
 
 
 @fix_dataclass_init_docs
@@ -23,30 +23,32 @@ class DC(Pattern):
 
     Attributes:
         waveguide_w: Waveguide width at the inputs and outputs.
-        bend_radius: The bend radius of the directional coupler
+        radius: The bend radius of the directional coupler
+        interport_distance: Distance between the ports of the directional coupler.
         gap_w: Gap between the waveguides in the interaction region.
         interaction_l: Interaction length for the interaction region.
+        euler: The euler parameter for the directional coupler bend.
+        end_l: End length for the coupler (before and after the bends).
         coupler_waveguide_w: Coupling waveguide width
-        end_bend_extent: If specified, places an additional end bend
-        use_radius: use radius to define bends
     """
 
     waveguide_w: float
-    bend_radius: float
+    radius: float
     interport_distance: float
     gap_w: float
     interaction_l: float
     euler: float = 0.2
     end_l: float = 0
     coupler_waveguide_w: Optional[float] = None
-    use_radius: bool = False
 
     def __post_init__(self):
         self.coupler_waveguide_w = self.waveguide_w if self.coupler_waveguide_w is None else self.coupler_waveguide_w
-        radius, dy, w = (self.bend_radius, (self.interport_distance - self.gap_w - self.coupler_waveguide_w) / 2,
-                     self.coupler_waveguide_w)
-        lower_path = dc(radius, dy, self.interaction_l, self.euler).path(self.waveguide_w)
-        upper_path = dc(radius, -dy, self.interaction_l, self.euler).path(self.waveguide_w)
+        cw = self.coupler_waveguide_w
+        w = self.waveguide_w
+        radius, dy = (self.radius, (self.interport_distance - self.gap_w - self.coupler_waveguide_w) / 2)
+        width = (w, cubic_taper_fn(w, cw), cw, cubic_taper_fn(cw, w), w) if cw != w else w
+        lower_path = link(self.end_l, dc_path(radius, dy, self.interaction_l, self.euler), self.end_l).path(width)
+        upper_path = link(self.end_l, dc_path(radius, -dy, self.interaction_l, self.euler), self.end_l).path(width)
         upper_path.translate(dx=0, dy=self.interport_distance)
         super(DC, self).__init__(lower_path, upper_path)
         self.lower_path, self.upper_path = lower_path, upper_path
@@ -129,7 +131,7 @@ class Array(Pattern):
 
 @fix_dataclass_init_docs
 @dataclass
-class WaveguideDevice(Device):
+class RibDevice(Device):
     """Waveguide cross section allowing specification of ridge and slab waveguides.
 
     Attributes:
@@ -238,8 +240,8 @@ class FocusingGrating(Device):
         sector = Pattern(np.hstack((np.zeros((2, 1)), grating_arcs[0].curve.geoms[0])))
         grating = Pattern(grating_arcs, sector)
         min_waveguide_l = np.abs(self.waveguide_w / np.tan(np.radians(self.angle)))
-        self.waveguide = WaveguideDevice(straight(self.waveguide_extra_l + min_waveguide_l).path(self.waveguide_w),
-                                         slab=self.slab, ridge=self.ridge)
+        self.waveguide = RibDevice(straight(self.waveguide_extra_l + min_waveguide_l).path(self.waveguide_w),
+                                   slab=self.slab, ridge=self.ridge)
         self.waveguide.halign(min_waveguide_l, left=False)
         super().__init__(self.name,
                          [(grating.buffer(self.rib_grow), self.slab),
@@ -283,30 +285,115 @@ class TapDC(Pattern):
         return device
 
 
-def circle(radius: float, resolution: int = DEFAULT_RESOLUTION):
-    """A circle of specified radius.
+@fix_dataclass_init_docs
+@dataclass
+class Interposer(Pattern):
+    """Pitch-changing array of waveguides with path length correction.
 
     Args:
-        radius: The radius of the circle.
-        resolution: Number of evaluations for each turn.
-
-    Returns:
-        The circle pattern.
-
+        waveguide_w: The waveguide width.
+        n: The number of I/O (waveguides) for interposer.
+        init_pitch: The initial pitch (distance between successive waveguides) entering the interposer.
+        radius: The radius of bends for the interposer.
+        trombone_radius: The trombone bend radius for path equalization.
+        final_pitch: The final pitch (distance between successive waveguides) for the interposer.
+        self_coupling_extension_extent: The self coupling for alignment, which is useful since a major use case of
+            the interposer is for fiber array coupling.
+        additional_x: The additional horizontal distance (useful in fiber array coupling for wirebond clearance).
+        num_trombones: The number of trombones for path equalization.
+        trombone_at_end: Whether to use a path-equalizing trombone near the waveguides spaced at :code:`final_period`.
     """
-    return ring(radius, resolution).pattern
+    waveguide_w: float
+    n: int
+    init_pitch: float
+    final_pitch: float
+    radius: Optional[float] = None
+    euler: float = 0
+    trombone_radius: float = 5
+    self_coupling_final: bool = True
+    self_coupling_init: bool = False
+    self_coupling_radius: float = None
+    self_coupling_extension: float = 0
+    additional_x: float = 0
+    num_trombones: int = 1
+    trombone_at_end: bool = True
 
+    def __post_init__(self):
+        w = self.waveguide_w
+        pitch_diff = self.final_pitch - self.init_pitch
+        self.radius = np.abs(pitch_diff) / 2 if self.radius is None else self.radius
+        r = self.radius
 
-def ellipse(radius_x: float, radius_y: float, resolution: int = DEFAULT_RESOLUTION):
-    """An ellipse of specified x and y radii.
+        paths = []
+        init_pos = np.zeros((2, self.n))
+        init_pos[1] = self.init_pitch * np.arange(self.n)
+        init_pos = init_pos.T
+        final_pos = np.zeros_like(init_pos)
 
-    Args:
-        radius_x: The x radius of the circle.
-        radius_y: The y radius of the circle.
-        resolution: Number of evaluations for each turn.
+        if np.abs(1 - np.abs(pitch_diff) / 4 / r) > 1:
+            raise ValueError(f"Radius {r} needs to be at least abs(pitch_diff) / 2 = {np.abs(pitch_diff) / 2}.")
+        angle_r = np.sign(pitch_diff) * np.arccos(1 - np.abs(pitch_diff) / 4 / r)
+        angled_length = np.abs(pitch_diff / np.sin(angle_r))
+        x_length = np.abs(pitch_diff / np.tan(angle_r))
+        mid = int(np.ceil(self.n / 2))
+        angle = float(np.degrees(angle_r))
 
-    Returns:
-        The ellipse pattern.
+        for idx in range(self.n):
+            init_pos[idx] = np.asarray((0, self.init_pitch * idx))
+            length_diff = (angled_length - x_length) * idx if idx < mid else (angled_length - x_length) * (
+                    self.n - 1 - idx)
+            segments = []
+            trombone_section = [trombone(self.trombone_radius,
+                                         length_diff / 2 / self.num_trombones, self.euler)] * self.num_trombones
+            if not self.trombone_at_end:
+                segments += trombone_section
+            segments.append(self.additional_x)
+            if idx < mid:
+                segments += [turn(r, -angle, self.euler), angled_length * (mid - idx - 1),
+                             turn(r, angle, self.euler), x_length * (idx + 1)]
+            else:
+                segments += [turn(r, angle, self.euler), angled_length * (mid - self.n + idx),
+                             turn(r, -angle, self.euler), x_length * (self.n - idx)]
+            if self.trombone_at_end:
+                segments += trombone_section
+            paths.append(link(*segments).path(w).to(init_pos[idx]))
+            final_pos[idx] = paths[-1].port['b0'].xy
 
-    """
-    return circle(1, resolution).scale(radius_x, radius_y).pattern
+        if self.self_coupling_final:
+            scr = self.final_pitch / 4 if self.self_coupling_radius is None else self.self_coupling_radius
+            dx, dy = final_pos[0, 0], final_pos[0, 1]
+            p = self.final_pitch
+            port = Port(dx, dy - p, -180)
+            extension = (self.self_coupling_extension, p * (self.n + 1) - 6 * scr)
+            paths.append(loopback(scr, self.euler, extension).path(w).to(port))
+        if self.self_coupling_init:
+            scr = self.init_pitch / 4 if self.self_coupling_radius is None else self.self_coupling_radius
+            dx, dy = init_pos[0, 0], init_pos[0, 1]
+            p = self.init_pitch
+            port = Port(dx, dy - p)
+            extension = (self.self_coupling_extension, p * (self.n + 1) - 6 * scr)
+            paths.append(loopback(scr, self.euler, extension).path(w).to(port))
+
+        port = {**{f'a{idx}': Port(*init_pos[idx], -180, w=self.waveguide_w) for idx in range(self.n)},
+                **{f'b{idx}': Port(*final_pos[idx], w=self.waveguide_w) for idx in range(self.n)},
+                'l0': paths[-1].port['a0'], 'l1': paths[-1].port['b0']}
+
+        super().__init__(*paths)
+        self.self_coupling_path = None if self.self_coupling_extension is None else paths[-1]
+        self.paths = paths
+        self.init_pos = init_pos
+        self.final_pos = final_pos
+        self.port = port
+
+    def device(self, layer: str = CommonLayer.RIDGE_SI):
+        return Device('interposer', [(self, layer)]).set_port(self.port_copy)
+
+    def with_gratings(self, grating: FocusingGrating, layer: str = CommonLayer.RIDGE_SI):
+        interposer = self.device(layer)
+        interposer.port = self.port
+        for idx in range(6):
+            interposer.place(grating, self.port[f'b{idx}'], from_port=grating.port['a0'])
+        interposer.place(grating, self.port['l0'], from_port=grating.port['a0'])
+        interposer.place(grating, self.port['l1'], from_port=grating.port['a0'])
+        return interposer
+

@@ -1,12 +1,12 @@
-from .active import Clearout, GndAnchorWaveguide, LateralNemsPS, LocalMesh, MEMSFlexure, MZI, PullInNemsActuator, \
-    PullOutNemsActuator, ThermalPS, Via
 from .foundry import AIR, CommonLayer, SILICON
-from .passive import DC, FocusingGrating, WaveguideDevice
+from .parametric import cubic_taper, straight
 from .pattern import Box
-from .prefab import cubic_taper, straight
+from .prefab.active import Clearout, GndAnchorWaveguide, LateralNemsPS, LocalMesh, MEMSFlexure, \
+    MZI, PullInNemsActuator, PullOutNemsActuator, ThermalPS, Via
+from .prefab.passive import DC, FocusingGrating, RibDevice
 
-ps = ThermalPS(straight(10).path(1), ps_w=4, via=Via((0.4, 0.4), 0.1))
-dc = DC(waveguide_w=1, interaction_l=2, bend_radius=2.5, interport_distance=10, gap_w=0.5)
+ps = ThermalPS(straight(5).path(0.5), ps_w=2, via=Via((0.4, 0.4), 0.1))
+dc = DC(waveguide_w=0.5, interaction_l=2, radius=2.5, interport_distance=5, gap_w=0.25)
 mzi = MZI(dc, top_internal=[ps.copy], bottom_internal=[ps.copy], top_external=[ps.copy], bottom_external=[ps.copy])
 mesh = LocalMesh(mzi, 6)
 grating = FocusingGrating(
@@ -24,7 +24,6 @@ grating = FocusingGrating(
 def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_height=12, via_extent=(0.5, 0.5),
                     ps_taper_change=-0.2, flexure_box_w=31, nominal_gap=0.201, waveguide_w=0.5,
                     nanofin_w=0.2, taper_l=10, anchor_taper_l=1.4, pull_in=False, trace_w=1, smooth: float = 0):
-
     ps_w = waveguide_w + 2 * nominal_gap + 2 * nanofin_w
     gap_w = waveguide_w + 2 * nominal_gap
 
@@ -46,7 +45,7 @@ def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_height=12, via_extent=(0
     gaw_slab = cubic_taper(0.5, 1, anchor_length, anchor_taper_l + 0.1)
 
     gaw = GndAnchorWaveguide(
-        rib_waveguide=WaveguideDevice(
+        rib_waveguide=RibDevice(
             ridge_waveguide=(gaw_rib - gaw_gap + gaw_waveguide).set_port(gaw_waveguide.port),
             slab_waveguide=gaw_slab,
         ),

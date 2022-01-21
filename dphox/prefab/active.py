@@ -4,14 +4,14 @@ from typing import Tuple
 
 import numpy as np
 
-from .device import Device, Via
-from .foundry import CommonLayer
-from .passive import DC, WaveguideDevice
-from .pattern import Box, MEMSFlexure, Pattern, Port
-from .prefab import straight
-from .transform import GDSTransform
-from .typing import List, Union
-from .utils import fix_dataclass_init_docs
+from ..device import Device, Via
+from ..foundry import CommonLayer
+from .passive import DC, RibDevice
+from ..pattern import Box, MEMSFlexure, Pattern, Port
+from ..parametric import straight
+from ..transform import GDSTransform
+from ..typing import List, Union
+from ..utils import fix_dataclass_init_docs
 
 
 @fix_dataclass_init_docs
@@ -149,7 +149,7 @@ class GndAnchorWaveguide(Device):
         gnd_pad_dope: Electrode dope setting
 
     """
-    rib_waveguide: WaveguideDevice
+    rib_waveguide: RibDevice
     gnd_pad: Box
     gnd_connector: Box
     via: Via
@@ -474,14 +474,18 @@ class LocalMesh(Device):
         self.waveguide_w = self.mzi.waveguide_w
         self.n_layers = n_layers
 
-    @property
-    def path_array(self) -> np.ndarray:
-        """Path array, which is useful for plotting and demo purposes.
+    def demo_polys(self, ps_w_factor: float = 2) -> Tuple[np.ndarray, np.ndarray]:
+        """Demo polygons, useful for plotting stuff, using only the polygons in the silicon layer.
 
-        This method requires transforming only the polygons in the silicon layer.
+        Note:
+            This method is generally useless unless used for demo purposes and will be deleted once a cleaner solution
+            is found.
+
+        Args:
+            ps_w_factor: phase shifter width factor
 
         Returns:
-            A numpy array consisting of polygons (note: NOT numbers)
+            A numpy array consisting of lists of polygons (note: NOT numbers)
         """
 
         geoms = []
@@ -512,20 +516,11 @@ class LocalMesh(Device):
         sizes = [0, 2] + [4] * (2 * self.n_layers - 1) + [3]
         slices = np.cumsum(sizes, dtype=int)
 
-        return np.array([[geoms[i][slices[s]:slices[s + 1]] for s in range(len(slices) - 1)] for i in range(self.n)],
-                        dtype=object)
+        path_array = np.array(
+            [[geoms[i][slices[s]:slices[s + 1]] for s in range(len(slices) - 1)] for i in range(self.n)],
+            dtype=object)
+        ps_array = np.array([Pattern(geoms[i][s * 4]).scale(1, ps_w_factor).points.T
+                             for s in range(len(slices) - 1) for i in range(self.n)])
 
-    def phase_shifter_array(self, ps_layer: str):
-        """Phase shifter array, which is useful for plotting and demo purposes.
+        return path_array, ps_array
 
-        Args:
-            ps_layer: name of the layer for the polygons
-
-        Returns:
-            Phase shifter array polygons.
-        """
-        if ps_layer in self.layer_to_polys:
-            return [ps for ps in self.layer_to_polys[ps_layer]]
-        else:
-            raise ValueError(f'The phase shifter layer {ps_layer} is not correct '
-                             f'or there is no phase shifter in this mesh.')

@@ -389,6 +389,7 @@ def link(*geoms: Union[Pattern, Curve, float], front_port: str = 'b0', back_port
         The resulting geometry (path or curve) after linking many curves together into a single one.
 
     """
+    geoms = [g for g in geoms if g != 0]
     geoms = [straight(g) if np.isscalar(g) else g for g in geoms]
     port = geoms[0].port_copy
     for geom in geoms[1:]:

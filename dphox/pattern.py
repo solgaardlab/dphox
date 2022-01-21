@@ -14,12 +14,18 @@ from .typing import Float2, Float4, List, MultiPolygon, Optional, Polygon, Polyg
 from .utils import DECIMALS, fix_dataclass_init_docs, min_aspect_bounds, poly_points, split_holes
 
 SHAPELYVEC_IMPORTED = True
+GDSPY_IMPORTED = True
 
 
 try:
     from shapely.vectorized import contains
 except ImportError:
     SHAPELYVEC_IMPORTED = False
+
+try:
+    import gdspy as gy
+except ImportError:
+    GDSPY_IMPORTED = False
 
 
 class Pattern(Geometry):
@@ -79,7 +85,7 @@ class Pattern(Geometry):
             geom = geom.buffer(2 * smooth_feature, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.square)
             # erode
             geom = geom.buffer(-smooth_feature, join_style=JOIN_STYLE.round, cap_style=CAP_STYLE.square)
-        return contains(geom, x_, y_)  # need to use union!
+        return contains(geom.buffer(np.max(spacing)), x_, y_)  # need to use union!
 
     def intersection(self, other_pattern: "Pattern") -> "Pattern":
         """Intersection between this pattern and provided pattern.
@@ -163,6 +169,18 @@ class Pattern(Geometry):
         import gdspy as gy
         for poly in self.geoms:
             cell.add(gy.Polygon(poly) if isinstance(poly, Polygon) else cell.add(poly))
+
+    @property
+    def bbox_pattern(self) -> "Box":
+        """
+
+        Returns:
+            The linestring along the diagonal of the bbox
+
+        """
+        bbox = Box(self.size).align(self.center)
+        bbox.port = self.port_copy
+        return bbox
 
     def replace(self, pattern: "Pattern", center: Optional[Float2] = None, raise_port: bool = True):
         """Replace the polygons in some part of the image with :code:`pattern`.
@@ -332,12 +350,13 @@ def get_ndarray_polygons(polylike_list: Iterable[Union["Pattern", PolygonLike, L
             polygons.extend([poly_points(geom).T for geom in pattern.geoms])
         elif isinstance(pattern, MultiPolygon):
             polygons.extend([poly_points(geom).T for geom in split_holes(pattern).geoms])
-        # elif isinstance(pattern, gy.FlexPath):
-        #     polygons.extend(pattern.get_polygons())
-        # elif isinstance(pattern, gy.Path):
-        #     polygons.extend(pattern.geoms)
         elif isinstance(pattern, GeometryCollection):
             polygons.extend([poly_points(geom).T for geom in split_holes(pattern).geoms])
+        elif GDSPY_IMPORTED:
+            if isinstance(pattern, gy.FlexPath):
+                polygons.extend(pattern.get_polygons())
+            elif isinstance(pattern, gy.Path):
+                polygons.extend(pattern.polygons)
         else:
             raise TypeError(f'Pattern does not accept type {type(pattern)}')
     return [np.around(p, decimals=decimals) for p in polygons]

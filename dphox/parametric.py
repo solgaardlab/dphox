@@ -347,8 +347,8 @@ def bezier_dc(dx: float, dy: float, interaction_l: float, resolution: int = DEFA
     )
 
 
-def dc(radius: float, dy: float, interaction_l: float, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
-    """Turn curve-based directional coupler
+def dc_path(radius: float, dy: float, interaction_l: float, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
+    """Turn curve-based directional coupler path (just the bottom waveguide curve).
 
     Args:
         radius: Bend radius (specify positive value).
@@ -365,6 +365,33 @@ def dc(radius: float, dy: float, interaction_l: float, euler: float = 0, resolut
         turn_sbend(dy, radius, euler, resolution),
         straight(interaction_l),
         turn_sbend(-dy, radius, euler, resolution)
+    )
+
+
+def mzi_path(radius: float, dy: float, interaction_l: float, arm_l: float,
+             euler: float = 0, resolution: int = DEFAULT_RESOLUTION):
+    """Turn curve-based MZI path (just the bottom waveguide curve).
+
+    Args:
+        radius: Bend radius (specify positive value).
+        dy: Bend height (specify negative value for bend to go down).
+        interaction_l: Interaction length for the directional couplers.
+        arm_l: Arm length for the MZI.
+        euler: Euler contribution to the directional coupler's bends.
+        resolution: Number of points to evaluate in each of the four bezier paths.
+
+    Returns:
+        The turn sbend-based dc path.
+
+    """
+    return link(
+        turn_sbend(dy, radius, euler, resolution),
+        interaction_l,
+        turn_sbend(-dy, radius, euler, resolution),
+        arm_l,
+        turn_sbend(dy, radius, euler, resolution),
+        interaction_l,
+        turn_sbend(-dy, radius, euler, resolution),
     )
 
 
@@ -614,3 +641,45 @@ def ring(radius: float, resolution: int = DEFAULT_RESOLUTION):
     """
     return arc(radius, 360, resolution=resolution)
 
+
+def semicircle(radius: float, resolution: int = DEFAULT_RESOLUTION):
+    """A semicircle pattern.
+
+    Args:
+        radius: The radius of the semicircle.
+        resolution: Number of evaluations for each turn.
+
+    Returns:
+        The semicircle pattern.
+
+    """
+    return arc(radius, 180, resolution=resolution).pattern
+
+
+def circle(radius: float, resolution: int = DEFAULT_RESOLUTION):
+    """A circle of specified radius.
+
+    Args:
+        radius: The radius of the circle.
+        resolution: Number of evaluations for each turn.
+
+    Returns:
+        The circle pattern.
+
+    """
+    return ring(radius, resolution).pattern
+
+
+def ellipse(radius_x: float, radius_y: float, resolution: int = DEFAULT_RESOLUTION):
+    """An ellipse of specified x and y radii.
+
+    Args:
+        radius_x: The x radius of the circle.
+        radius_y: The y radius of the circle.
+        resolution: Number of evaluations for each turn.
+
+    Returns:
+        The ellipse pattern.
+
+    """
+    return circle(1, resolution).scale(radius_x, radius_y).pattern

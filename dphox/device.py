@@ -1,21 +1,22 @@
 import datetime
+import hashlib
 from collections import defaultdict
-from copy import deepcopy as copy, deepcopy
+from copy import deepcopy, deepcopy as copy
+from dataclasses import dataclass
 from typing import BinaryIO
 
 import klamath
 import numpy as np
 from klamath.library import FileHeader
-from dataclasses import dataclass
 from shapely.affinity import rotate
-from shapely.geometry import box, MultiPolygon, Point, Polygon
+from shapely.geometry import MultiPolygon, Point, Polygon
 from shapely.ops import unary_union
 
-from .geometry import Geometry
 from .foundry import CommonLayer, FABLESS, fabricate, Foundry
+from .geometry import Geometry
 from .pattern import Box, Pattern, Port
 from .transform import GDSTransform, rotate2d
-from .typing import Dict, Float2, Float4, Int2, List, Optional, Tuple, Union
+from .typing import Dict, Float2, Int2, List, Optional, Tuple, Union
 from .utils import fix_dataclass_init_docs, min_aspect_bounds, poly_bounds, poly_points, PORT_LABEL_LAYER, PORT_LAYER
 
 try:
@@ -140,6 +141,41 @@ class Device:
         else:
             return np.array((0, 0, 0, 0))
 
+    @property
+    def layer_to_pattern(self):
+        return {layer: Pattern(p) for layer, p in self.layer_to_polys.items()}
+
+    @property
+    def full_layer_to_pattern(self):
+        return {layer: Pattern(p) for layer, p in self.full_layer_to_polys.items()}
+
+    @property
+    def tree(self):
+        """Tree / hierarchical representation of the device.
+
+        Returns:
+            A dictionary containing the tree representation of the device (ignoring transforms).
+
+        """
+        return {
+            self.name: {
+                name: child.tree for name, child in self.child_to_device
+            }
+        }
+
+    def __hash__(self):
+        return hashlib.sha256({self.name: {
+            layer: p.__hash__() for layer, p in self.layer_to_pattern
+        },
+            f'{self.name}_children': {
+                name: child.__hash__() + hashlib.sha256(self.child_to_transform[name][0])
+                for name, child in self.child_to_device
+            }
+        })
+
+    @property
+    def hash(self):
+        return self.__hash__()
 
     @property
     def bbox(self) -> np.ndarray:
@@ -336,7 +372,8 @@ class Device:
         """
         if device.name not in self.child_to_device:
             self.child_to_device[device.name] = device
-        if not isinstance(placement, list) and not isinstance(placement, tuple) and not isinstance(placement, np.ndarray):
+        if not isinstance(placement, list) and not isinstance(placement, tuple) and not isinstance(placement,
+                                                                                                   np.ndarray):
             placement = [placement]
         if from_port is None:
             transform = np.array([p.xya if isinstance(p, Port) else p for p in placement])
@@ -468,7 +505,8 @@ class Device:
                                  f"so could not find a color. Make sure you specify the correct foundry.")
             pattern = Pattern(*multipoly)
             ax.add_patch(
-                PolygonPatch(unary_union(MultiPolygon(pattern.shapely)),  # union avoids some weird plotting with alpha < 1
+                PolygonPatch(unary_union(MultiPolygon(pattern.shapely)),
+                             # union avoids some weird plotting with alpha < 1
                              facecolor=color, edgecolor='none', alpha=alpha))
             if plot_ports:
                 for name, port in self.port.items():

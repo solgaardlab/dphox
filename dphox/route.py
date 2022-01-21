@@ -1,17 +1,13 @@
-from dataclasses import dataclass
 from typing import Union
 
 import numpy as np
 
-from .foundry import CommonLayer
-from .device import Device
-from .passive import FocusingGrating
+from .parametric import arc, circular_bend, link, spiral, turn
 from .path import Curve
 from .pattern import Pattern
 from .port import Port
-from .prefab import arc, circular_bend, link, loopback, spiral, trombone, turn
 from .typing import Optional
-from .utils import DEFAULT_RESOLUTION, fix_dataclass_init_docs
+from .utils import DEFAULT_RESOLUTION
 
 
 def _turn_connect_angle_solve(start: Port, end: Port, start_r: float, end_r: float):
@@ -149,129 +145,3 @@ def loopify(curve: Curve, radius: float, euler: float = 0, resolution: int = DEF
     """
     return link(curve, turn_connect(curve.port['b0'], curve.port['a0'], radius, euler=euler, resolution=resolution))
 
-
-def semicircle(radius: float, resolution: int = DEFAULT_RESOLUTION):
-    """A semicircle pattern.
-
-    Args:
-        radius: The radius of the semicircle.
-        resolution: Number of evaluations for each turn.
-
-    Returns:
-        The semicircle pattern.
-
-    """
-    return arc(radius, 180, resolution=resolution).pattern
-
-
-@fix_dataclass_init_docs
-@dataclass
-class Interposer(Pattern):
-    """Pitch-changing array of waveguides with path length correction.
-
-    Args:
-        waveguide_w: The waveguide width.
-        n: The number of I/O (waveguides) for interposer.
-        init_pitch: The initial pitch (distance between successive waveguides) entering the interposer.
-        radius: The radius of bends for the interposer.
-        trombone_radius: The trombone bend radius for path equalization.
-        final_pitch: The final pitch (distance between successive waveguides) for the interposer.
-        self_coupling_extension_extent: The self coupling for alignment, which is useful since a major use case of
-            the interposer is for fiber array coupling.
-        additional_x: The additional horizontal distance (useful in fiber array coupling for wirebond clearance).
-        num_trombones: The number of trombones for path equalization.
-        trombone_at_end: Whether to use a path-equalizing trombone near the waveguides spaced at :code:`final_period`.
-    """
-    waveguide_w: float
-    n: int
-    init_pitch: float
-    final_pitch: float
-    radius: Optional[float] = None
-    euler: float = 0
-    trombone_radius: float = 5
-    self_coupling_final: bool = True
-    self_coupling_init: bool = False
-    self_coupling_radius: float = None
-    self_coupling_extension: float = 0
-    additional_x: float = 0
-    num_trombones: int = 1
-    trombone_at_end: bool = True
-
-    def __post_init__(self):
-        w = self.waveguide_w
-        pitch_diff = self.final_pitch - self.init_pitch
-        self.radius = np.abs(pitch_diff) / 2 if self.radius is None else self.radius
-        r = self.radius
-
-        paths = []
-        init_pos = np.zeros((2, self.n))
-        init_pos[1] = self.init_pitch * np.arange(self.n)
-        init_pos = init_pos.T
-        final_pos = np.zeros_like(init_pos)
-
-        if np.abs(1 - np.abs(pitch_diff) / 4 / r) > 1:
-            raise ValueError(f"Radius {r} needs to be at least abs(pitch_diff) / 2 = {np.abs(pitch_diff) / 2}.")
-        angle_r = np.sign(pitch_diff) * np.arccos(1 - np.abs(pitch_diff) / 4 / r)
-        angled_length = np.abs(pitch_diff / np.sin(angle_r))
-        x_length = np.abs(pitch_diff / np.tan(angle_r))
-        mid = int(np.ceil(self.n / 2))
-        angle = np.degrees(angle_r)
-
-        for idx in range(self.n):
-            init_pos[idx] = np.asarray((0, self.init_pitch * idx))
-            length_diff = (angled_length - x_length) * idx if idx < mid else (angled_length - x_length) * (
-                    self.n - 1 - idx)
-            segments = []
-            trombone_section = [trombone(self.trombone_radius,
-                                         length_diff / 2 / self.num_trombones, self.euler)] * self.num_trombones
-            if not self.trombone_at_end:
-                segments += trombone_section
-            segments.append(self.additional_x)
-            if idx < mid:
-                segments += [turn(r, -angle, self.euler), angled_length * (mid - idx - 1),
-                             turn(r, angle, self.euler), x_length * (idx + 1)]
-            else:
-                segments += [turn(r, angle, self.euler), angled_length * (mid - self.n + idx),
-                             turn(r, -angle, self.euler), x_length * (self.n - idx)]
-            if self.trombone_at_end:
-                segments += trombone_section
-            paths.append(link(*segments).path(w).to(init_pos[idx]))
-            final_pos[idx] = paths[-1].port['b0'].xy
-
-        if self.self_coupling_final:
-            scr = self.final_pitch / 4 if self.self_coupling_radius is None else self.self_coupling_radius
-            dx, dy = final_pos[0, 0], final_pos[0, 1]
-            p = self.final_pitch
-            port = Port(dx, dy - p, -180)
-            extension = (self.self_coupling_extension, p * (self.n + 1) - 6 * scr)
-            paths.append(loopback(scr, self.euler, extension).path(w).to(port))
-        if self.self_coupling_init:
-            scr = self.init_pitch / 4 if self.self_coupling_radius is None else self.self_coupling_radius
-            dx, dy = init_pos[0, 0], init_pos[0, 1]
-            p = self.init_pitch
-            port = Port(dx, dy - p)
-            extension = (self.self_coupling_extension, p * (self.n + 1) - 6 * scr)
-            paths.append(loopback(scr, self.euler, extension).path(w).to(port))
-
-        port = {**{f'a{idx}': Port(*init_pos[idx], -180, w=self.waveguide_w) for idx in range(self.n)},
-                **{f'b{idx}': Port(*final_pos[idx], w=self.waveguide_w) for idx in range(self.n)},
-                'l0': paths[-1].port['a0'], 'l1': paths[-1].port['b0']}
-
-        super().__init__(*paths)
-        self.self_coupling_path = None if self.self_coupling_extension is None else paths[-1]
-        self.paths = paths
-        self.init_pos = init_pos
-        self.final_pos = final_pos
-        self.port = port
-
-    def device(self, layer: str = CommonLayer.RIDGE_SI):
-        return Device('interposer', [(self, layer)]).set_port(self.port_copy)
-
-    def with_gratings(self, grating: FocusingGrating, layer: str = CommonLayer.RIDGE_SI):
-        interposer = self.device(layer)
-        interposer.port = self.port
-        for idx in range(6):
-            interposer.place(grating, self.port[f'b{idx}'], from_port=grating.port['a0'])
-        interposer.place(grating, self.port['l0'], from_port=grating.port['a0'])
-        interposer.place(grating, self.port['l1'], from_port=grating.port['a0'])
-        return interposer

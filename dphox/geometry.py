@@ -293,6 +293,9 @@ class Geometry:
         }
         return self
 
+    def __hash__(self):
+        return hash(id(self.shapely.wkt))
+
     @property
     def port_copy(self):
         """The copy of ports in this device.
