@@ -10,6 +10,7 @@ from ..pattern import Box, Pattern, Port
 from ..typing import Float2, Int2, Optional, Union
 from ..utils import fix_dataclass_init_docs
 
+
 @fix_dataclass_init_docs
 @dataclass
 class DC(Pattern):
@@ -119,11 +120,12 @@ class Array(Pattern):
     pitch: Optional[Union[float, Float2]] = None
 
     def __post_init__(self):
+        self.pitch = np.array(self.unit.size) * 2 if self.pitch is None else self.pitch
         self.pitch = (self.pitch, self.pitch) if isinstance(self.pitch, float) else self.pitch
-        super().__init__(MultiPolygon([self.unit.copy.translate(i * self.pitch[0], j * self.pitch[1])
-                                       for i in range(self.grid_shape[0])
-                                       for j in range(self.grid_shape[1])
-                                       ]))
+        super().__init__([self.unit.copy.translate(i * self.pitch[0], j * self.pitch[1])
+                           for i in range(self.grid_shape[0])
+                           for j in range(self.grid_shape[1])
+                         ])
 
 
 @fix_dataclass_init_docs

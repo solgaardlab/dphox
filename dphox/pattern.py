@@ -42,7 +42,7 @@ class Pattern(Geometry):
         decimals: decimal places for rounding (in case of tiny errors in polygons)
     """
 
-    def __init__(self, *patterns: Union["Pattern", PolygonLike, List[PolygonLike]], decimals: int = 6):
+    def __init__(self, *patterns: Union["Pattern", PolygonLike, List[Union[PolygonLike, "Pattern"]]], decimals: int = 6):
         """Initializer for the pattern class.
 
         Args:
@@ -322,7 +322,7 @@ class Pattern(Geometry):
         return copy(self)
 
 
-def get_ndarray_polygons(polylike_list: Iterable[Union["Pattern", PolygonLike, List[PolygonLike]]],
+def get_ndarray_polygons(polylike_list: Iterable[Union["Pattern", PolygonLike, List[Union[PolygonLike, "Pattern"]]]],
                          decimals: int = DECIMALS):
     """A recursive list of lists of polylike objects, which turned into a flat list of 2d ndarray polygons.
 
