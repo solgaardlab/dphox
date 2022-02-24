@@ -659,7 +659,7 @@ class Device:
         self.port = port
         return self
 
-    def _pdk_ports(self, labels: List[klamath.elements.Text], foundry: Foundry,
+    def _pdk_ports(self, labels: List["klamath.elements.Text"], foundry: Foundry,
                    user_units_per_db_unit: float):
         """A helper function for reading a standard PDK layout's labelled ports from a GDS file."""
         port = {}
