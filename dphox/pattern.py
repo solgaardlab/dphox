@@ -11,7 +11,7 @@ from .geometry import Geometry
 from .port import Port
 from .typing import Float2, Float4, List, MultiPolygon, Optional, Polygon, PolygonLike, Shape, Spacing, \
     Union, Iterable
-from .utils import DECIMALS, fix_dataclass_init_docs, min_aspect_bounds, poly_points, split_holes
+from .utils import DECIMALS, fix_dataclass_init_docs, min_aspect_bounds, poly_points, shapely_patch, split_holes
 
 SHAPELYVEC_IMPORTED = True
 GDSPY_IMPORTED = True
@@ -207,11 +207,10 @@ class Pattern(Geometry):
 
     def plot(self, ax: Optional, color: str = 'black'):
         # import locally since this import takes some time.
-        from descartes import PolygonPatch
         if ax is None:
             import matplotlib.pyplot as plt
             ax = plt.gca()
-        ax.add_patch(PolygonPatch(self.shapely_union, facecolor=color, edgecolor='none'))
+        ax.add_patch(shapely_patch(self.shapely_union, facecolor=color, edgecolor='none'))
         b = min_aspect_bounds(self.bounds)
         ax.set_xlim((b[0], b[2]))
         ax.set_ylim((b[1], b[3]))

@@ -16,7 +16,8 @@ from .geometry import Geometry
 from .pattern import Box, Pattern, Port
 from .transform import GDSTransform, rotate2d
 from .typing import Dict, Float2, Int2, List, Optional, Tuple, Union
-from .utils import fix_dataclass_init_docs, min_aspect_bounds, poly_bounds, poly_points, PORT_LABEL_LAYER, PORT_LAYER
+from .utils import fix_dataclass_init_docs, min_aspect_bounds, poly_bounds, poly_points, PORT_LABEL_LAYER, PORT_LAYER, \
+    shapely_patch
 
 try:
     NAZCA_IMPORTED = True
@@ -497,7 +498,6 @@ class Device:
 
         """
         # import locally since this import takes some time.
-        from descartes import PolygonPatch
         if ax is None:
             # import locally since this import takes some time.
             import matplotlib.pyplot as plt
@@ -511,14 +511,14 @@ class Device:
                                  f"so could not find a color. Make sure you specify the correct foundry.")
             pattern = Pattern(*multipoly)
             ax.add_patch(
-                PolygonPatch(unary_union(MultiPolygon(pattern.shapely)),
-                             # union avoids some weird plotting with alpha < 1
-                             facecolor=color, edgecolor='none', alpha=alpha))
+                shapely_patch(unary_union(MultiPolygon(pattern.shapely)),
+                              # union avoids some weird plotting with alpha < 1
+                              facecolor=color, edgecolor='none', alpha=alpha))
             if plot_ports:
                 for name, port in self.port.items():
                     port_xy = port.xy - port.tangent(port.w)
-                    ax.add_patch(PolygonPatch(port.shapely,
-                                              facecolor='red', edgecolor='none', alpha=alpha))
+                    ax.add_patch(shapely_patch(port.shapely,
+                                               facecolor='red', edgecolor='none', alpha=alpha))
                     ax.text(*port_xy, name)
         b = min_aspect_bounds(self.bounds)
         ax.set_xlim((b[0], b[2]))

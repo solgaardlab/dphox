@@ -1,6 +1,8 @@
 import numpy as np
 from shapely.geometry import GeometryCollection, LineString, MultiPolygon, Polygon
 from shapely.ops import split
+from matplotlib.path import Path
+from matplotlib.patches import PathPatch
 
 from .typing import Float4, List, Optional, Union
 
@@ -183,3 +185,31 @@ def min_aspect_bounds(b: Union[np.ndarray, Float4], min_aspect: float = 0.25):
     size = np.array((np.abs(b[2] - b[0]), np.abs(b[3] - b[1])))
     dx = np.array((np.maximum(min_aspect * size[1], size[0]) / 2, np.maximum(size[1], min_aspect * size[0]) / 2))
     return np.hstack((center - dx, center + dx))
+
+
+def shapely_patch(geom: Union[MultiPolygon, Polygon], **kwargs):
+    """Get the shapely patch for plotting in matplotlib
+
+    Args:
+        geom: geometry
+        kwargs: keyword arguments for matplotlib's PathPatch
+
+    Returns:
+
+    """
+    if geom.geom_type == 'Polygon':
+        polygon = [Polygon(geom)]
+    elif geom.geom_type == 'MultiPolygon':
+        polygon = [Polygon(p) for p in geom]
+    else:
+        raise ValueError("A polygon or multi-polygon representation is required")
+
+    vertices = np.vstack([np.vstack([np.array(poly.exterior)[:, :2]] + [np.array(hole)[:, :2] for hole in poly.interiors])
+                          for poly in polygon]).squeeze()
+    codes = sum([
+        [Path.MOVETO] + [Path.LINETO] * (len(poly.exterior.coords) - 1) +
+        sum([[Path.MOVETO] + [Path.LINETO] * (len(hole.coords) - 1) for hole in poly.interiors], [])
+        for poly in polygon], [])
+
+    return PathPatch(Path(vertices, codes), **kwargs)
+
