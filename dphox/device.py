@@ -485,7 +485,8 @@ class Device:
         self.layer_to_polys = self._update_layers()
 
     def plot(self, ax: Optional = None, foundry: Foundry = FABLESS,
-             exclude_layer: Optional[List[CommonLayer]] = None, alpha: float = 0.5, plot_ports: bool = False):
+             exclude_layer: Optional[List[CommonLayer]] = None, alpha: float = 0.5,
+             plot_ports: bool = False):
         """Plot this device on a matplotlib plot.
 
         Args:
@@ -499,9 +500,9 @@ class Device:
         """
         # import locally since this import takes some time.
         if ax is None:
-            # import locally since this import takes some time.
             import matplotlib.pyplot as plt
             ax = plt.gca()
+        exclude_layer = [] if exclude_layer is None else exclude_layer
         for layer, multipoly in self.full_layer_to_polys.items():
             if layer in exclude_layer:
                 continue

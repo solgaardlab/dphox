@@ -188,13 +188,14 @@ def min_aspect_bounds(b: Union[np.ndarray, Float4], min_aspect: float = 0.25):
 
 
 def shapely_patch(geom: Union[MultiPolygon, Polygon], **kwargs):
-    """Get the shapely patch for plotting in matplotlib
+    """Get the shapely patch for plotting in matplotlib (remove descartes dependency).
 
     Args:
         geom: geometry
         kwargs: keyword arguments for matplotlib's PathPatch
 
     Returns:
+        The Matplotlib `PathPatch` for plotting in matplotlib.
 
     """
     if geom.geom_type == 'Polygon':
