@@ -369,6 +369,7 @@ class MZI(Device):
     bottom_external: List[PathComponent] = field(default_factory=list)
     name: str = "mzi"
 
+
     def __post_init__(self):
         dc_device = self.coupler.device(self.ridge)
         w = self.coupler.waveguide_w
@@ -474,7 +475,7 @@ class LocalMesh(Device):
         self.waveguide_w = self.mzi.waveguide_w
         self.n_layers = n_layers
 
-    def demo_polys(self, ps_w_factor: float = 2) -> Tuple[np.ndarray, np.ndarray]:
+    def demo_polys(self, ps_w_factor: float = 4) -> Tuple[np.ndarray, np.ndarray]:
         """Demo polygons, useful for plotting stuff, using only the polygons in the silicon layer.
 
         Note:
@@ -520,7 +521,8 @@ class LocalMesh(Device):
             [[geoms[i][slices[s]:slices[s + 1]] for s in range(len(slices) - 1)] for i in range(self.n)],
             dtype=object)
         ps_array = np.array([Pattern(geoms[i][s * 4]).scale(1, ps_w_factor).points.T
-                             for s in range(len(slices) - 1) for i in range(self.n)])
+                             for i in range(self.n)
+                             for s in range(len(slices) - 1)])
 
         return path_array, ps_array
 

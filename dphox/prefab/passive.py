@@ -10,7 +10,6 @@ from ..pattern import Box, Pattern, Port
 from ..typing import Float2, Int2, Optional, Union
 from ..utils import fix_dataclass_init_docs
 
-
 @fix_dataclass_init_docs
 @dataclass
 class DC(Pattern):
@@ -113,17 +112,15 @@ class Array(Pattern):
         unit: The pattern to repeat in the array
         grid_shape: Number of rows and columns
         pitch: The distance between the circles in the Hole array
-        n_points: The number of points in the circle (it can save time to use fewer points).
 
     """
     unit: Pattern
     grid_shape: Int2
-    # orientation: Union[float, np.ndarray]
     pitch: Optional[Union[float, Float2]] = None
 
     def __post_init__(self):
         self.pitch = (self.pitch, self.pitch) if isinstance(self.pitch, float) else self.pitch
-        super().__init__(MultiPolygon([self.unit.copy.translate(i * self.pitch, j * self.pitch)
+        super().__init__(MultiPolygon([self.unit.copy.translate(i * self.pitch[0], j * self.pitch[1])
                                        for i in range(self.grid_shape[0])
                                        for j in range(self.grid_shape[1])
                                        ]))

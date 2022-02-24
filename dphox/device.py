@@ -5,9 +5,8 @@ from copy import deepcopy, deepcopy as copy
 from dataclasses import dataclass
 from typing import BinaryIO
 
-import klamath
 import numpy as np
-from klamath.library import FileHeader
+
 from shapely.affinity import rotate
 from shapely.geometry import MultiPolygon, Point, Polygon
 from shapely.ops import unary_union
@@ -24,6 +23,13 @@ try:
     import nazca as nd
 except ImportError:
     NAZCA_IMPORTED = False
+
+KLAMATH_IMPORTED = True
+try:
+    import klamath
+    from klamath.library import FileHeader
+except:
+    KLAMATH_IMPORTED = False
 
 GDSTransformOrTuple = Union[GDSTransform, Tuple, np.ndarray, Port, List[Port]]
 
@@ -730,6 +736,8 @@ class Device:
         Returns:
             The `klamath` GDS elements for the device.
         """
+        if not KLAMATH_IMPORTED:
+            raise ImportError('Klamath not imported, need klamath for GDS export.')
         elements = []
         for layer, geom in self.layer_to_polys.items():
             elements += [
@@ -793,6 +801,8 @@ class Device:
         Returns:
 
         """
+        if not KLAMATH_IMPORTED:
+            raise ImportError('Klamath not imported, need klamath for GDS export.')
         with open(filepath, 'wb') as stream:
             header = FileHeader(name=b'dphox', user_units_per_db_unit=user_units_per_db_unit,
                                 meters_per_db_unit=meters_per_db_unit,
