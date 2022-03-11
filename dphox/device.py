@@ -400,6 +400,7 @@ class Device:
                                   for p in placement])
         self.child_to_transform[device.name] = GDSTransform.parse(transform,
                                                                   self.child_to_transform.get(device.name))
+        return self
 
     def clear(self, device: Union[str, "Device"]):
         """Clear the device or its name from the children of this device. Do nothing if the device isn't present.

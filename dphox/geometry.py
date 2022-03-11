@@ -154,18 +154,19 @@ class Geometry:
         """
         return self.transform(skew2d((xs, ys), self.center if origin is None else origin))
 
-    def scale(self, xfact: float = 1, yfact: float = 1, origin: Optional[Float2] = None) -> "Geometry":
+    def scale(self, xfact: float = 1, yfact: float = None, origin: Optional[Float2] = None) -> "Geometry":
         """Affine scale operation on the geometry about :code:`origin`.
 
         Args:
             xfact: x scale factor.
-            yfact: y scale factor.
+            yfact: y scale factor (same as x scale factor if not specified).
             origin: origin of rotation (uses center of geom if :code:`None`).
 
         Returns:
             Rotated geom by :code:`angle` about :code:`origin`
 
         """
+        yfact = xfact if yfact is None else yfact
         return self.transform(scale2d((xfact, yfact), self.center if origin is None else origin))
 
     def to(self, port: Union[Tuple[float, ...], Port] = (0, 0), from_port: Optional[Union[str, Port]] = None):

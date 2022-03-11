@@ -526,3 +526,28 @@ class LocalMesh(Device):
 
         return path_array, ps_array
 
+    def demo_3d_arrays(self, ps_w_factor: float = 4, height=0.22, sep=0.22):
+        from trimesh.creation import extrude_polygon
+        import trimesh
+        path_array, ps_array = self.demo_polys(ps_w_factor)
+        ps_array = ps_array.reshape((*path_array.shape, 4, 2))
+
+        def _shapely_to_mesh_from_step(_geom, translation):
+            _meshes = []
+            for _poly in _geom.geoms:
+                _meshes.append(extrude_polygon(_poly, height=height))
+            _mesh = trimesh.util.concatenate(_meshes) if len(_meshes) > 0 else trimesh.Trimesh()
+            return _mesh.apply_translation((0, 0, translation))
+
+        path_3d_array = []
+        ps_3d_array = []
+        for i in range(6):
+            path_row = []
+            ps_row = []
+            for j in range(19):
+                path_row.append(_shapely_to_mesh_from_step(Pattern(path_array[i, j]).shapely, 0))
+                ps_row.append(_shapely_to_mesh_from_step(Pattern(ps_array[i, j].T).shapely, sep + height))
+            path_3d_array.append(path_row)
+            ps_3d_array.append(ps_row)
+
+        return path_3d_array, ps_3d_array
