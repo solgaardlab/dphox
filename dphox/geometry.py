@@ -212,7 +212,7 @@ class Geometry:
 
         """
         x = self.bounds[0] if left else self.bounds[2]
-        p = c if isinstance(c, float) or isinstance(c, int) \
+        p = c if np.isscalar(c) \
             else (c.bounds[0] if left and not opposite or opposite and not left else c.bounds[2])
         self.translate(dx=p - x)
         return self
@@ -230,7 +230,7 @@ class Geometry:
 
         """
         y = self.bounds[1] if bottom else self.bounds[3]
-        p = c if isinstance(c, float) or isinstance(c, int) \
+        p = c if np.isscalar(c) \
             else (c.bounds[1] if bottom and not opposite or opposite and not bottom else c.bounds[3])
         self.translate(dy=p - y)
         return self

@@ -255,7 +255,7 @@ class Device:
 
         """
         x = self.bounds[0] if left else self.bounds[2]
-        p = c if isinstance(c, float) or isinstance(c, int) \
+        p = c if np.isscalar(c) \
             else (c.bounds[0] if left and not opposite or opposite and not left else c.bounds[2])
         self.translate(dx=p - x)
         return self
@@ -273,7 +273,7 @@ class Device:
 
         """
         y = self.bounds[1] if bottom else self.bounds[3]
-        p = c if isinstance(c, float) or isinstance(c, int) \
+        p = c if np.isscalar(c) \
             else (c.bounds[1] if bottom and not opposite or opposite and not bottom else c.bounds[3])
         self.translate(dy=p - y)
         return self
@@ -512,10 +512,11 @@ class Device:
                 raise ValueError(f"The layer {layer} does not exist in the foundry stack,"
                                  f"so could not find a color. Make sure you specify the correct foundry.")
             pattern = Pattern(*multipoly)
-            ax.add_patch(
-                shapely_patch(unary_union(MultiPolygon(pattern.shapely)),
-                              # union avoids some weird plotting with alpha < 1
-                              facecolor=color, edgecolor='none', alpha=alpha))
+            if len(pattern.geoms) > 0:
+                ax.add_patch(
+                    shapely_patch(unary_union(MultiPolygon(pattern.shapely)),
+                                  # union avoids some weird plotting with alpha < 1
+                                  facecolor=color, edgecolor='none', alpha=alpha))
             if plot_ports:
                 for name, port in self.port.items():
                     port_xy = port.xy - port.tangent(port.w)

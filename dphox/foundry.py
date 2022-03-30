@@ -78,8 +78,10 @@ class CommonLayer(str, Enum):
     """Common layers used in foundries. These are just strings representing common layers, no other functionality,
 
     Attributes:
-        RIDGE_SI: Ridge silicon waveguide layer.
-        RIB_SI: Rib silicon waveguide layer.
+        RIDGE_SI: Ridge silicon waveguide layer (waveguiding portion of the waveguide).
+        RIDGE_SI_2: Another ridge silicon waveguide layer.
+        RIB_SI: Rib silicon waveguide layer (slab portion of the waveguide).
+        RIB_SI_2: Another rib silicon waveguide layer.
         PDOPED_SI: Lightly P-doped silicon (implants into the crystalline silicon layer).
         NDOPED_SI: Lightly N-doped silicon (implants into the crystalline silicon layer).
         PPDOPED_SI: Medium P-doped silicon (implants into the crystalline silicon layer).
@@ -109,6 +111,7 @@ class CommonLayer(str, Enum):
     RIDGE_SI = 'ridge_si'
     RIDGE_SI_2 = 'ridge_si_2'
     RIB_SI = 'rib_si'
+    RIB_SI_2 = 'rib_si_2'
     RIDGE_SIN = 'ridge_sin'
     RIDGE_SIN_2 = 'ridge_sin_2'
     RIB_SIN = 'rib_sin'
@@ -127,14 +130,22 @@ class CommonLayer(str, Enum):
     VIA_1_2 = "via_1_2"
     METAL_2 = "metal_2"
     VIA_2_PAD = "via_2_pad"
-    METAL_PAD = "metal_pad"
+    PAD = "pad"
     HEATER = "heater"
     VIA_HEATER_2 = "via_heater_2"
     CLAD = "clad"
+    OXIDE_OPEN = "oxide_open"
     CLEAROUT = "clearout"
     PHOTONIC_KEEPOUT = "photonic_keepout"
     METAL_KEEPOUT = "metal_keepout"
     BBOX = "bbox"
+    BBOX_SI = "bbox_si"
+    BBOX_SIN = "bbox_sin"
+    BBOX_METAL = "bbox_metal"
+    BBOX_LABEL = "bbox_label"
+    BBOX_METAL_1 = "bbox_metal_1"
+    BBOX_METAL_2 = "bbox_metal_2"
+    BBOX_RIB_SI = "bbox_rib_si"
     TRENCH = "trench"
 
 
@@ -147,8 +158,10 @@ class ProcessStep:
         process_op: Process operation, specified in the enum for :code:`ProcessOp`
         thickness: The thickness spec for the process step.
         mat: Material (relevant to the non-etch :code:`ProcessOp.grow` and :code:`ProcessOp.dope` process ops)
-        layer: The device layer corresponding to the process step (can vary by foundry).
-        gds_label: The GDS label used for GDS file creation of the device (can vary by foundry).
+        layer: The device layer corresponding to the process step
+            (should NOT vary by foundry, use CommonLayer interface).
+        gds_label: The GDS label used for GDS file creation of the device (SHOULD vary by foundry).
+        foundry_layer: The device layer corresponding to the process step specified by foundry (SHOULD vary by foundry).
         start_height: The starting height for the process step.
 
     """
@@ -157,6 +170,7 @@ class ProcessStep:
     mat: Material
     layer: str
     gds_label: LayerLabel
+    foundry_layer_name: Optional[str] = None
     start_height: Optional[float] = None
 
 
@@ -174,8 +188,7 @@ class Foundry:
         height: Overall height of the foundry stack.
         cladding: The cladding material used by the foundry (usually OXIDE). This material will more-or-less
             cover the entire
-        other: A dictionary between other layers and layer labels (useful for loading PDK's)
-        port_fn: An optional callable that extracts a port dictionary for a given device / cell
+        port_layers: A list of common layers for extracting the appropriate layers.
 
     """
     stack: List[ProcessStep]
@@ -323,7 +336,7 @@ FABLESS = Foundry(
         ProcessStep(ProcessOp.GROW, 0.2, COPPER, CommonLayer.METAL_2, (503, 0)),
         ProcessStep(ProcessOp.GROW, 0.5, ALUMINUM, CommonLayer.VIA_2_PAD, (504, 0)),
         # Note: negative means grow downwards (below the ceiling of the device).
-        ProcessStep(ProcessOp.GROW, 0.3, ALUMINUM, CommonLayer.METAL_PAD, (600, 0)),
+        ProcessStep(ProcessOp.GROW, 0.3, ALUMINUM, CommonLayer.PAD, (600, 0)),
         ProcessStep(ProcessOp.GROW, 0.2, HEATER, CommonLayer.HEATER, (700, 0), 3.2),
         ProcessStep(ProcessOp.GROW, 0.5, COPPER, CommonLayer.VIA_HEATER_2, (505, 0)),
         # 3. Finally specify the clearout (needed for MEMS).

@@ -121,10 +121,9 @@ class Array(Pattern):
 
     def __post_init__(self):
         self.pitch = np.array(self.unit.size) * 2 if self.pitch is None else self.pitch
-        self.pitch = (self.pitch, self.pitch) if isinstance(self.pitch, float) else self.pitch
+        self.pitch = (self.pitch, self.pitch) if np.isscalar(self.pitch) else self.pitch
         super().__init__([self.unit.copy.translate(i * self.pitch[0], j * self.pitch[1])
-                           for i in range(self.grid_shape[0])
-                           for j in range(self.grid_shape[1])
+                          for i in range(self.grid_shape[0]) for j in range(self.grid_shape[1])
                          ])
 
 

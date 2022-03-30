@@ -205,13 +205,14 @@ class Pattern(Geometry):
             new_pattern.port = self.port
         return new_pattern
 
-    def plot(self, ax: Optional = None, color: str = 'black', plot_ports: bool = True):
+    def plot(self, ax: Optional = None, color: str = 'gray', plot_ports: bool = True, alpha: float = 1):
         """Plot the pattern
 
         Args:
             ax: Axis for plotting (if none, use the default matplotlib plot axis
             color: Color of the pattern
             plot_ports: Whether to plot the ports.
+            alpha: the alpha property for plotting.
 
         Returns:
 
@@ -220,12 +221,12 @@ class Pattern(Geometry):
         if ax is None:
             import matplotlib.pyplot as plt
             ax = plt.gca()
-        ax.add_patch(shapely_patch(self.shapely_union, facecolor=color, edgecolor='none'))
+        ax.add_patch(shapely_patch(self.shapely_union, facecolor=color, edgecolor='none', alpha=alpha))
         if plot_ports:
             for name, port in self.port.items():
                 port_xy = port.xy - port.tangent(port.w)
                 ax.add_patch(shapely_patch(port.shapely,
-                                           facecolor='red', edgecolor='none'))
+                                           facecolor='red', edgecolor='none', alpha=alpha))
                 ax.text(*port_xy, name)
         b = min_aspect_bounds(self.bounds)
         ax.set_xlim((b[0], b[2]))

@@ -21,7 +21,7 @@ grating = FocusingGrating(
 )
 
 
-def lateral_nems_ps(ps_l=100, anchor_length=3, clearout_height=12, via_extent=(0.5, 0.5),
+def lateral_nems_ps(ps_l=100, anchor_length=3.1, clearout_height=12, via_extent=(0.5, 0.5),
                     ps_taper_change=-0.2, flexure_box_w=31, nominal_gap=0.201, waveguide_w=0.5,
                     nanofin_w=0.2, taper_l=10, anchor_taper_l=1.4, pull_in=False, trace_w=1, smooth: float = 0):
     ps_w = waveguide_w + 2 * nominal_gap + 2 * nanofin_w

@@ -202,8 +202,13 @@ def shapely_patch(geom: Union[MultiPolygon, Polygon], **kwargs):
         polygon = [Polygon(geom)]
     elif geom.geom_type == 'MultiPolygon':
         polygon = [Polygon(p) for p in geom]
+    elif geom.geom_type == 'GeometryCollection':
+        polygon = [Polygon(p) for p in geom]
     else:
         raise ValueError("A polygon or multi-polygon representation is required")
+
+    if len(polygon) == 0:
+        return None
 
     vertices = np.vstack([np.vstack([np.array(poly.exterior)[:, :2]] + [np.array(hole)[:, :2] for hole in poly.interiors])
                           for poly in polygon]).squeeze()

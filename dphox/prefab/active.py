@@ -299,7 +299,7 @@ class MultilayerPath(Device):
 
     def __post_init__(self):
         waveguided_patterns = []
-        if not self.sequence or isinstance(self.sequence[0], float):
+        if not self.sequence or np.isscalar(self.sequence[0]):
             port = self.start_port
         else:
             start = self.sequence[0].port['a0']
@@ -337,7 +337,7 @@ class MultilayerPath(Device):
 
         """
         self.sequence.append(path)
-        path = straight(path).path(self.waveguide_w) if isinstance(path, float) else path
+        path = straight(path).path(self.waveguide_w) if np.isscalar(path) else path
         segment = path.to(self.port['b0'])
         self.add(segment, self.path_layer)
         self.port['b0'] = segment.port['b0']
@@ -369,7 +369,6 @@ class MZI(Device):
     bottom_external: List[PathComponent] = field(default_factory=list)
     name: str = "mzi"
 
-
     def __post_init__(self):
         dc_device = self.coupler.device(self.ridge)
         w = self.coupler.waveguide_w
@@ -394,8 +393,8 @@ class MZI(Device):
         self.init_coupler = dc_device
         self.final_coupler = dc_device.copy.to(bottom_arm_port, 'a0')
         self.port = {
-            'a0': Port(0, 0, 180),
-            'a1': Port(0, self.coupler.interport_distance, 180),
+            'a0': Port(0, 0, 180, w=w),
+            'a1': Port(0, self.coupler.interport_distance, 180, w=w),
             'b0': self.final_coupler.port['b0'].copy,
             'b1': self.final_coupler.port['b1'].copy
         }
