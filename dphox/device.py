@@ -11,7 +11,8 @@ from shapely.affinity import rotate
 from shapely.geometry import MultiPolygon, Point, Polygon
 from shapely.ops import unary_union
 
-from .foundry import CommonLayer, FABLESS, fabricate, Foundry
+from .foundry import CommonLayer, FABLESS, Foundry
+
 from .geometry import Geometry
 from .pattern import Box, Pattern, Port
 from .transform import GDSTransform, rotate2d
@@ -88,6 +89,9 @@ class Device:
     def from_pattern(cls, pattern: Pattern, name: str, layer: str):
         """A class method to convert a :code:`Pattern` into a :code:`Device`.
 
+        Note:
+            The ports from pattern is "raised" to the pattern in ths device.
+
         Args:
             pattern: The pattern that is being used to generate the device.
             name: Name for the component.
@@ -97,7 +101,9 @@ class Device:
             The :code:`Device` containing the :code:`Pattern` at the specified :code:`layer`.
 
         """
-        return cls(name, [(pattern, layer)])
+        device = cls(name, [(pattern, layer)])
+        device.port = pattern.port
+        return device
 
     @classmethod
     def from_nazca_cell(cls, cell: "nd.Cell"):
@@ -363,7 +369,7 @@ class Device:
             )
 
     def place(self, device: "Device", placement: Union[GDSTransformOrTuple],
-              from_port: Optional[Union[str, Port, tuple]] = None):
+              from_port: Optional[Union[str, Port, tuple]] = None, return_ports: bool = False):
         """Place another device into this device at a specified :code:`placement` (location and angle) or list of them.
 
         Args:
@@ -372,15 +378,18 @@ class Device:
                 Note that the transform to apply can be the form of an xya (x, y, angle) tuple or a port.
             from_port: The port name corresponding to child device's port that should be connected according to
                 :code:`placement`. This effectively acts like a reference position/orientation for placement.
+            return_ports: Return the ports of the placed device according to the format of placement.
 
         Returns:
-            This device, after modifying the children of the device.
+            The ports of the placed device, according to the specification of :code:`return_ports`.
 
         """
         if device.name not in self.child_to_device:
             self.child_to_device[device.name] = device
+        single_placement = False
         if not isinstance(placement, list) and not isinstance(placement, tuple) and not isinstance(placement,
                                                                                                    np.ndarray):
+            single_placement = True
             placement = [placement]
         if from_port is None:
             transform = np.array([p.xya if isinstance(p, Port) else p for p in placement])
@@ -400,7 +409,11 @@ class Device:
                                   for p in placement])
         self.child_to_transform[device.name] = GDSTransform.parse(transform,
                                                                   self.child_to_transform.get(device.name))
-        return self
+        # if return_ports:
+        #     placed_ports = []
+        #     for placement in placement:
+        #         placed_ports.append()
+        #     return placed_ports[0] if single_placement else placed_ports
 
     def clear(self, device: Union[str, "Device"]):
         """Clear the device or its name from the children of this device. Do nothing if the device isn't present.
@@ -598,17 +611,16 @@ class Device:
         by the :code:`Foundry` stack.
 
         Args:
-            foundry: The foundry for each layer.
+            foundry: The foundry for each layer which converts it into a trimesh
             exclude_layer: Exclude all layers in this list.
 
         Returns:
             The device :code:`Scene` to visualize.
 
         """
-        return fabricate(
+        return foundry.fabricate(
             layer_to_geom={layer: MultiPolygon([Polygon(p.T) for p in polys])
                            for layer, polys in self.full_layer_to_polys.items()},
-            foundry=foundry,
             exclude_layer=exclude_layer
         )
 

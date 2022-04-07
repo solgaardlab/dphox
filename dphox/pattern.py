@@ -6,7 +6,7 @@ from shapely.geometry import box, GeometryCollection, LineString, LinearRing, Po
 from shapely.ops import split, unary_union, polygonize
 from copy import deepcopy as copy
 
-from .foundry import CommonLayer, fabricate, Foundry, FABLESS
+from .foundry import CommonLayer, Foundry, FABLESS
 from .geometry import Geometry
 from .port import Port
 from .typing import Float2, Float4, List, MultiPolygon, Optional, Polygon, PolygonLike, Shape, Spacing, \
@@ -314,9 +314,8 @@ class Pattern(Geometry):
             The device :code:`Scene` to visualize.
 
         """
-        return fabricate(
-            layer_to_geom={layer: MultiPolygon([Polygon(p.T) for p in self.geoms])},
-            foundry=foundry,
+        return foundry.fabricate(
+            layer_to_geom={layer: MultiPolygon([Polygon(p.T) for p in self.geoms])}
         )
 
     def __sub__(self, other: "Pattern"):

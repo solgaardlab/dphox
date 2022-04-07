@@ -4,7 +4,7 @@ import numpy as np
 from dataclasses import field, dataclass
 from shapely.geometry import box, MultiPolygon, Polygon
 
-from .typing import Dict, Float3, LayerLabel, List, Optional, Callable
+from .typing import Dict, Float3, LayerLabel, List, Optional
 from .utils import fix_dataclass_init_docs
 
 
@@ -161,7 +161,6 @@ class ProcessStep:
         layer: The device layer corresponding to the process step
             (should NOT vary by foundry, use CommonLayer interface).
         gds_label: The GDS label used for GDS file creation of the device (SHOULD vary by foundry).
-        foundry_layer: The device layer corresponding to the process step specified by foundry (SHOULD vary by foundry).
         start_height: The starting height for the process step.
 
     """
@@ -170,7 +169,6 @@ class ProcessStep:
     mat: Material
     layer: str
     gds_label: LayerLabel
-    foundry_layer_name: Optional[str] = None
     start_height: Optional[float] = None
 
 
@@ -216,102 +214,106 @@ class Foundry:
             if step.layer == layer:
                 return step.mat.color
 
+    def fabricate(self, layer_to_geom: Dict[str, MultiPolygon], init_device: Optional["Scene"] = None,
+                  exclude_layer: Optional[List[CommonLayer]] = None) -> "Scene":
+        """Fabricate a device based on a layer-to-geometry dict, :code:`Foundry`, and initial device (type :code:`Scene`).
 
-def fabricate(layer_to_geom: Dict[str, MultiPolygon], foundry: Foundry, init_device: Optional["Scene"] = None,
-              exclude_layer: Optional[List[CommonLayer]] = None) -> "Scene":
-    """Fabricate a device based on a layer-to-geometry dict, :code:`Foundry`, and initial device (type :code:`Scene`).
+        This method is fairly rudimentary and will not implement things like conformal deposition. At the moment,
+        you can implement things like rib etches which can be determined using 2d shape operations. Depositions in
+        layers above etched layers will just start from the maximum z extent of the previous layer. This is specified
+        by the :code:`Foundry` stack.
 
-    This method is fairly rudimentary and will not implement things like conformal deposition. At the moment,
-    you can implement things like rib etches which can be determined using 2d shape operations. Depositions in
-    layers above etched layers will just start from the maximum z extent of the previous layer. This is specified
-    by the :code:`Foundry` stack.
+        Note:
+            Custom fabricate methods may be built if this foundry class is extended.
+            However, the same template is recommended
 
-    Args:
-        layer_to_geom: A dictionary mapping each layer to the `full` Shapely geometry for that layer.
-        foundry: The foundry for each layer
-        init_device: The initial device on which to start fabrication  (useful for post-processing simulations).
-        exclude_layer: Exclude all layers in this list.
+        Args:
+            layer_to_geom: A dictionary mapping each layer to the `full` Shapely geometry for that layer.
+            init_device: The initial device on which to start fabrication  (useful for post-processing simulations).
+            exclude_layer: Exclude all layers in this list.
 
-    Returns:
-        The device :code:`Scene` to visualize.
+        Returns:
+            The device :code:`Scene` to visualize.
 
-    """
+        """
 
-    try:
-        import triangle
-    except ImportError:
-        raise ImportError("Fabrication requires the triangle module to be compiled with trimesh")
-    import trimesh
-    from trimesh.creation import extrude_polygon
-    from trimesh.scene import Scene
+        try:
+            import triangle
+        except ImportError:
+            raise ImportError("Fabrication requires the triangle module to be compiled with trimesh")
+        import trimesh
+        from trimesh.creation import extrude_polygon
+        from trimesh.scene import Scene
 
-    def _shapely_to_mesh_from_step(_geom: MultiPolygon, _meshes: List["trimesh.Trimesh"], _step: ProcessStep):
-        for _poly in _geom.geoms:
-            if _poly.area > 1e-8:
-                _meshes.append(extrude_polygon(_poly, height=_step.thickness))
-        _mesh = trimesh.util.concatenate(_meshes) if len(_meshes) > 0 else trimesh.Trimesh()
-        _mesh.visual.face_colors = _step.mat.color
-        return _mesh
+        def _shapely_to_mesh_from_step(_geom: MultiPolygon, _meshes: List["trimesh.Trimesh"], _step: ProcessStep):
+            for _poly in _geom.geoms:
+                if _poly.area > 1e-8:
+                    _meshes.append(extrude_polygon(_poly, height=_step.thickness))
+            _mesh = trimesh.util.concatenate(_meshes) if len(_meshes) > 0 else trimesh.Trimesh()
+            _mesh.visual.face_colors = _step.mat.color
+            return _mesh
 
-    device = Scene() if init_device is None else init_device
-    prev_mat: Optional[Material] = None
-    bound_list = np.array([p.bounds for _, p in layer_to_geom.items()]).T
-    xy_extent = np.min(bound_list[0]), np.min(bound_list[1]), np.max(bound_list[2]), np.max(bound_list[3])
-    clad_geometry = box(*xy_extent)
-    mesh = extrude_polygon(clad_geometry, height=foundry.height)
-    exclude_layer = [] if exclude_layer is None else exclude_layer
-    prev_si_geom = None
-    if 'clad' not in device.geometry and foundry.cladding is not None:
-        device.add_geometry(mesh, geom_name='clad')
-        mesh.visual.face_colors = (*foundry.cladding.color, 0.5)
-    for step in foundry.stack:
-        # move the pattern to the previous maximum z height (previous mesh) OR start_height if specified in step.
-        dz = step.start_height
-        meshes = []
-        layer = step.layer
-        if layer in exclude_layer:
-            continue
-        elif layer in layer_to_geom:
-            # only silicon (rib/ridge) and metal (via, pad, multilevel) generally have multiple layers
-            geom = layer_to_geom[layer]
-            mesh_name = f"{step.mat.name}_{layer}" if step.mat.name in {SILICON.name, ALUMINUM.name} else layer
+        device = Scene() if init_device is None else init_device
+        prev_mat: Optional[Material] = None
+        bound_list = np.array([p.bounds for _, p in layer_to_geom.items()]).T
+        xy_extent = np.min(bound_list[0]), np.min(bound_list[1]), np.max(bound_list[2]), np.max(bound_list[3])
+        clad_geometry = box(*xy_extent)
+        mesh = extrude_polygon(clad_geometry, height=self.height)
+        exclude_layer = [] if exclude_layer is None else exclude_layer
+        prev_si_geom = None
+        if 'clad' not in device.geometry and self.cladding is not None:
+            device.add_geometry(mesh, geom_name='clad')
+            mesh.visual.face_colors = (*self.cladding.color, 0.5)
+        for step in self.stack:
+            # move the pattern to the previous maximum z height (previous mesh) OR start_height if specified in step.
+            dz = step.start_height
+            meshes = []
+            layer = step.layer
+            if layer in exclude_layer:
+                continue
+            elif layer in layer_to_geom:
+                # only silicon (rib/ridge) and metal (via, pad, multilevel) generally have multiple layers
+                geom = layer_to_geom[layer]
+                mesh_name = f"{step.mat.name}_{layer}" if step.mat.name in {SILICON.name, ALUMINUM.name} else layer
+                if step.process_op == ProcessOp.GROW:
+                    mesh = _shapely_to_mesh_from_step(geom, meshes, step)
+                    device.add_geometry(mesh.apply_translation((0, 0, dz)), geom_name=mesh_name)
+                elif step.process_op == ProcessOp.DRI_ETCH:
+                    # Directly etch device
+                    # TODO: convert this to a 2D geometry function
+                    raise NotImplementedError(f"Fabrication method not yet implemented for `{step.process_op.value}`")
+                elif step.process_op == ProcessOp.DOPE:
+                    # only support to dope silicon at the moment
+                    if prev_mat != SILICON:
+                        raise ValueError("The previous material must be crystalline silicon for dopant implantation.")
+                    geoms = []
+                    for poly_si in prev_si_geom.geoms:
+                        for poly in geom:
+                            mat = poly.intersection(poly_si)
+                            if isinstance(mat, Polygon) or isinstance(mat, MultiPolygon):
+                                geoms.append(mat)
+                    mesh = _shapely_to_mesh_from_step(MultiPolygon(geoms), meshes, step)
+                    device.add_geometry(mesh.apply_translation((0, 0, dz - step.thickness)), geom_name=mesh_name)
+                elif step.process_op == ProcessOp.SAC_ETCH:
+                    if 'clad' not in device.geometry:
+                        raise ValueError(
+                            "The cladding is not in the device geometry / not spec'd by the foundry object.")
+                    clad_geometry -= geom
+                    clad_geometry = MultiPolygon([clad_geometry]) if isinstance(clad_geometry,
+                                                                                Polygon) else clad_geometry
+                    for poly in clad_geometry:
+                        meshes.append(extrude_polygon(poly, height=step.thickness))
+                    device.geometry['clad'] = trimesh.util.concatenate(meshes)
+                    mesh.visual.face_colors = (*self.cladding.color, 0.5)
+                    # raise NotImplementedError(f"Fabrication method not yet implemented for `{step.process_op.value}`")
+                    # device.geometry['clad'] -= difference(device.geometry['clad'], mesh)
+                elif not step.process_op == ProcessOp.DUMMY:
+                    raise NotImplementedError(f"Fabrication method not yet implemented for `{step.process_op.value}`")
+                if step.mat.name == SILICON.name:
+                    prev_si_geom = geom
             if step.process_op == ProcessOp.GROW:
-                mesh = _shapely_to_mesh_from_step(geom, meshes, step)
-                device.add_geometry(mesh.apply_translation((0, 0, dz)), geom_name=mesh_name)
-            elif step.process_op == ProcessOp.DRI_ETCH:
-                # Directly etch device
-                # TODO: convert this to a 2D geometry function
-                raise NotImplementedError(f"Fabrication method not yet implemented for `{step.process_op.value}`")
-            elif step.process_op == ProcessOp.DOPE:
-                # only support to dope silicon at the moment
-                if prev_mat != SILICON:
-                    raise ValueError("The previous material must be crystalline silicon for dopant implantation.")
-                geoms = []
-                for poly_si in prev_si_geom.geoms:
-                    for poly in geom:
-                        mat = poly.intersection(poly_si)
-                        if isinstance(mat, Polygon) or isinstance(mat, MultiPolygon):
-                            geoms.append(mat)
-                mesh = _shapely_to_mesh_from_step(MultiPolygon(geoms), meshes, step)
-                device.add_geometry(mesh.apply_translation((0, 0, dz - step.thickness)), geom_name=mesh_name)
-            elif step.process_op == ProcessOp.SAC_ETCH:
-                if 'clad' not in device.geometry:
-                    raise ValueError("The cladding is not in the device geometry / not spec'd by the foundry object.")
-                clad_geometry -= geom
-                clad_geometry = MultiPolygon([clad_geometry]) if isinstance(clad_geometry, Polygon) else clad_geometry
-                for poly in clad_geometry:
-                    meshes.append(extrude_polygon(poly, height=step.thickness))
-                device.geometry['clad'] = trimesh.util.concatenate(meshes)
-                mesh.visual.face_colors = (*foundry.cladding.color, 0.5)
-                # raise NotImplementedError(f"Fabrication method not yet implemented for `{step.process_op.value}`")
-                # device.geometry['clad'] -= difference(device.geometry['clad'], mesh)
-            elif not step.process_op == ProcessOp.DUMMY:
-                raise NotImplementedError(f"Fabrication method not yet implemented for `{step.process_op.value}`")
-            if step.mat.name == SILICON.name:
-                prev_si_geom = geom
-        if step.process_op == ProcessOp.GROW:
-            prev_mat = step.mat
-    return device
+                prev_mat = step.mat
+        return device
 
 
 # Foundries are generally secretive about their exact stack/gds labels,

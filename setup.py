@@ -5,7 +5,7 @@ project_name = "dphox"
 
 setup(
     name=project_name,
-    version="0.0.3a1",
+    version="0.0.3a2",
     packages=find_packages(),
     install_requires=[
         'numpy>=1.19',
