@@ -19,6 +19,7 @@ from .transform import GDSTransform, rotate2d
 from .typing import Dict, Float2, Int2, List, Optional, Tuple, Union
 from .utils import fix_dataclass_init_docs, min_aspect_bounds, poly_bounds, poly_points, PORT_LABEL_LAYER, PORT_LAYER, \
     shapely_patch
+import networkx as nx
 
 try:
     NAZCA_IMPORTED = True
@@ -64,8 +65,8 @@ class Device:
             [p.pattern_to_layer if isinstance(p, Device) else [p] for p in self.pattern_to_layer], []
         )
         self.layer_to_polys = self._update_layers()
-        self.child_to_device = {}  # children in this dictionary
-        self.child_to_transform = {}  # dictionary from child name to transform
+        self.child_to_device: Dict[str, Device] = {}  # children in this dictionary
+        self.child_to_transform: Dict[str, GDSTransform] = {}  # dictionary from child name to transform
 
         # check to see if the original devices
         if devices is not None:
@@ -386,10 +387,8 @@ class Device:
         """
         if device.name not in self.child_to_device:
             self.child_to_device[device.name] = device
-        single_placement = False
         if not isinstance(placement, list) and not isinstance(placement, tuple) and not isinstance(placement,
                                                                                                    np.ndarray):
-            single_placement = True
             placement = [placement]
         if from_port is None:
             transform = np.array([p.xya if isinstance(p, Port) else p for p in placement])
@@ -585,10 +584,11 @@ class Device:
         for child_name, child in self.child_to_device.items():
             # this recursively goes down the child tree
             for layer, multipoly in child.full_layer_to_polys.items():
-                polygons = self.child_to_transform[child_name][0].transform_geoms(multipoly)
-                new_polys = sum([np.split(p, p.shape[0]) if p.ndim == 3 else [p] for p in polygons], [])
-                new_polys = [np.squeeze(p) for p in new_polys]
-                layer_to_polys[layer].extend(new_polys)
+                if len(multipoly) > 0:
+                    polygons = self.child_to_transform[child_name][0].transform_geoms(multipoly)
+                    new_polys = sum([np.split(p, p.shape[0]) if p.ndim == 3 else [p] for p in polygons], [])
+                    new_polys = [np.squeeze(p) for p in new_polys]
+                    layer_to_polys[layer].extend(new_polys)
         return layer_to_polys
 
     @property
@@ -706,6 +706,7 @@ class Device:
         Args:
             filepath: The filepath to read the GDS device.
             foundry: The foundry to get the device.
+            name: The name of the device (top cell) from the GDS file, if None return a dictionary
 
         Returns:
             The non-annotated Device generated from reading a GDS file.
@@ -719,10 +720,14 @@ class Device:
                 name, elements = struct
                 structs[name] = elements
                 struct = klamath.library.try_read_struct(stream)
-            devices = {}
+            cells = {}
+            references = {}
+
             for key in structs.keys():
                 pattern_to_layer = []
                 labels = []
+                name = key.decode("utf-8")
+                references[name] = []
                 for obj in structs[key]:
                     if isinstance(obj, klamath.elements.Boundary):
                         if obj.layer in foundry.gds_label_to_layer:
@@ -733,12 +738,19 @@ class Device:
                                 pattern_to_layer.append((pattern, layer))
                     elif isinstance(obj, klamath.elements.Text):
                         labels.append(obj)
-                if pattern_to_layer:
-                    name = key.decode("utf-8")
-                    device = cls(name, pattern_to_layer)
-                    device.port = device._pdk_ports(labels, foundry, header.user_units_per_db_unit)
-                    devices[name] = device
-        return devices
+                    elif isinstance(obj, klamath.elements.Reference):
+                        x, y = obj.xy[0] * header.user_units_per_db_unit
+                        references[name].append((obj.struct_name.decode("utf-8"),
+                                                 GDSTransform(x, y, obj.angle_deg, obj.mag, obj.invert_y)))
+                cell = cls(name, pattern_to_layer)
+                cell.port = cell._pdk_ports(labels, foundry, header.user_units_per_db_unit)
+                cells[name] = cell
+            net = nx.DiGraph([(r, s[0]) for r in references for s in references[r]])
+            topo_sorted_cells = [node for node in nx.topological_sort(net)]
+            for node in topo_sorted_cells[::-1]:
+                for cell_name, ref in references[node]:
+                    cells[node].place(cells[cell_name], ref)
+        return cells
 
     def gds_elements(self, foundry: Foundry = FABLESS, user_units_per_db_unit: float = 0.001):
         """Use `klamath <https://mpxd.net/code/jan/klamath/src/branch/master/klamath>`_ to convert to GDS elements
@@ -795,7 +807,7 @@ class Device:
                         struct_name=child.name.encode('utf-8'),
                         xy=xy, angle_deg=gds_transform.angle,
                         mag=gds_transform.mag,
-                        invert_y=False,
+                        invert_y=gds_transform.flip_y,
                         colrow=None,
                         properties={}
                     )

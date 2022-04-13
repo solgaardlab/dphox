@@ -41,7 +41,9 @@ def skew2d(skew: Float2 = (0, 0), origin: Float2 = (0, 0)):
                      [0, 0, 1]])
 
 
-def reflect2d(origin: Float2 = (0, 0), horiz: bool = False):
+def reflect2d(origin: Float2 = (0, 0), horiz: bool = False, flip: bool = True):
+    if not flip:
+        return np.eye(3)
     x0, y0 = origin
     return np.array([[1 - 2 * horiz, 0, 2 * x0 * horiz],
                      [0, 1 - 2 * (1 - horiz), 2 * y0 * (1 - horiz)],
@@ -98,19 +100,31 @@ class AffineTransform:
 @fix_dataclass_init_docs
 @dataclass
 class GDSTransform(AffineTransform):
-    x: float
-    y: float
+    """GDS transform class
+
+    Attributes:
+        x: x translation
+        y: y translation
+        angle: rotation angle
+        mag: scale magnification
+        flip_y: Whether to flip the design about the x-axis (in y direction)
+
+    """
+    x: float = 0
+    y: float = 0
     angle: float = 0
     mag: float = 1
+    flip_y: bool = False
 
     def __post_init__(self):
         super(GDSTransform, self).__init__((scale2d((self.mag, self.mag)),
+                                            reflect2d(flip=self.flip_y),
                                             rotate2d(np.radians(self.angle)),
                                             translate2d((self.x, self.y))))
 
     @classmethod
     def parse(cls, transform: Optional[Union["GDSTransform", Tuple, np.ndarray]],
-              existing_transform: Optional[Tuple[AffineTransform, List["GDSTransform"]]] = None) -> \
+                   existing_transform: Optional[Tuple[AffineTransform, List["GDSTransform"]]] = None) -> \
             Tuple[AffineTransform, List["GDSTransform"]]:
         """Turns representations like :code:`(x, y, angle)` or a numpy array into convenient GDS/affine transforms.
 
@@ -121,22 +135,29 @@ class GDSTransform(AffineTransform):
             A tuple of :code:`AffineTransform` representation and a list of GDS transforms for gds output.
 
         """
-        if transform is None:
-            transform = (0, 0)
-        if isinstance(transform, tuple) or isinstance(transform, list):
-            transform = np.array(transform)
-        if transform.ndim == 1:
-            gds_transforms = [cls(*transform)]
-        elif transform.ndim == 2:  # efficiently represent the transformation in 2D
-            gds_transforms = [cls(*t) for t in transform]
-        elif isinstance(transform, GDSTransform):
-            gds_transforms = [transform]
-        else:
-            raise TypeError("Expected transform to be of type GDSTransform, or tuple or ndarray representing GDS"
-                            "transforms, but got a malformed input.")
+        gds_transforms = _parse_gds_transform(transform)
         parallel_transform = np.array([t.transform for t in gds_transforms])
         if existing_transform is not None:
             return AffineTransform(np.vstack((existing_transform[0].transform, parallel_transform))),\
                    existing_transform[1] + gds_transforms
         else:
             return AffineTransform(parallel_transform), gds_transforms
+
+
+def _parse_gds_transform(transform):
+    """Recursive helper function for parsing GDS transform objects flexibly."""
+    if transform is None:
+        gds_transforms = [GDSTransform()]
+    else:
+        if isinstance(transform, GDSTransform):
+            gds_transforms = [transform]
+        elif isinstance(transform, tuple) or isinstance(transform, list) or isinstance(transform, np.ndarray):
+            if len(transform) <= 5 and all([np.isscalar(v) for v in transform]):
+                gds_transforms = [GDSTransform(*transform)]
+            else:
+                gds_transforms = sum([_parse_gds_transform(t) for t in transform], [])
+        else:
+            raise TypeError("Expected transform to be of type GDSTransform, or tuple or ndarray representing GDS"
+                            f"transforms, but got a malformed input of type: {type(transform)}")
+
+    return gds_transforms

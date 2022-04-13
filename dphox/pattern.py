@@ -284,8 +284,7 @@ class Pattern(Geometry):
             holes = [[np.array(hole.coords.xy).T for hole in shapely_poly.interiors]]
             return {'x': x, 'y': y, 'holes': holes}
 
-        polys = [_holoviews_poly(poly) for poly in geom.geoms] if isinstance(geom, MultiPolygon) \
-            else [_holoviews_poly(geom)]
+        polys = [_holoviews_poly(poly) for poly in geom.geoms] if isinstance(geom, MultiPolygon) else [_holoviews_poly(geom)]
 
         plots_to_overlay.append(
             hv.Polygons(polys, label=name).opts(data_aspect=1, frame_height=200, fill_alpha=alpha,
