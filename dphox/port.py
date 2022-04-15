@@ -1,5 +1,6 @@
 from copy import deepcopy as copy
 from dataclasses import dataclass
+from typing import Tuple
 
 import numpy as np
 
@@ -130,12 +131,21 @@ class Port:
         return np.array(transform[..., :2, :]) @ np.vstack((self.line, np.array([(1, 1)])))
 
     def transform(self, transform: np.ndarray, decimals: float = DECIMALS):
+        """Transform.
+
+        Args:
+            transform: affine transform tensor whose final two dimensions transform the port
+            decimals: decimal precision for port x, y after the rotation.
+
+        Returns:
+
+        """
         line = self.transformed_line(transform).T
         c = (line[0] + line[1]) / 2
         d = (line[1, 1] - line[0, 1]) + (line[1, 0] - line[0, 0]) * 1j
         self.a = -np.angle(d) * 180 / np.pi
-        self.x = np.around(c[0], DECIMALS)
-        self.y = np.around(c[1], DECIMALS)
+        self.x = np.around(c[0], decimals)
+        self.y = np.around(c[1], decimals)
         self.w = np.abs(d)
         self.xy = np.array((self.x, self.y))
         self.xya = np.array((self.x, self.y, self.a))
@@ -159,3 +169,12 @@ class Port:
 
         """
         return Port(*self.xya, self.w, self.z, self.h)
+
+    def orient_xya(self, xya: np.ndarray):
+        xya = np.array((*xya, 0)) if len(xya) == 2 else xya
+        rotated_translate = -rotate2d(np.radians(xya[-1] - self.a + 180))[:2, :2] @ self.xy
+        return xya + np.array((*rotated_translate, -self.a + 180))
+
+    def transform_xya(self, xya: Tuple[float, float, float]):
+        x, y, a = xya
+        return self.transform(translate2d((x, y)) @ rotate2d(np.radians(a)))

@@ -10,6 +10,7 @@ import numpy as np
 from shapely.affinity import rotate
 from shapely.geometry import MultiPolygon, Point, Polygon
 from shapely.ops import unary_union
+import networkx as nx
 
 from .foundry import CommonLayer, FABLESS, Foundry
 
@@ -19,7 +20,6 @@ from .transform import GDSTransform, rotate2d
 from .typing import Dict, Float2, Int2, List, Optional, Tuple, Union
 from .utils import fix_dataclass_init_docs, min_aspect_bounds, poly_bounds, poly_points, PORT_LABEL_LAYER, PORT_LAYER, \
     shapely_patch
-import networkx as nx
 
 try:
     NAZCA_IMPORTED = True
@@ -390,29 +390,25 @@ class Device:
         if not isinstance(placement, list) and not isinstance(placement, tuple) and not isinstance(placement,
                                                                                                    np.ndarray):
             placement = [placement]
-        if from_port is None:
-            transform = np.array([p.xya if isinstance(p, Port) else p for p in placement])
-        else:
-            if isinstance(from_port, str):
-                from_port = device.port[from_port]
-            elif isinstance(from_port, tuple):
-                from_port = Port(*from_port)
-            elif not isinstance(from_port, Port):
-                raise TypeError(f"from_port must be str, tuple or Port type but got {type(from_port)}.")
 
-            def transformed_port(xya):
-                rotated_translate = -rotate2d(np.radians(xya[-1] - from_port.a + 180))[:2, :2] @ from_port.xy
-                return xya + np.array((*rotated_translate, -from_port.a + 180))
+        from_port = Port(0, 0, 180) if from_port is None else from_port
 
-            transform = np.array([transformed_port(p.xya) if isinstance(p, Port) else transformed_port(p)
-                                  for p in placement])
+        if isinstance(from_port, str):
+            from_port = device.port[from_port]
+        elif isinstance(from_port, tuple):
+            from_port = Port(*from_port)
+        elif not isinstance(from_port, Port):
+            raise TypeError(f"from_port must be str, tuple or Port type but got {type(from_port)}.")
+
+        transform = np.array([from_port.orient_xya(p.xya) if isinstance(p, Port) else from_port.orient_xya(p)
+                              for p in placement])
         self.child_to_transform[device.name] = GDSTransform.parse(transform,
                                                                   self.child_to_transform.get(device.name))
-        # if return_ports:
-        #     placed_ports = []
-        #     for placement in placement:
-        #         placed_ports.append()
-        #     return placed_ports[0] if single_placement else placed_ports
+        if return_ports:
+            placed_ports = []
+            for t in transform:
+                placed_ports.append({pname: port.copy.transform_xya(t) for pname, port in device.port.items()})
+            return placed_ports[0] if len(placed_ports) == 1 else placed_ports
 
     def clear(self, device: Union[str, "Device"]):
         """Clear the device or its name from the children of this device. Do nothing if the device isn't present.
@@ -895,3 +891,4 @@ class Via(Device):
             'n': Port(self.center[0], self.bounds[3], 90),
             'c': Port(*self.center)
         }
+

@@ -1,11 +1,13 @@
 from dataclasses import dataclass
+from typing import Dict, Tuple
 
 import numpy as np
 from shapely.geometry import MultiPolygon
 
 from ..device import Device
 from ..foundry import AIR, CommonLayer, SILICON
-from ..parametric import cubic_taper_fn, dc_path, grating_arc, link, loopback, straight, trombone, turn
+from ..parametric import cubic_taper, cubic_taper_fn, dc_path, grating_arc, link, loopback, straight, taper, trombone, \
+    turn
 from ..pattern import Box, Pattern, Port
 from ..typing import Float2, Int2, Optional, Union
 from ..utils import fix_dataclass_init_docs
@@ -288,7 +290,7 @@ class TapDC(Pattern):
 class Interposer(Pattern):
     """Pitch-changing array of waveguides with path length correction.
 
-    Args:
+    Attributes:
         waveguide_w: The waveguide width.
         n: The number of I/O (waveguides) for interposer.
         init_pitch: The initial pitch (distance between successive waveguides) entering the interposer.
@@ -395,3 +397,64 @@ class Interposer(Pattern):
         interposer.place(grating, self.port['l1'], from_port=grating.port['a0'])
         return interposer
 
+
+@fix_dataclass_init_docs
+@dataclass
+class TSplitter(Pattern):
+    """Pitch-changing array of waveguides with path length correction.
+
+    Args:
+        waveguide_w: The waveguide width.
+        splitter_l: The splitter length (ignoring the turns).
+        radius: The radius.
+        splitter_mmi_w: Splitter MMI width (use twice the waveguide width by default).
+        input_l: The input extension length.
+        output_l: The output extension length.
+    """
+    waveguide_w: float
+    splitter_l: float
+    radius: float
+    splitter_mmi_w: Optional[float] = None
+    input_l: float = 0
+    output_l: float = 0
+
+    def __post_init__(self):
+        self.splitter_mmi_w = 2 * self.waveguide_w if self.splitter_mmi_w is None else self.splitter_mmi_w
+        splitter_taper = cubic_taper(init_w=self.waveguide_w,
+                                     change_w=self.splitter_mmi_w - self.waveguide_w,
+                                     length=self.input_l + self.splitter_l,
+                                     taper_length=self.splitter_l,
+                                     symmetric=False,
+                                     taper_first=False)
+        turn_shift = self.splitter_mmi_w / 2 - self.waveguide_w / 2
+        upturn = link(turn(self.radius), self.output_l).path(self.waveguide_w)
+        downturn = link(turn(self.radius, -90), self.output_l).path(self.waveguide_w)
+        super(TSplitter, self).__init__(splitter_taper,
+                                        upturn.to(splitter_taper.port['b0']).translate(dy=turn_shift),
+                                        downturn.to(splitter_taper.port['b0']).translate(dy=-turn_shift))
+        self.port = {'a0': splitter_taper.port['a0'], 'b0': upturn.port['b0'], 'b1': downturn.port['b0']}
+
+    def htree(self, depth: int, pitch: float, layer: str = CommonLayer.RIDGE_SI):
+        splitter_device = Device.from_pattern(self, "tsplitter", layer)
+
+        def _htree(depth: int, pitch: float, port_idx: int = 0, port: Dict[str, Port] = None, name: str = None):
+            waveguide_w = self.waveguide_w
+            name = f"htree_{depth}" if name is None else name
+            htree = Device(name)
+            segment = straight(pitch * 2 ** depth).path(waveguide_w)
+            htree.add(segment, layer)
+            htree.port = segment.port
+            if port is None:
+                port = {}
+            if depth == 0:
+                port[f'b{port_idx}'] = htree.port['b0']
+            else:
+                splitter_port = htree.place(splitter_device, htree.port['b0'], from_port='a0', return_ports=True)
+                top_htree = _htree(depth - 1, pitch, port=port, name=f"htree_{depth - 1}")
+                bottom_htree = _htree(depth - 1, pitch, port_idx=2 ** depth - 1, port=port, name=f"htree_{depth - 1}")
+                htree.place(top_htree, splitter_port['b0'], from_port='a0')
+                htree.place(bottom_htree, splitter_port['b1'], from_port='a0')
+            htree.port.update(port)
+            return htree
+
+        return _htree(depth, pitch)

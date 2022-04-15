@@ -616,10 +616,12 @@ def cubic_taper(init_w: float, change_w: float, length: float, taper_length: flo
         The cubic taper waveguide.
 
     """
-    if 2 * taper_length > length:
+    if (1 + symmetric) * taper_length > length:
         raise ValueError(f"Require 2 * taper_length <= length, but got {2 * taper_length} >= {length}.")
     straight_length = length / (1 + symmetric) - taper_length
-    if taper_first:
+    if straight_length == 0:
+        path = taper(taper_length, resolution).path(cubic_taper_fn(init_w, init_w + change_w))
+    elif taper_first:
         path = link(taper(taper_length, resolution), straight_length).path((cubic_taper_fn(init_w, init_w + change_w),
                                                                             init_w + change_w))
     else:
