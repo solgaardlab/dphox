@@ -475,7 +475,7 @@ class TSplitter(Pattern):
 
         """
         waveguide_w = self.waveguide_w
-        htree = _htree(Device.from_pattern(self, "tsplitter", wg_layer), depth, pitch)
+        htree = _htree(Device.from_pattern(self, "tsplitter", wg_layer), depth, pitch, shortened_length)
         b = htree.bounds[-2:] - np.array((0, waveguide_w / 2))
         htree.port.update({f'b_{i}_{j}': Port(b[0] - i * pitch * 2, b[1] - j * pitch, w=waveguide_w)
                       for i in range(int(2 ** np.ceil(depth / 2 - 1)))

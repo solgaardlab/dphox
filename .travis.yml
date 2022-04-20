@@ -15,7 +15,7 @@ before_install:
 - conda create -q -n test-environment
 - source activate test-environment
 - conda install numpy matplotlib scipy
-- pip install pydantic trimesh klamath
+- pip install pydantic trimesh klamath networkx
 - conda install shapely descartes
 install: pip install codecov && pip install pytest
 script: coverage run -m pytest tests
