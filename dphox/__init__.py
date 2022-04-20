@@ -1,6 +1,6 @@
 from .prefab.active import MZI, LocalMesh, Via, ThermalPS, LateralNemsPS, PullOutNemsActuator,\
     PullInNemsActuator, Clearout,  GndAnchorWaveguide, MEMSFlexure, MultilayerPath
-from .prefab.passive import DC, TapDC, RibDevice, FocusingGrating, StraightGrating, Cross, Interposer, Array
+from .prefab.passive import DC, TapDC, RibDevice, FocusingGrating, StraightGrating, Cross, Interposer, Array, TSplitter
 from .route import manhattan_route, turn_connect, loopify, spiral_delay
 from .pattern import Pattern, Circle, Ellipse, Box, Sector, Port, text
 from .device import Device

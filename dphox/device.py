@@ -370,7 +370,7 @@ class Device:
             )
 
     def place(self, device: "Device", placement: Union[GDSTransformOrTuple],
-              from_port: Optional[Union[str, Port, tuple]] = None, return_ports: bool = False):
+              from_port: Optional[Union[str, Port, tuple]] = None, flip_y: bool = False, return_ports: bool = False):
         """Place another device into this device at a specified :code:`placement` (location and angle) or list of them.
 
         Args:
@@ -379,6 +379,7 @@ class Device:
                 Note that the transform to apply can be the form of an xya (x, y, angle) tuple or a port.
             from_port: The port name corresponding to child device's port that should be connected according to
                 :code:`placement`. This effectively acts like a reference position/orientation for placement.
+            flip_y: Whether to flip the design vertically (to be applied to all GDS transforms!)
             return_ports: Return the ports of the placed device according to the format of placement.
 
         Returns:
@@ -402,12 +403,13 @@ class Device:
 
         transform = np.array([from_port.orient_xya(p.xya) if isinstance(p, Port) else from_port.orient_xya(p)
                               for p in placement])
+        transform = np.hstack((transform, np.ones((len(placement), 1)) * flip_y))
         self.child_to_transform[device.name] = GDSTransform.parse(transform,
                                                                   self.child_to_transform.get(device.name))
         if return_ports:
             placed_ports = []
             for t in transform:
-                placed_ports.append({pname: port.copy.transform_xya(t) for pname, port in device.port.items()})
+                placed_ports.append({pname: port.copy.transform_xyaf(t) for pname, port in device.port.items()})
             return placed_ports[0] if len(placed_ports) == 1 else placed_ports
 
     def clear(self, device: Union[str, "Device"]):

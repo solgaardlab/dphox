@@ -131,6 +131,33 @@ class Array(Pattern):
 
 @fix_dataclass_init_docs
 @dataclass
+class Escalator(Device):
+    """Escalator device implemented using tapers facing each other
+
+    Attributes:
+        bottom_waveguide: The bottom waveguide of escalator represented as a :code:`Waveguide` object
+            to allow features such as tapering and coupling.
+        top_waveguide: The top waveguide of escalator represented as a :code:`Waveguide` object
+            to allow features such as tapering and coupling.
+        bottom: Bottom layer of escalator.
+        top: Top layer of escalator.
+        name: The device name for the escalator.
+    """
+    bottom_waveguide: Pattern
+    top_waveguide: Optional[Pattern] = None
+    bottom: str = CommonLayer.RIDGE_SI
+    top: str = CommonLayer.RIDGE_SIN
+    name: str = "escalator"
+
+    def __post_init__(self):
+        pattern_to_layer = [(self.bottom_waveguide, self.bottom)]
+        pattern_to_layer += [(self.top_waveguide, self.top)] if self.top_waveguide is not None else []
+        super().__init__(self.name, pattern_to_layer)
+        self.port = {'a0': self.bottom_waveguide.port['a0'].copy, 'b0': self.bottom_waveguide.port['b0'].copy}
+
+
+@fix_dataclass_init_docs
+@dataclass
 class RibDevice(Device):
     """Waveguide cross section allowing specification of ridge and slab waveguides.
 
@@ -434,27 +461,70 @@ class TSplitter(Pattern):
                                         downturn.to(splitter_taper.port['b0']).translate(dy=-turn_shift))
         self.port = {'a0': splitter_taper.port['a0'], 'b0': upturn.port['b0'], 'b1': downturn.port['b0']}
 
-    def htree(self, depth: int, pitch: float, layer: str = CommonLayer.RIDGE_SI):
-        splitter_device = Device.from_pattern(self, "tsplitter", layer)
+    def htree(self, depth: int, pitch: float, shortened_length: float = 0, wg_layer: str = CommonLayer.RIDGE_SI):
+        """An H-tree for optical phased array and transceiver applications.
 
-        def _htree(depth: int, pitch: float, port_idx: int = 0, port: Dict[str, Port] = None, name: str = None):
-            waveguide_w = self.waveguide_w
-            name = f"htree_{depth}" if name is None else name
-            htree = Device(name)
-            segment = straight(pitch * 2 ** depth).path(waveguide_w)
-            htree.add(segment, layer)
-            htree.port = segment.port
-            if port is None:
-                port = {}
-            if depth == 0:
-                port[f'b{port_idx}'] = htree.port['b0']
-            else:
-                splitter_port = htree.place(splitter_device, htree.port['b0'], from_port='a0', return_ports=True)
-                top_htree = _htree(depth - 1, pitch, port=port, name=f"htree_{depth - 1}")
-                bottom_htree = _htree(depth - 1, pitch, port_idx=2 ** depth - 1, port=port, name=f"htree_{depth - 1}")
-                htree.place(top_htree, splitter_port['b0'], from_port='a0')
-                htree.place(bottom_htree, splitter_port['b1'], from_port='a0')
-            htree.port.update(port)
-            return htree
+        Args:
+            depth: Depth of the H-tree
+            pitch: Pitch of the final H-tree devices
+            shortened_length: Optional user-calculated value based on distances calculated in final device to maintain pitch
+            wg_layer: Waveguide layer for the H-tree photonic routing and splitting
 
-        return _htree(depth, pitch)
+        Returns:
+            The H-tree with devices attached if provided.
+
+        """
+        waveguide_w = self.waveguide_w
+        htree = _htree(Device.from_pattern(self, "tsplitter", wg_layer), depth, pitch)
+        b = htree.bounds[-2:] - np.array((0, waveguide_w / 2))
+        htree.port.update({f'b_{i}_{j}': Port(b[0] - i * pitch * 2, b[1] - j * pitch, w=waveguide_w)
+                      for i in range(int(2 ** np.ceil(depth / 2 - 1)))
+                      for j in range(int(2 ** np.floor(depth / 2)))})
+        dxy = (pitch - 2 * shortened_length) * np.array((1 - depth % 2, depth % 2))
+        htree.port.update({f't_{i}_{j}': Port(b[0] - i * pitch * 2 - dxy[0], b[1] - j * pitch - dxy[1], 180, waveguide_w)
+                      for i in range(int(2 ** np.ceil(depth / 2 - 1)))
+                      for j in range(int(2 ** np.floor(depth / 2)))})
+        return htree
+
+
+@fix_dataclass_init_docs
+@dataclass
+class HTree(Pattern):
+    """Pitch-changing array of waveguides with path length correction.
+
+    Args:
+        tsplitter: The tsplitter device or TSplitter
+        depth: Depth of the H-tree
+        pitch: Pitch of the final H-tree devices
+        shortened_length: Optional user-calculated value based on distances calculated in final device to maintain pitch
+        wg_layer: Waveguide layer for the H-tree photonic routing and splitting
+        name: Name of the htree device
+    """
+    waveguide_w: float
+    depth: int
+    pitch: float
+    shortened_length: float = 0
+    wg_layer: str = CommonLayer.RIDGE_SI
+    name: str = "htree"
+
+
+def _htree(splitter: Device, depth: int, pitch: float, shortened_length: float = 0, name: str = None,
+           wg_layer: str = CommonLayer.RIDGE_SI):
+    name = f"htree_{depth}" if name is None else name
+    waveguide_w = splitter.port['a0'].w
+    htree = Device(name)
+    silver_ratio = 1 / np.sqrt(2) if depth % 2 else 1
+    silver_length = pitch * 2 ** (depth / 2 - 1) * silver_ratio
+    segment_length = silver_length - splitter.size[0] - splitter.size[1] / 2 + waveguide_w / 2
+    if depth == 0:
+        segment_length += splitter.size[0] - shortened_length - waveguide_w / 2
+    segment = straight(segment_length).path(waveguide_w)
+    htree.add(segment, wg_layer)
+    htree.port['a0'] = segment.port['a0']
+    if depth > 0:
+        splitter_port = htree.place(splitter, segment.port['b0'], from_port='a0', return_ports=True)
+        top_htree = _htree(splitter, depth - 1, pitch, shortened_length, f"htree_{depth - 1}")
+        bottom_htree = _htree(splitter, depth - 1, pitch, shortened_length, f"htree_{depth - 1}")
+        htree.place(top_htree, splitter_port['b0'], from_port='a0')
+        htree.place(bottom_htree, splitter_port['b1'], from_port='a0')
+    return htree

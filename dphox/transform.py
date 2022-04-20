@@ -106,15 +106,15 @@ class GDSTransform(AffineTransform):
         x: x translation
         y: y translation
         angle: rotation angle
-        mag: scale magnification
         flip_y: Whether to flip the design about the x-axis (in y direction)
+        mag: scale magnification
 
     """
     x: float = 0
     y: float = 0
     angle: float = 0
-    mag: float = 1
     flip_y: bool = False
+    mag: float = 1
 
     def __post_init__(self):
         super(GDSTransform, self).__init__((scale2d((self.mag, self.mag)),

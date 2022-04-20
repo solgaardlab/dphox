@@ -102,7 +102,8 @@ def manhattan_route(start: Port, lengths: np.ndarray, include_width: bool = True
 
 
 def spiral_delay(n_turns: int, min_radius: float, separation: float,
-                 resolution: int = 1000, turn_resolution: int = DEFAULT_RESOLUTION):
+                 resolution: int = 1000, turn_resolution: int = DEFAULT_RESOLUTION,
+                 include_straightening_bend: bool = True):
     """Spiral delay (large waveguide delay in minimal area).
 
     Args:
@@ -111,6 +112,7 @@ def spiral_delay(n_turns: int, min_radius: float, separation: float,
         separation: Separation of waveguides in the spiral.
         resolution: Number of evaluations for the spiral.
         turn_resolution: Number of evaluations for the turns.
+        include_straightening_bend: Include input and output bends to straighten spiral delay along a line
 
     Returns:
         The spiral delay waveguide.
@@ -119,12 +121,18 @@ def spiral_delay(n_turns: int, min_radius: float, separation: float,
                      separation_scale=separation, resolution=resolution)
     bend = circular_bend(min_radius, 180, resolution=turn_resolution)
     curve = link(spiral_.copy.reverse(), bend.copy.reflect(), bend, spiral_)
-    start, end = curve.port['a0'], curve.port['b0']
-    start_section = turn_connect(start, Port(start.x - 3 * min_radius, start.y, 0), min_radius,
-                                 resolution=turn_resolution, include_width=False)
-    end_section = turn_connect(end, Port(end.x + 3 * min_radius, end.y, 180), min_radius,
-                               resolution=turn_resolution, include_width=False)
-    return link(start_section.reverse(), curve.reflect(), end_section)
+    if include_straightening_bend:
+        start, end = curve.port['a0'], curve.port['b0']
+        start_section = turn_connect(start, Port(start.x - 3 * min_radius, start.y, 0), min_radius,
+                                     resolution=turn_resolution, include_width=False)
+        end_section = turn_connect(end, Port(end.x + 3 * min_radius, end.y, 180), min_radius,
+                                   resolution=turn_resolution, include_width=False)
+
+        curve = link(start_section.reverse(), curve.reflect(), end_section)
+        curve.halign(0)
+    else:
+        curve.halign(0)
+    return curve
 
 
 def loopify(curve: Curve, radius: float, euler: float = 0, resolution: int = DEFAULT_RESOLUTION):

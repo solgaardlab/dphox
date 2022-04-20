@@ -4,7 +4,7 @@ from typing import Tuple
 
 import numpy as np
 
-from .transform import AffineTransform, GDSTransform, rotate2d, translate2d
+from .transform import AffineTransform, GDSTransform, reflect2d, rotate2d, translate2d
 from .typing import Polygon
 from .utils import DECIMALS, fix_dataclass_init_docs
 
@@ -175,6 +175,6 @@ class Port:
         rotated_translate = -rotate2d(np.radians(xya[-1] - self.a + 180))[:2, :2] @ self.xy
         return xya + np.array((*rotated_translate, -self.a + 180))
 
-    def transform_xya(self, xya: Tuple[float, float, float]):
-        x, y, a = xya
-        return self.transform(translate2d((x, y)) @ rotate2d(np.radians(a)))
+    def transform_xyaf(self, xyaf: Tuple[float, float, float, bool]):
+        x, y, a, f = xyaf
+        return self.transform(translate2d((x, y)) @ rotate2d(np.radians(a)) @ reflect2d(flip=bool(f)))
