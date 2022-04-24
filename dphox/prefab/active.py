@@ -1,12 +1,12 @@
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Tuple
+from typing import Tuple, Optional
 
 import numpy as np
 
 from ..device import Device, Via
 from ..foundry import CommonLayer
-from .passive import DC, RibDevice
+from .passive import DC, RibDevice, TSplitter
 from ..pattern import Box, MEMSFlexure, Pattern, Port
 from ..parametric import straight
 from ..transform import GDSTransform
@@ -550,3 +550,71 @@ class LocalMesh(Device):
             ps_3d_array.append(ps_row)
 
         return path_3d_array, ps_3d_array
+
+
+@fix_dataclass_init_docs
+@dataclass
+class HTree(Device):
+    """An H-tree for optical phased array and transceiver applications.
+
+    Args:
+        splitter: Splitter for the h tree (t splitter)
+        depth: Depth of the H-tree
+        pitch: Pitch of the final H-tree devices
+        root_dx: Optional user-calculated value to adjust waveguide length for the root of the h-tree
+        leaf_dx: Optional user-calculated value to adjust waveguide length for the leaves of the h-tree
+            This could be based on distances calculated in final device to maintain pitch.
+        wg_layer: Waveguide layer for the H-tree photonic routing and splitting
+        top_level: Whether this layer should be considered the top level of the tree (useful for labelling ports)
+
+    Returns:
+        The H-tree with devices attached if provided.
+
+    """
+    splitter: Device
+    depth: int
+    pitch: float
+    root_dx: float = 0
+    leaf_dx: float = 0
+    name: str = "htree"
+    wg_layer: str = CommonLayer.RIDGE_SI
+    top_level: bool = True
+
+    def __post_init__(self):
+        if self.top_level:
+            self.splitter = Device.from_pattern(self.splitter, "tsplitter", self.wg_layer) \
+                if isinstance(self.splitter, TSplitter) else self.splitter
+        self.name = f"htree_{self.depth}" if self.name is None else self.name
+        super(HTree, self).__init__(self.name)
+        waveguide_w = self.splitter.port['a0'].w
+        silver_ratio = 1 / np.sqrt(2) if self.depth % 2 else 1
+        silver_length = self.pitch * 2 ** (self.depth / 2 - 1) * silver_ratio
+        segment_length = silver_length - self.splitter.size[0] - self.splitter.size[1] / 2 + waveguide_w / 2 + self.root_dx
+        if self.depth == 0:
+            segment_length += self.splitter.size[0] + self.leaf_dx - waveguide_w / 2
+        segment = straight(segment_length).path(waveguide_w)
+        self.add(segment, self.wg_layer)
+        self.port['a0'] = segment.port['a0']
+
+        if self.depth > 0:
+            splitter_port = self.place(self.splitter, segment.port['b0'], from_port='a0', return_ports=True)
+            top_htree = HTree(self.splitter, self.depth - 1, self.pitch, 0, self.leaf_dx,
+                              f"{self.name}_{self.depth - 1}", wg_layer=self.wg_layer, top_level=False)
+            bottom_htree = HTree(self.splitter, self.depth - 1, self.pitch, 0, self.leaf_dx,
+                                 f"{self.name}_{self.depth - 1}", wg_layer=self.wg_layer, top_level=False)
+            self.place(top_htree, splitter_port['b0'], from_port='a0')
+            self.place(bottom_htree, splitter_port['b1'], from_port='a0')
+        if self.top_level:
+            b = self.bounds[-2:] - np.array((0, waveguide_w / 2))
+            self.port.update({f'b_{i}_{j}': Port(b[0] - i * self.pitch * 2, b[1] - j * self.pitch, w=waveguide_w)
+                              for i in range(int(2 ** np.ceil(self.depth / 2 - 1)))
+                              for j in range(int(2 ** np.floor(self.depth / 2)))})
+            dxy = (self.pitch + 2 * self.leaf_dx) * np.array((1 - self.depth % 2, self.depth % 2))
+            self.port.update(
+                {f't_{i}_{j}': Port(b[0] - i * self.pitch * 2 - dxy[0], b[1] - j * self.pitch - dxy[1], 180, waveguide_w)
+                 for i in range(int(2 ** np.ceil(self.depth / 2 - 1)))
+                 for j in range(int(2 ** np.floor(self.depth / 2)))})
+
+    def fill_ports(self, device: Device):
+        self.place(device, [port for pname, port in self.port.items() if 'b' in pname])
+        self.place(device, [port for pname, port in self.port.items() if 't' in pname], flip_y=True)

@@ -125,7 +125,7 @@ class Geometry:
         return self
 
     def rotate(self, angle: float, origin: Union[Float2, np.ndarray] = (0, 0)) -> "Geometry":
-        """Runs Shapely's rotate operation on the geometry about :code:`origin`.
+        """Rotate the geometry about :code:`origin`.
 
         Args:
             angle: rotation angle in degrees.

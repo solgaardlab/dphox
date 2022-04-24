@@ -1,10 +1,10 @@
-from copy import deepcopy as copy
 from dataclasses import dataclass
 from typing import Tuple
 
 import numpy as np
 
-from .transform import AffineTransform, GDSTransform, reflect2d, rotate2d, translate2d
+from .transform import reflect2d, rotate2d, translate2d
+from .foundry import CommonLayer
 from .typing import Polygon
 from .utils import DECIMALS, fix_dataclass_init_docs
 
@@ -31,6 +31,7 @@ class Port:
     w: float = 1
     z: float = 0
     h: float = 0
+    layer: str = CommonLayer.PORT
 
     def __post_init__(self):
         self.xy = np.array((self.x, self.y))
@@ -160,6 +161,32 @@ class Port:
         return hv.Polygons([{'x': x, 'y': y}]).opts(
             data_aspect=1, frame_height=200, color='red', line_alpha=0) * hv.Text(px[0], py[0], name)
 
+    def translate(self, dx: float = 0, dy: float = 0) -> "Port":
+        """Translate port.
+
+        Args:
+            dx: Displacement in x
+            dy: Displacement in y
+
+        Returns:
+            The translated port
+
+        """
+        return self.transform(translate2d((dx, dy)))
+
+    def rotate(self, angle: float, origin: Tuple[float, float] = (0, 0)) -> "Port":
+        """Rotate the geometry about :code:`origin`.
+
+        Args:
+            angle: Angle of rotation in degrees
+            origin: Rotation origin
+
+        Returns:
+            The rotated port
+
+        """
+        return self.transform(rotate2d(np.radians(angle), origin))
+
     @property
     def copy(self) -> "Port":
         """Return a copy of this port for repeated use.
@@ -170,11 +197,40 @@ class Port:
         """
         return Port(*self.xya, self.w, self.z, self.h)
 
-    def orient_xya(self, xya: np.ndarray):
-        xya = np.array((*xya, 0)) if len(xya) == 2 else xya
-        rotated_translate = -rotate2d(np.radians(xya[-1] - self.a + 180))[:2, :2] @ self.xy
-        return xya + np.array((*rotated_translate, -self.a + 180))
+    def orient_xyaf(self, xyaf: np.ndarray, flip_y: bool = False):
+        """Orient xyaf (x, y , angle, flip) based on this port.
+
+        Note:
+            The orientation is only modified if the port specified is not the default port.
+
+        Args:
+            xyaf: The x, y, angle, and flip objects.
+            flip_y: If only xya is provided, specify the flip.
+
+        Returns:
+            The new xyaf after orienting based on this port.
+
+        """
+        if not isinstance(xyaf, np.ndarray) or len(xyaf) > 4 or len(xyaf) < 2:
+            raise TypeError(f"Require xya to be ndarray but got {type(xyaf)}")
+        elif len(xyaf) == 2:
+            transform_array = np.array((*xyaf, 0, flip_y))
+        elif len(xyaf) == 3:
+            transform_array = np.array((*xyaf, flip_y))
+        else:
+            transform_array = np.array(xyaf)
+
+        rotated_translate = -rotate2d(np.radians(xyaf[-1] - self.a + 180))[:2, :2] @ self.xy
+        return transform_array + np.array((*rotated_translate, -self.a + 180, 0))
 
     def transform_xyaf(self, xyaf: Tuple[float, float, float, bool]):
+        """Transform
+
+        Args:
+            xyaf: The x, y, angle, and flip objects.
+
+        Returns:
+
+        """
         x, y, a, f = xyaf
         return self.transform(translate2d((x, y)) @ rotate2d(np.radians(a)) @ reflect2d(flip=bool(f)))

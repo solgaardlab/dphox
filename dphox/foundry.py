@@ -106,6 +106,7 @@ class CommonLayer(str, Enum):
         PHOTONIC_KEEPOUT: A layer specifying where photonics cannot be routed.
         METAL_KEEPOUT: A layer specifying where metal cannot be routed.
         BBOX: Layer for the bounding box of the design.
+        PORT: Default port layer (unless foundries specify port by layer)
 
     """
     RIDGE_SI = 'ridge_si'
@@ -131,6 +132,10 @@ class CommonLayer(str, Enum):
     METAL_2 = "metal_2"
     VIA_2_PAD = "via_2_pad"
     PAD = "pad"
+    PAD_OPEN = "pad_open"
+    GERMANIUM_ANODE = "ge_anode"
+    GERMANIUM_CATHODE = "ge_cathode"
+    GERMANIUM_OPEN = "ge_open"
     HEATER = "heater"
     VIA_HEATER_2 = "via_heater_2"
     CLAD = "clad"
@@ -141,12 +146,15 @@ class CommonLayer(str, Enum):
     BBOX = "bbox"
     BBOX_SI = "bbox_si"
     BBOX_SIN = "bbox_sin"
+    BBOX_SI_SIN = "bbox_si_sin"
     BBOX_METAL = "bbox_metal"
     BBOX_LABEL = "bbox_label"
     BBOX_METAL_1 = "bbox_metal_1"
     BBOX_METAL_2 = "bbox_metal_2"
     BBOX_RIB_SI = "bbox_rib_si"
     TRENCH = "trench"
+    VGROOVE = "vgroove"
+    PORT = "port"
 
 
 @fix_dataclass_init_docs
@@ -159,9 +167,10 @@ class ProcessStep:
         thickness: The thickness spec for the process step.
         mat: Material (relevant to the non-etch :code:`ProcessOp.grow` and :code:`ProcessOp.dope` process ops)
         layer: The device layer corresponding to the process step
-            (should NOT vary by foundry, use CommonLayer interface).
+            (should NOT vary by foundry, use CommonLayer interface unless layers are hyper-specific).
         gds_label: The GDS label used for GDS file creation of the device (SHOULD vary by foundry).
         start_height: The starting height for the process step.
+        inverse: Whether to assign this process step as an inverse (data clear) mask
 
     """
     process_op: ProcessOp
@@ -170,6 +179,7 @@ class ProcessStep:
     layer: str
     gds_label: LayerLabel
     start_height: Optional[float] = None
+    inverse: bool = False
 
 
 @fix_dataclass_init_docs
@@ -186,13 +196,16 @@ class Foundry:
         height: Overall height of the foundry stack.
         cladding: The cladding material used by the foundry (usually OXIDE). This material will more-or-less
             cover the entire
-        port_layers: A list of common layers for extracting the appropriate layers.
+        port_layers: A list of common layers for extracting the appropriate ports.
+        use_port_boxes: Whether the foundry uses boxes to indicate port widths (useful for loading PDKs).
 
     """
     stack: List[ProcessStep]
     height: float
     cladding: Material = None
     port_layers: List[CommonLayer] = field(default_factory=list)
+    use_port_boxes: bool = True
+    use_port_layers: bool = True  # preserve the port layer given by the foundry when reading GDS
 
     def __post_init__(self):
         start_height = 0

@@ -7,8 +7,7 @@ from typing import BinaryIO
 
 import numpy as np
 
-from shapely.affinity import rotate
-from shapely.geometry import MultiPolygon, Point, Polygon
+from shapely.geometry import MultiPolygon, Polygon
 from shapely.ops import unary_union
 import networkx as nx
 
@@ -18,7 +17,7 @@ from .geometry import Geometry
 from .pattern import Box, Pattern, Port
 from .transform import GDSTransform, rotate2d
 from .typing import Dict, Float2, Int2, List, Optional, Tuple, Union
-from .utils import fix_dataclass_init_docs, min_aspect_bounds, poly_bounds, poly_points, PORT_LABEL_LAYER, PORT_LAYER, \
+from .utils import fix_dataclass_init_docs, min_aspect_bounds, poly_bounds, poly_points, PORT_GDS_LABEL, PORT_LAYER, \
     shapely_patch
 
 try:
@@ -45,7 +44,8 @@ class Device:
     :code:`Trimesh` may be used to show a full 3D model of the device. Additionally, a :code:`Device` can be mapped
     to a GDSPY or Nazca cell.
 
-    A :code:`Device` is more or less the same as a GDS cell, including all of the same functionality including
+    A :code:`Device` is more or less the same as a GDS cell, including hierarchical design and transform data for
+    subcells in the hierarchy.
 
 
     Attributes:
@@ -326,9 +326,7 @@ class Device:
             for pattern, _ in self.pattern_to_layer:
                 pattern.rotate(angle, origin)
             self.layer_to_polys = self._update_layers()
-            port_to_point = {name: rotate(Point(*port.xy), angle, origin) for name, port in self.port.items()}
-            self.port = {name: Port(float(point.x), float(point.y), np.mod(self.port[name].a + angle, 360))
-                         for name, point in port_to_point.items()}
+            self.port = {name: port.rotate(angle, origin) for name, port in self.port.items()}
         return self
 
     def reflect(self, center: Float2 = (0, 0), horiz: bool = False) -> "Device":
@@ -379,7 +377,8 @@ class Device:
                 Note that the transform to apply can be the form of an xya (x, y, angle) tuple or a port.
             from_port: The port name corresponding to child device's port that should be connected according to
                 :code:`placement`. This effectively acts like a reference position/orientation for placement.
-            flip_y: Whether to flip the design vertically (to be applied to all GDS transforms!)
+            flip_y: Whether to flip the design vertically (to be applied to all GDS transforms,
+                UNLESS placement is a GDS transform, in which case this arg is ignored)
             return_ports: Return the ports of the placed device according to the format of placement.
 
         Returns:
@@ -388,6 +387,7 @@ class Device:
         """
         if device.name not in self.child_to_device:
             self.child_to_device[device.name] = device
+
         if not isinstance(placement, list) and not isinstance(placement, tuple) and not isinstance(placement,
                                                                                                    np.ndarray):
             placement = [placement]
@@ -401,11 +401,17 @@ class Device:
         elif not isinstance(from_port, Port):
             raise TypeError(f"from_port must be str, tuple or Port type but got {type(from_port)}.")
 
-        transform = np.array([from_port.orient_xya(p.xya) if isinstance(p, Port) else from_port.orient_xya(p)
-                              for p in placement])
-        transform = np.hstack((transform, np.ones((len(placement), 1)) * flip_y))
-        self.child_to_transform[device.name] = GDSTransform.parse(transform,
-                                                                  self.child_to_transform.get(device.name))
+        # synthesize placement and from_port into parseable GDS transform table
+        transform = []
+        for p in placement:
+            if isinstance(p, Port):
+                transform.append(from_port.orient_xyaf(p.xya, flip_y=flip_y))
+            elif isinstance(p, GDSTransform):
+                p.set_xyaf(from_port.orient_xyaf(p.xya))  # if GDS transform is supplied, ignore the flip_y argument
+                transform.append(p)
+            else:
+                transform.append(from_port.orient_xyaf(p, flip_y=flip_y))
+        self.child_to_transform[device.name] = GDSTransform.parse(transform, self.child_to_transform.get(device.name))
         if return_ports:
             placed_ports = []
             for t in transform:
@@ -562,7 +568,8 @@ class Device:
                 continue
             color = foundry.color(layer)
             if color is None:
-                raise ValueError(f"The layer {layer} does not exist in the foundry stack, so could not find a color.")
+                raise ValueError(f"The layer {layer} does not exist in the foundry stack, so could not find a color."
+                                 f"Make sure you specify the correct foundry.")
             pattern = Pattern(*multipoly)
             plots_to_overlay.append(pattern.hvplot(color, layer, alpha, plot_ports=False))
         for name, port in self.port.items():
@@ -682,19 +689,27 @@ class Device:
         port_angle_options = (180, -90, 0, 90)
         # find the port closest to the labels
         for label in labels:
-            bbox = None
-            for port_layer in foundry.port_layers:
-                if label.layer[0] == foundry.layer_to_gds_label[port_layer][0]:
-                    bbox = min(port_boxes[port_layer],
-                               key=lambda p: np.linalg.norm((p[:2] + p[2:]) / 2 / user_units_per_db_unit - label.xy))
-            if bbox is not None:
-                side = np.argmin(np.abs(np.array(bbox) - np.array(overall_bounds)))
-                side = side[0] if isinstance(side, np.ndarray) else side
+            layer = foundry.gds_label_to_layer.get(label.layer, CommonLayer.PORT)
+            if foundry.use_port_boxes:
+                bbox = None
+                for port_layer in foundry.port_layers:
+                    if label.layer[0] == foundry.layer_to_gds_label[port_layer][0] and port_layer in port_boxes:
+                        bbox = min(port_boxes[port_layer],
+                                   key=lambda p: np.linalg.norm((p[:2] + p[2:]) / 2 / user_units_per_db_unit - label.xy))
+                if bbox is not None:
+                    side = np.argmin(np.abs(np.array(bbox) - np.array(overall_bounds)))
+                    side = side[0] if isinstance(side, np.ndarray) else side
+                    angle = port_angle_options[side]
+                    width = bbox[2] - bbox[0] if side % 2 else bbox[3] - bbox[1]
+                    x = (bbox[0] + bbox[2]) / 2 if side % 2 else bbox[side]
+                    y = bbox[side] if side % 2 else (bbox[1] + bbox[3]) / 2
+                    port[label.string.decode("utf-8")] = Port(x, y, angle, width, layer=layer)
+            else:
+                x, y = label.xy.T.squeeze() * user_units_per_db_unit
+                side = np.argmin(np.abs(np.array((x, y, x, y)) - np.array(overall_bounds)))
+                side = int(side[0]) if isinstance(side, np.ndarray) else side
                 angle = port_angle_options[side]
-                width = bbox[2] - bbox[0] if side % 2 else bbox[3] - bbox[1]
-                x = (bbox[0] + bbox[2]) / 2 if side % 2 else bbox[side]
-                y = bbox[side] if side % 2 else (bbox[1] + bbox[3]) / 2
-                port[label.string.decode("utf-8")] = Port(x, y, angle, width)
+                port[label.string.decode("utf-8")] = Port(x, y, angle, layer=layer)
         return port
 
     @classmethod
@@ -739,7 +754,7 @@ class Device:
                     elif isinstance(obj, klamath.elements.Reference):
                         x, y = obj.xy[0] * header.user_units_per_db_unit
                         references[name].append((obj.struct_name.decode("utf-8"),
-                                                 GDSTransform(x, y, obj.angle_deg, obj.mag, obj.invert_y)))
+                                                 GDSTransform(x, y, obj.angle_deg, obj.invert_y, obj.mag)))
                 cell = cls(name, pattern_to_layer)
                 cell.port = cell._pdk_ports(labels, foundry, header.user_units_per_db_unit)
                 cells[name] = cell
@@ -773,8 +788,8 @@ class Device:
             ]
         for name, port in self.port.items():
             elements += [
-                klamath.elements.Text(layer=(PORT_LABEL_LAYER, 0),
-                                      xy=(port.xy - port.tangent(port.w)) / user_units_per_db_unit,
+                klamath.elements.Text(layer=foundry.layer_to_gds_label.get(port.layer, PORT_GDS_LABEL),
+                                      xy=port.xy / user_units_per_db_unit,
                                       string=name.encode('utf-8'), properties={},
                                       presentation=0, angle_deg=0, invert_y=False, width=0, path_type=0, mag=1),
                 klamath.elements.Boundary(

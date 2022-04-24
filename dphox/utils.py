@@ -11,7 +11,7 @@ DEFAULT_RESOLUTION = 99
 DECIMALS = 6
 
 PORT_LAYER = 1
-PORT_LABEL_LAYER = 1002
+PORT_GDS_LABEL = (1002, 0)
 
 
 def poly_points(geom: Polygon, decimals: Optional[int] = None):

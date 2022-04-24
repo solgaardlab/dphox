@@ -122,6 +122,21 @@ class GDSTransform(AffineTransform):
                                             rotate2d(np.radians(self.angle)),
                                             translate2d((self.x, self.y))))
 
+    @property
+    def xya(self):
+        return np.array((self.x, self.y, self.angle))
+
+    @property
+    def xyaf(self):
+        return np.array((self.x, self.y, self.angle, self.flip_y))
+
+    def set_xya(self, xya: Union[np.ndarray, Tuple[float, float, float]]):
+        self.x, self.y, self.angle = xya
+
+    def set_xyaf(self, xyaf: Union[np.ndarray, Tuple[float, float, float, bool]]):
+        self.x, self.y, self.angle = xyaf[:3]
+        self.flip_y = bool(xyaf[-1])
+
     @classmethod
     def parse(cls, transform: Optional[Union["GDSTransform", Tuple, np.ndarray]],
                    existing_transform: Optional[Tuple[AffineTransform, List["GDSTransform"]]] = None) -> \
