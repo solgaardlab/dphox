@@ -1,5 +1,5 @@
 from collections import namedtuple
-from typing import Union, Tuple, List, Optional, Dict, Callable, Iterable
+from typing import Callable, Tuple, Union
 import numpy as np
 from shapely.geometry import Polygon, MultiPolygon, LineString
 

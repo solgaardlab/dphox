@@ -93,7 +93,7 @@ setting necessary because `dphox` will be in your environment's `site-packages` 
 
 ## Requirements
 
-You will need `python>=3.8` as well as the following (note these requirements are automatically installed):
+You will need `python>=3.9` as well as the following (note these requirements are automatically installed):
 
 
 
@@ -101,7 +101,7 @@ You will need `python>=3.8` as well as the following (note these requirements ar
 numpy==1.21.2
 scipy==1.7.1
 shapely==1.7.0
-klamath==1.1
+klamath>=1.2
 ```
 
 These will be installed via `pip` automatically if not already installed.

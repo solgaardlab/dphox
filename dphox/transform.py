@@ -1,6 +1,7 @@
 from dataclasses import dataclass
+from typing import Iterable, List, Optional
 
-from .typing import Float2, Float4, Tuple, List, Union, Iterable, Optional
+from .typing import Float2, Tuple, Union
 from .utils import DECIMALS, fix_dataclass_init_docs
 
 import numpy as np
@@ -139,12 +140,13 @@ class GDSTransform(AffineTransform):
 
     @classmethod
     def parse(cls, transform: Optional[Union["GDSTransform", Tuple, np.ndarray]],
-                   existing_transform: Optional[Tuple[AffineTransform, List["GDSTransform"]]] = None) -> \
+              existing_transform: Optional[Tuple[AffineTransform, List["GDSTransform"]]] = None) -> \
             Tuple[AffineTransform, List["GDSTransform"]]:
         """Turns representations like :code:`(x, y, angle)` or a numpy array into convenient GDS/affine transforms.
 
         Args:
             transform: The transform array in the order :code:`(x, y, angle, mag)` or just a GDS transform.
+            existing_transform: Given an existing transform(s), apply the new transform on top of the existing one.
 
         Returns:
             A tuple of :code:`AffineTransform` representation and a list of GDS transforms for gds output.

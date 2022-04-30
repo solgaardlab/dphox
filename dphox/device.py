@@ -3,7 +3,7 @@ import hashlib
 from collections import defaultdict
 from copy import deepcopy, deepcopy as copy
 from dataclasses import dataclass
-from typing import BinaryIO
+from typing import BinaryIO, List, Optional, Dict
 
 import numpy as np
 
@@ -15,8 +15,8 @@ from .foundry import CommonLayer, FABLESS, Foundry
 
 from .geometry import Geometry
 from .pattern import Box, Pattern, Port
-from .transform import GDSTransform, rotate2d
-from .typing import Dict, Float2, Int2, List, Optional, Tuple, Union
+from .transform import GDSTransform
+from .typing import Float2, Int2, Tuple, Union
 from .utils import fix_dataclass_init_docs, min_aspect_bounds, poly_bounds, poly_points, PORT_GDS_LABEL, PORT_LAYER, \
     shapely_patch
 
@@ -30,7 +30,7 @@ KLAMATH_IMPORTED = True
 try:
     import klamath
     from klamath.library import FileHeader
-except:
+except ImportError:
     KLAMATH_IMPORTED = False
 
 GDSTransformOrTuple = Union[GDSTransform, Tuple, np.ndarray, Port, List[Port]]

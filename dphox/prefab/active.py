@@ -1,6 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Tuple, Optional
+from typing import Tuple, List, Union
 
 import numpy as np
 
@@ -10,7 +10,6 @@ from .passive import DC, RibDevice, TSplitter
 from ..pattern import Box, MEMSFlexure, Pattern, Port
 from ..parametric import straight
 from ..transform import GDSTransform
-from ..typing import List, Union
 from ..utils import fix_dataclass_init_docs
 
 

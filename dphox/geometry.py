@@ -1,8 +1,8 @@
-from copy import deepcopy as copy
 
 from .port import Port
 from .transform import AffineTransform, rotate2d, translate2d, reflect2d, skew2d, scale2d
-from .typing import Union, Float4, Float2, List, Dict, Optional, Tuple
+from .typing import Union, Float4, Float2
+from typing import List, Dict, Optional, Tuple
 
 import numpy as np
 

@@ -1,13 +1,12 @@
-from typing import Callable
 
 import numpy as np
 from shapely.geometry import LineString, MultiLineString
-from shapely.ops import unary_union
+from typing import Iterable, List, Optional, Union
 
 from .pattern import Pattern
 from .geometry import Geometry
 from .port import Port
-from .typing import CurveLike, CurveTuple, Float4, Iterable, List, Optional, PathWidth, Union
+from .typing import CurveLike, CurveTuple, Float4, PathWidth
 from .utils import DECIMALS, linestring_points, MAX_GDS_POINTS, min_aspect_bounds
 
 

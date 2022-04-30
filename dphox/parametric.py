@@ -3,7 +3,7 @@ from scipy.special import fresnel
 
 from .path import Curve, link, straight
 from .transform import translate2d
-from .typing import Callable, CurveTuple, Float2, Optional, Tuple, Union
+from .typing import Callable, CurveTuple, Float2, Tuple, Union
 from .utils import DEFAULT_RESOLUTION
 
 

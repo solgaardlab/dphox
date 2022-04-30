@@ -1,12 +1,11 @@
-from typing import Union
+from typing import Union, Optional
 
 import numpy as np
 
-from .parametric import arc, circular_bend, link, spiral, turn
+from .parametric import circular_bend, link, spiral, turn
 from .path import Curve
 from .pattern import Pattern
 from .port import Port
-from .typing import Optional
 from .utils import DEFAULT_RESOLUTION
 
 

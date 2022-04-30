@@ -3,6 +3,7 @@ from .prefab.active import MZI, LocalMesh, Via, ThermalPS, LateralNemsPS, PullOu
 from .prefab.passive import DC, TapDC, RibDevice, FocusingGrating, StraightGrating, Cross, Interposer, Array, TSplitter
 from .route import manhattan_route, turn_connect, loopify, spiral_delay
 from .pattern import Pattern, Circle, Ellipse, Box, Sector, Port, text
+from .path import Curve
 from .device import Device
 from .parametric import cubic_taper_fn, dc_path, grating_arc, straight, ring, turn, link, loopback, trombone, \
     parametric_curve, cubic_bezier, cubic_taper, circular_bend, euler_bend, spiral, bezier_dc, bezier_sbend, \

@@ -3,8 +3,9 @@ from enum import Enum
 import numpy as np
 from dataclasses import field, dataclass
 from shapely.geometry import box, MultiPolygon, Polygon
+from typing import List, Optional, Dict
 
-from .typing import Dict, Float3, LayerLabel, List, Optional
+from .typing import Float3, LayerLabel
 from .utils import fix_dataclass_init_docs
 
 
@@ -251,7 +252,7 @@ class Foundry:
         """
 
         try:
-            import triangle
+            pass
         except ImportError:
             raise ImportError("Fabrication requires the triangle module to be compiled with trimesh")
         import trimesh

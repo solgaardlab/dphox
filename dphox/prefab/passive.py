@@ -1,15 +1,13 @@
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Optional, Union
 
 import numpy as np
-from shapely.geometry import MultiPolygon
 
 from ..device import Device
 from ..foundry import AIR, CommonLayer, SILICON
-from ..parametric import cubic_taper, cubic_taper_fn, dc_path, grating_arc, link, loopback, straight, taper, trombone, \
-    turn
+from ..parametric import cubic_taper, cubic_taper_fn, dc_path, grating_arc, link, loopback, straight, trombone, turn
 from ..pattern import Box, Pattern, Port
-from ..typing import Float2, Int2, Optional, Union
+from ..typing import Float2, Int2
 from ..utils import fix_dataclass_init_docs
 
 
