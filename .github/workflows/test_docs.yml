@@ -23,7 +23,9 @@ jobs:
         run: |
           pip install -r requirements_dev.txt
           pip install .
+          pip install -r doc/source/requirements.txt
           sudo apt install pandoc
+          sudo apt-get install dvipng texlive-latex-extra texlive-fonts-recommended cm-super
       - name: Test documentation
         run: |
           cd doc/source

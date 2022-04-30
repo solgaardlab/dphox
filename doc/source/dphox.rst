@@ -4,10 +4,18 @@ dphox package
 Submodules
 ----------
 
-dphox.active module
+dphox.prefab.active module
 -------------------
 
-.. automodule:: dphox.active
+.. automodule:: dphox.prefab.active
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+dphox.prefab.passive module
+-------------------
+
+.. automodule:: dphox.prefab.passive
    :members:
    :undoc-members:
    :show-inheritance:
@@ -40,14 +48,6 @@ dphox.geometry module
 ---------------------
 
 .. automodule:: dphox.geometry
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-dphox.passive module
---------------------
-
-.. automodule:: dphox.passive
    :members:
    :undoc-members:
    :show-inheritance:

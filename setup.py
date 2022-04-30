@@ -10,8 +10,9 @@ setup(
     install_requires=[
         'numpy>=1.19',
         'scipy==1.7.1',
-        'shapely>=1.7.1',
-        'klamath>=1.2'
+        'shapely==1.7.1',
+        'klamath>=1.2',
+        'networkx>=2.4'
     ],
     extras_require={
         'all': [

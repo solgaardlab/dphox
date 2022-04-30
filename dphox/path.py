@@ -54,7 +54,7 @@ class Curve(Geometry):
 
         """
 
-        if path: 
+        if path:
             return np.cumsum(self.lengths())
         else:
             return [np.cumsum(p) for p in self.lengths(path=False)]
@@ -70,7 +70,7 @@ class Curve(Geometry):
 
         """
 
-        if path: 
+        if path:
             return np.linalg.norm(np.diff(self.points), axis=0)
         else:
             return [np.linalg.norm(np.diff(p), axis=0) for p in self.geoms]
@@ -176,7 +176,6 @@ class Curve(Geometry):
         return Curve([_interp(g, t, p, length)
                       for g, t, p, length in zip(self.geoms, self.tangents, self.shapely.geoms, lengths)])
 
-
     def path(self, width: Union[float, Iterable[PathWidth]] = 1, offset: Union[float, Iterable[PathWidth]] = 0,
              decimals: int = DECIMALS) -> Pattern:
         """Path (pattern) converted from this curve using width and offset specifications.
@@ -235,7 +234,10 @@ class Curve(Geometry):
         alternate_color = alternate_color or color
         b = min_aspect_bounds(self.bounds) if bounds is None else bounds
 
-        plots_to_overlay = [hv.Curve((curve[0], curve[1])).opts(data_aspect=1, frame_height=200, line_width=line_width, ylim=(b[1], b[3]), xlim=(b[0], b[2]), color=(color, alternate_color)[i % 2], tools=['hover']) for i, curve in enumerate(self.geoms)]
+        plots_to_overlay = [hv.Curve((curve[0], curve[1])).opts(data_aspect=1, frame_height=200, line_width=line_width,
+                                                                ylim=(b[1], b[3]), xlim=(b[0], b[2]),
+                                                                color=(color, alternate_color)[i % 2], tools=['hover'])
+                            for i, curve in enumerate(self.geoms)]
 
         if plot_ports:
             plots_to_overlay.extend(port.hvplot(name) for name, port in self.port.items())

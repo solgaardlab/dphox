@@ -1,10 +1,9 @@
 import numpy as np
+from typing import List, Optional, Union
 from shapely.geometry import GeometryCollection, LineString, MultiPolygon, Polygon
 from shapely.ops import split
-from matplotlib.path import Path
-from matplotlib.patches import PathPatch
 
-from .typing import Float4, List, Optional, Union
+from .typing import Float4
 
 MAX_GDS_POINTS = 8096
 DEFAULT_RESOLUTION = 99
@@ -89,7 +88,7 @@ def split_holes(geom: Union[Polygon, MultiPolygon, GeometryCollection, np.ndarra
     elif not isinstance(geom, MultiPolygon) and not isinstance(geom, GeometryCollection):
         raise TypeError("The input geometry is not either a shapely Polygon, MultiPolygon or ndarray.")
     for geom_poly in geom.geoms:
-        if holes := geom_poly.interiors:
+        if geom_poly.interiors:
             c = geom_poly.interiors[0].centroid
             minx, miny, maxx, maxy = geom_poly.bounds
             splitter = LineString([(c.x, miny), (c.x, maxy)]) if along_y else LineString([(minx, c.y), (maxx, c.y)])
@@ -197,6 +196,9 @@ def shapely_patch(geom: Union[MultiPolygon, Polygon], **kwargs):
         The Matplotlib `PathPatch` for plotting in matplotlib.
 
     """
+    from matplotlib.path import Path
+    from matplotlib.patches import PathPatch
+
     if geom.geom_type == 'Polygon':
         polygon = [Polygon(geom)]
     elif geom.geom_type in ['MultiPolygon', 'GeometryCollection']:
@@ -207,10 +209,12 @@ def shapely_patch(geom: Union[MultiPolygon, Polygon], **kwargs):
     if len(polygon) == 0:
         return None
 
-    vertices = np.vstack([np.vstack([np.array(poly.exterior)[:, :2]] + [np.array(hole)[:, :2] for hole in poly.interiors])
-                          for poly in polygon]).squeeze()
-    codes = sum((([Path.MOVETO] + [Path.LINETO] * (len(poly.exterior.coords) - 1) + sum(([Path.MOVETO] + [Path.LINETO] * (len(hole.coords) - 1) for hole in poly.interiors), [])) for poly in polygon), [])
-
+    vertices = np.vstack(
+        [np.vstack([np.array(poly.exterior)[:, :2]] + [np.array(hole)[:, :2] for hole in poly.interiors])
+         for poly in polygon]).squeeze()
+    codes = sum([
+        ([Path.MOVETO] + [Path.LINETO] * (len(poly.exterior.coords) - 1) + sum(([Path.MOVETO] + [Path.LINETO] * (len(hole.coords) - 1)
+                                                                                for hole in poly.interiors), []))
+        for poly in polygon], [])
 
     return PathPatch(Path(vertices, codes), **kwargs)
-

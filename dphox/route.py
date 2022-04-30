@@ -149,4 +149,3 @@ def loopify(curve: Curve, radius: float, euler: float = 0, resolution: int = DEF
 
     """
     return link(curve, turn_connect(curve.port['b0'], curve.port['a0'], radius, euler=euler, resolution=resolution))
-

@@ -228,8 +228,7 @@ class Foundry:
             if step.layer == layer:
                 return step.mat.color
 
-    def fabricate(self, layer_to_geom: Dict[str, MultiPolygon], init_device: Optional["Scene"] = None,
-                  exclude_layer: Optional[List[CommonLayer]] = None) -> "Scene":
+    def fabricate(self, layer_to_geom: Dict[str, MultiPolygon], exclude_layer: Optional[List[CommonLayer]] = None):
         """Fabricate a device based on a layer-to-geometry dict, :code:`Foundry`, and initial device (type :code:`Scene`).
 
         This method is fairly rudimentary and will not implement things like conformal deposition. At the moment,
@@ -239,11 +238,10 @@ class Foundry:
 
         Note:
             Custom fabricate methods may be built if this foundry class is extended.
-            However, the same template is recommended
+            However, the same template is recommended.
 
         Args:
             layer_to_geom: A dictionary mapping each layer to the `full` Shapely geometry for that layer.
-            init_device: The initial device on which to start fabrication  (useful for post-processing simulations).
             exclude_layer: Exclude all layers in this list.
 
         Returns:
@@ -252,12 +250,11 @@ class Foundry:
         """
 
         try:
-            pass
+            import trimesh
+            from trimesh.creation import extrude_polygon
+            from trimesh.scene import Scene
         except ImportError:
             raise ImportError("Fabrication requires the triangle module to be compiled with trimesh")
-        import trimesh
-        from trimesh.creation import extrude_polygon
-        from trimesh.scene import Scene
 
         def _shapely_to_mesh_from_step(_geom: MultiPolygon, _meshes: List["trimesh.Trimesh"], _step: ProcessStep):
             for _poly in _geom.geoms:
@@ -266,8 +263,7 @@ class Foundry:
             _mesh = trimesh.util.concatenate(_meshes) if _meshes else trimesh.Trimesh()
             _mesh.visual.face_colors = _step.mat.color
             return _mesh
-
-        device = Scene() if init_device is None else init_device
+        device = Scene()
         prev_mat: Optional[Material] = None
         bound_list = np.array([p.bounds for _, p in layer_to_geom.items()]).T
         xy_extent = np.min(bound_list[0]), np.min(bound_list[1]), np.max(bound_list[2]), np.max(bound_list[3])
@@ -364,3 +360,5 @@ FABLESS = Foundry(
     ],
     height=5
 )
+
+DEFAULT_FOUNDRY = FABLESS

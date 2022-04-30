@@ -155,8 +155,7 @@ class GDSTransform(AffineTransform):
         gds_transforms = _parse_gds_transform(transform)
         parallel_transform = np.array([t.transform for t in gds_transforms])
         if existing_transform is not None:
-            return AffineTransform(np.vstack((existing_transform[0].transform, parallel_transform))),\
-                   existing_transform[1] + gds_transforms
+            return AffineTransform(np.vstack((existing_transform[0].transform, parallel_transform))), existing_transform[1] + gds_transforms
         else:
             return AffineTransform(parallel_transform), gds_transforms
 
@@ -168,7 +167,8 @@ def _parse_gds_transform(transform):
     elif isinstance(transform, GDSTransform):
         gds_transforms = [transform]
     elif isinstance(transform, tuple) or isinstance(transform, list) or isinstance(transform, np.ndarray):
-        gds_transforms = [GDSTransform(*transform)] if len(transform) <= 5 and all(np.isscalar(v) for v in transform) else sum((_parse_gds_transform(t) for t in transform), [])
+        gds_transforms = [GDSTransform(*transform)] if len(transform) <= 5 and all(np.isscalar(v) for v in transform)\
+            else sum((_parse_gds_transform(t) for t in transform), [])
 
     else:
         raise TypeError("Expected transform to be of type GDSTransform, or tuple or ndarray representing GDS"

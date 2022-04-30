@@ -6,11 +6,11 @@ from shapely.geometry import box, GeometryCollection, LineString, LinearRing, Po
 from shapely.ops import split, unary_union, polygonize
 from copy import deepcopy as copy
 
-from .foundry import CommonLayer, Foundry, FABLESS
+from .foundry import CommonLayer, Foundry, DEFAULT_FOUNDRY
 from .geometry import Geometry
 from .port import Port
-from .typing import Float2, Float4, List, MultiPolygon, Optional, Polygon, PolygonLike, Shape, Spacing, \
-    Union, Iterable
+from typing import List, Optional, Iterable, Union
+from .typing import Float2, Float4, MultiPolygon, Polygon, PolygonLike, Shape, Spacing
 from .utils import DECIMALS, fix_dataclass_init_docs, min_aspect_bounds, poly_points, shapely_patch, split_holes
 
 SHAPELYVEC_IMPORTED = True
@@ -297,7 +297,7 @@ class Pattern(Geometry):
 
         return hv.Overlay(plots_to_overlay)
 
-    def trimesh(self, foundry: Foundry = FABLESS, layer: CommonLayer = CommonLayer.RIDGE_SI):
+    def trimesh(self, foundry: Union[str, Foundry] = DEFAULT_FOUNDRY, layer: CommonLayer = CommonLayer.RIDGE_SI):
         """Fabricate this pattern based on a :code:`Foundry`.
 
         This method is fairly rudimentary and will not implement things like conformal deposition. At the moment,

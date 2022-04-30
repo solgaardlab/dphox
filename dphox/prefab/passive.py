@@ -124,7 +124,7 @@ class Array(Pattern):
         self.pitch = (self.pitch, self.pitch) if np.isscalar(self.pitch) else self.pitch
         super().__init__([self.unit.copy.translate(i * self.pitch[0], j * self.pitch[1])
                           for i in range(self.grid_shape[0]) for j in range(self.grid_shape[1])
-                         ])
+                          ])
 
 
 @fix_dataclass_init_docs
@@ -365,8 +365,7 @@ class Interposer(Pattern):
 
         for idx in range(self.n):
             init_pos[idx] = np.asarray((0, self.init_pitch * idx))
-            length_diff = (angled_length - x_length) * idx if idx < mid else (angled_length - x_length) * (
-                    self.n - 1 - idx)
+            length_diff = (angled_length - x_length) * idx if idx < mid else (angled_length - x_length) * (self.n - 1 - idx)
             segments = []
             trombone_section = [trombone(self.trombone_radius,
                                          length_diff / 2 / self.num_trombones, self.euler)] * self.num_trombones

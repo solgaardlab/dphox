@@ -11,7 +11,7 @@ from shapely.geometry import MultiPolygon, Polygon
 from shapely.ops import unary_union
 import networkx as nx
 
-from .foundry import CommonLayer, FABLESS, Foundry
+from .foundry import CommonLayer, DEFAULT_FOUNDRY, Foundry
 
 from .geometry import Geometry
 from .pattern import Box, Pattern, Port
@@ -61,7 +61,8 @@ class Device:
     def __init__(self, name: str, devices: List[Union[Tuple[Pattern, Union[int, str]], "Device"]] = None):
         self.name = name
         self.pattern_to_layer = [] if devices is None else devices
-        self.pattern_to_layer = sum((p.pattern_to_layer if isinstance(p, Device) else [p] for p in self.pattern_to_layer), [])
+        self.pattern_to_layer = sum(
+            (p.pattern_to_layer if isinstance(p, Device) else [p] for p in self.pattern_to_layer), [])
 
         self.layer_to_polys = self._update_layers()
         self.child_to_device: Dict[str, Device] = {}  # children in this dictionary
@@ -175,14 +176,17 @@ class Device:
         }
 
     def __hash__(self):
-        return hashlib.sha256({self.name: {
-            layer: p.__hash__() for layer, p in self.layer_to_pattern
-        },
-            f'{self.name}_children': {
-                name: child.__hash__() + hashlib.sha256(self.child_to_transform[name][0])
-                for name, child in self.child_to_device
+        return hashlib.sha256(
+            {
+                self.name: {
+                    layer: p.__hash__() for layer, p in self.layer_to_pattern
+                },
+                f'{self.name}_children': {
+                    name: child.__hash__() + hashlib.sha256(self.child_to_transform[name][0])
+                    for name, child in self.child_to_device
+                }
             }
-        })
+        )
 
     @property
     def hash(self):
@@ -410,7 +414,8 @@ class Device:
                 transform.append(from_port.orient_xyaf(p, flip_y=flip_y))
         self.child_to_transform[device.name] = GDSTransform.parse(transform, self.child_to_transform.get(device.name))
         if return_ports:
-            placed_ports = [{pname: port.copy.transform_xyaf(t) for pname, port in device.port.items()} for t in transform]
+            placed_ports = [{pname: port.copy.transform_xyaf(t) for pname, port in device.port.items()} for t in
+                            transform]
 
             return placed_ports[0] if len(placed_ports) == 1 else placed_ports
 
@@ -441,7 +446,7 @@ class Device:
         return copy(self)
 
     @property
-    def gdspy_cell(self, foundry: Foundry = FABLESS):
+    def gdspy_cell(self, foundry: Foundry = DEFAULT_FOUNDRY):
         """Turn this multilayer into a gdspy cell.
 
         Args:
@@ -462,7 +467,7 @@ class Device:
                 )
         return cell
 
-    def nazca_cell(self, foundry: Foundry = FABLESS) -> "nd.Cell":
+    def nazca_cell(self, foundry: Foundry = DEFAULT_FOUNDRY) -> "nd.Cell":
         """Turn this multilayer into a nazca cell (need to install nazca for this to work).
 
         Args:
@@ -497,7 +502,7 @@ class Device:
         self.pattern_to_layer.append((pattern, layer))
         self.layer_to_polys = self._update_layers()
 
-    def plot(self, ax: Optional = None, foundry: Foundry = FABLESS,
+    def plot(self, ax: Optional = None, foundry: Foundry = DEFAULT_FOUNDRY,
              exclude_layer: Optional[List[CommonLayer]] = None, alpha: float = 0.5,
              plot_ports: bool = False):
         """Plot this device on a matplotlib plot.
@@ -542,7 +547,7 @@ class Device:
         ax.set_ylabel(r'$y$ ($\mu$m)')
         ax.set_aspect('equal')
 
-    def hvplot(self, foundry: Foundry = FABLESS, exclude_layer: Optional[List[CommonLayer]] = None, alpha: float = 0.5):
+    def hvplot(self, foundry: Foundry = DEFAULT_FOUNDRY, exclude_layer: Optional[List[CommonLayer]] = None, alpha: float = 0.5):
         """Plot this device on a holoviews plot.
 
         Args:
@@ -603,7 +608,7 @@ class Device:
         b = self.bounds  # (minx, miny, maxx, maxy)
         return b[2] - b[0], b[3] - b[1]  # (maxx - minx, maxy - miny)
 
-    def trimesh(self, foundry: Foundry = FABLESS, exclude_layer: Optional[List[CommonLayer]] = None):
+    def trimesh(self, foundry: Foundry = DEFAULT_FOUNDRY, exclude_layer: Optional[List[CommonLayer]] = None):
         """Fabricate this device based on a :code:`Foundry`.
 
         This method is fairly rudimentary and will not implement things like conformal deposition. At the moment,
@@ -691,7 +696,8 @@ class Device:
                 for port_layer in foundry.port_layers:
                     if label.layer[0] == foundry.layer_to_gds_label[port_layer][0] and port_layer in port_boxes:
                         bbox = min(port_boxes[port_layer],
-                                   key=lambda p: np.linalg.norm((p[:2] + p[2:]) / 2 / user_units_per_db_unit - label.xy))
+                                   key=lambda p: np.linalg.norm(
+                                       (p[:2] + p[2:]) / 2 / user_units_per_db_unit - label.xy))
                 if bbox is not None:
                     side = np.argmin(np.abs(np.array(bbox) - np.array(overall_bounds)))
                     side = side[0] if isinstance(side, np.ndarray) else side
@@ -709,7 +715,7 @@ class Device:
         return port
 
     @classmethod
-    def from_gds(cls, filepath: str, foundry: Foundry = FABLESS) -> Dict[str, "Device"]:
+    def from_gds(cls, filepath: str, foundry: Foundry = DEFAULT_FOUNDRY) -> Dict[str, "Device"]:
         """Generate non-annotated device from GDS file based on the provided layer map in :code:`foundry`.
 
         Args:
@@ -761,7 +767,7 @@ class Device:
                     cells[node].place(cells[cell_name], ref)
         return cells
 
-    def gds_elements(self, foundry: Foundry = FABLESS, user_units_per_db_unit: float = 0.001):
+    def gds_elements(self, foundry: Foundry = DEFAULT_FOUNDRY, user_units_per_db_unit: float = 0.001):
         """Use `klamath <https://mpxd.net/code/jan/klamath/src/branch/master/klamath>`_ to convert to GDS elements
         using a foundry object and user units.
 
@@ -795,7 +801,7 @@ class Device:
             ]
         return elements
 
-    def to_gds_stream(self, stream: BinaryIO, foundry: Foundry = FABLESS, user_units_per_db_unit: float = 0.001):
+    def to_gds_stream(self, stream: BinaryIO, foundry: Foundry = DEFAULT_FOUNDRY, user_units_per_db_unit: float = 0.001):
         """Use `klamath <https://mpxd.net/code/jan/klamath/src/branch/master/klamath>`_ to add device struct to GDS.
 
         Args:
@@ -823,7 +829,7 @@ class Device:
                 )
         klamath.library.write_struct(stream, self.name.encode('utf-8'), elements)
 
-    def to_gds(self, filepath: str, foundry: Foundry = FABLESS, user_units_per_db_unit: float = 0.001,
+    def to_gds(self, filepath: str, foundry: Foundry = DEFAULT_FOUNDRY, user_units_per_db_unit: float = 0.001,
                meters_per_db_unit: float = 1e-9):
         """Use `klamath <https://mpxd.net/code/jan/klamath/src/branch/master/klamath>`_ to convert to GDS
         using a foundry object and a provided :code:`filepath`.
@@ -903,4 +909,3 @@ class Via(Device):
             'n': Port(self.center[0], self.bounds[3], 90),
             'c': Port(*self.center)
         }
-

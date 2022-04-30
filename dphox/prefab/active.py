@@ -615,8 +615,3 @@ class HTree(Device):
     def fill_ports(self, device: Device):
         self.place(device, [port for pname, port in self.port.items() if 'b' in pname])
         self.place(device, [port for pname, port in self.port.items() if 't' in pname], flip_y=True)
-
-
-if __name__ == "__main__": 
-    c = ThermalPS()
-
