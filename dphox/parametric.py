@@ -192,19 +192,18 @@ def turn(radius: float, angle: float = 90, euler: float = 0, resolution: int = D
     """
     if not 0 <= euler < 1:
         raise ValueError(f"Expected euler parameter to be 0 <= euler < 1 but got {euler}.")
-    if euler > 0:
-        euler_angle = euler * angle / 2
-        circular_angle = (1 - euler) * angle / 2
-
-        euler_curve = euler_bend(1, euler_angle, resolution=int(euler / 2 * resolution))
-        circular_curve = circular_bend(1 / np.sqrt(2 * np.pi * np.radians(np.abs(euler_angle))), circular_angle,
-                                       resolution=int((1 - euler) / 2 * resolution))
-
-        curve = Curve(euler_curve, circular_curve.to(euler_curve.port['b0'])).symmetrized()
-        scale = radius * 2 * np.sin(np.radians(np.abs(angle)) / 2) / np.linalg.norm(curve.points.T[-1])
-        return curve.scale(scale, scale, origin=(0, 0))
-    else:
+    if euler <= 0:
         return circular_bend(radius, angle, resolution)
+    euler_angle = euler * angle / 2
+    circular_angle = (1 - euler) * angle / 2
+
+    euler_curve = euler_bend(1, euler_angle, resolution=int(euler / 2 * resolution))
+    circular_curve = circular_bend(1 / np.sqrt(2 * np.pi * np.radians(np.abs(euler_angle))), circular_angle,
+                                   resolution=int((1 - euler) / 2 * resolution))
+
+    curve = Curve(euler_curve, circular_curve.to(euler_curve.port['b0'])).symmetrized()
+    scale = radius * 2 * np.sin(np.radians(np.abs(angle)) / 2) / np.linalg.norm(curve.points.T[-1])
+    return curve.scale(scale, scale, origin=(0, 0))
 
 
 def arc(angle: float, radius: float, start_angle: float = None, resolution: int = DEFAULT_RESOLUTION):

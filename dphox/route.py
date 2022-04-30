@@ -91,7 +91,7 @@ def manhattan_route(start: Port, lengths: np.ndarray, include_width: bool = True
         The manhattan route path.
 
     """
-    lengths = np.array(lengths) if not isinstance(lengths, np.ndarray) else lengths
+    lengths = lengths if isinstance(lengths, np.ndarray) else np.array(lengths)
     xs = np.hstack((0, np.tile(np.cumsum(lengths[::2]), 2).reshape((2, -1)).T.flatten()))[:lengths.size + 1]
     ys = np.hstack(((0, 0), np.tile(np.cumsum(lengths[1::2]), 2).reshape((2, -1)).T.flatten()))[:lengths.size + 1]
     points = np.vstack((xs, ys)).T
@@ -129,9 +129,7 @@ def spiral_delay(n_turns: int, min_radius: float, separation: float,
                                    resolution=turn_resolution, include_width=False)
 
         curve = link(start_section.reverse(), curve.reflect(), end_section)
-        curve.halign(0)
-    else:
-        curve.halign(0)
+    curve.halign(0)
     return curve
 
 

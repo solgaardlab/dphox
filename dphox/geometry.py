@@ -170,13 +170,12 @@ class Geometry:
         return self.transform(scale2d((xfact, yfact), self.center if origin is None else origin))
 
     def to(self, port: Union[Tuple[float, ...], Port] = (0, 0), from_port: Optional[Union[str, Port]] = None):
-        port = Port(*port) if isinstance(port, tuple) or isinstance(port, np.ndarray) else port
+        port = Port(*port) if isinstance(port, (tuple, np.ndarray)) else port
         from_port = Port(*from_port) if isinstance(from_port, tuple) else from_port
         if from_port is None:
             return self.rotate(port.a).translate(port.x, port.y)
-        else:
-            fp = self.port[from_port] if isinstance(from_port, str) else from_port
-            return self.rotate(port.a - fp.a + 180, origin=fp.xy).translate(port.x - fp.x, port.y - fp.y)
+        fp = self.port[from_port] if isinstance(from_port, str) else from_port
+        return self.rotate(port.a - fp.a + 180, origin=fp.xy).translate(port.x - fp.x, port.y - fp.y)
 
     def align(self, geom_or_center: Union["Geometry", Float2] = (0, 0),
               other: Union["Geometry", Float2] = None) -> "Geometry":

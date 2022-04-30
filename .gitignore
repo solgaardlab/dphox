@@ -15,3 +15,5 @@ aim_lib/*
 doc/source/_build
 build/*
 dist/*
+extra/
+.ipynb_checkpoints/

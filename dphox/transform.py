@@ -61,7 +61,7 @@ class AffineTransform:
 
     def __init__(self, transform: Union[np.ndarray, Iterable[np.ndarray]]):
         self.transform = transform
-        if isinstance(self.transform, list) or isinstance(self.transform, tuple):
+        if isinstance(self.transform, (list, tuple)):
             self.transform = np.linalg.multi_dot(self.transform[::-1])
 
     @property
@@ -163,16 +163,13 @@ def _parse_gds_transform(transform):
     """Recursive helper function for parsing GDS transform objects flexibly."""
     if transform is None:
         gds_transforms = [GDSTransform()]
+    elif isinstance(transform, GDSTransform):
+        gds_transforms = [transform]
+    elif isinstance(transform, tuple) or isinstance(transform, list) or isinstance(transform, np.ndarray):
+        gds_transforms = [GDSTransform(*transform)] if len(transform) <= 5 and all(np.isscalar(v) for v in transform) else sum((_parse_gds_transform(t) for t in transform), [])
+
     else:
-        if isinstance(transform, GDSTransform):
-            gds_transforms = [transform]
-        elif isinstance(transform, tuple) or isinstance(transform, list) or isinstance(transform, np.ndarray):
-            if len(transform) <= 5 and all([np.isscalar(v) for v in transform]):
-                gds_transforms = [GDSTransform(*transform)]
-            else:
-                gds_transforms = sum([_parse_gds_transform(t) for t in transform], [])
-        else:
-            raise TypeError("Expected transform to be of type GDSTransform, or tuple or ndarray representing GDS"
-                            f"transforms, but got a malformed input of type: {type(transform)}")
+        raise TypeError("Expected transform to be of type GDSTransform, or tuple or ndarray representing GDS"
+                        f"transforms, but got a malformed input of type: {type(transform)}")
 
     return gds_transforms
