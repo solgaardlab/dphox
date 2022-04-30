@@ -354,7 +354,7 @@ def get_ndarray_polygons(polylike_list: Iterable[Union["Pattern", PolygonLike, L
     for pattern in polylike_list:
         if isinstance(pattern, list):
             # recursively apply to the list.
-            polygons.extend(sum([get_ndarray_polygons([p]) for p in pattern], []))
+            polygons.extend(sum((get_ndarray_polygons([p]) for p in pattern), []))
         elif isinstance(pattern, Pattern):
             polygons.extend(pattern.geoms)
         elif isinstance(pattern, np.ndarray):
@@ -639,13 +639,11 @@ def text(string: str, size: float = 12):
     except FileNotFoundError:
         usetex = False
         path = TextPath((0, 0), string, size=size, usetex=False)
-    rings = [LinearRing(p) for i, p in enumerate(path.to_polygons())]
+    rings = [LinearRing(p) for p in path.to_polygons()]
     multipoly = MultiPolygon(polygonize(rings))
 
     filtered_polys = []
     for ring in rings:
-        for poly in multipoly.geoms:
-            if (Polygon(poly.exterior) ^ Polygon(ring)).area < 1e-6 and ring.is_ccw == usetex:
-                filtered_polys.append(poly)
+        filtered_polys.extend(poly for poly in multipoly.geoms if (Polygon(poly.exterior) ^ Polygon(ring)).area < 1e-6 and ring.is_ccw == usetex)
 
     return Pattern(filtered_polys)

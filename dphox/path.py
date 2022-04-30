@@ -39,11 +39,10 @@ class Curve(Geometry):
 
         """
 
-        if path: 
-            t = np.hstack(self.tangents)
-            return np.unwrap(np.arctan2(t[1], t[0]))
-        else:
+        if not path:
             return [np.unwrap(np.arctan2(t[1], t[0])) for t in self.tangents]
+        t = np.hstack(self.tangents)
+        return np.unwrap(np.arctan2(t[1], t[0]))
 
     def total_length(self, path: bool = True):
         """Calculate the total length at the end of each line segment of the curve.
@@ -93,12 +92,11 @@ class Curve(Geometry):
 
         """
         min_dist = min_frac * np.mean(self.lengths(path=True))
-        if path: 
-            d, a = self.lengths(path=True), self.angles(path=True)
-            return np.cumsum(d)[d > min_dist], np.diff(a)[d > min_dist] / d[d > min_dist]
-        else:
+        if not path:
             return [(np.cumsum(d)[d > min_dist], np.diff(a)[d > min_dist] / d[d > min_dist])
                     for d, a in zip(self.lengths(path=False), self.angles(path=False))]
+        d, a = self.lengths(path=True), self.angles(path=True)
+        return np.cumsum(d)[d > min_dist], np.diff(a)[d > min_dist] / d[d > min_dist]
 
     @property
     def normals(self):
@@ -199,9 +197,9 @@ class Curve(Geometry):
         offsets = [offset] * self.num_geoms if not isinstance(offset, list) and not isinstance(offset,
                                                                                                tuple) else offset
 
-        if not len(widths) == self.num_geoms:
+        if len(widths) != self.num_geoms:
             raise AttributeError(f"Expected len(widths) == self.num_geoms, but got {len(widths)} != {self.num_geoms}")
-        if not len(offsets) == self.num_geoms:
+        if len(offsets) != self.num_geoms:
             raise AttributeError(f"Expected len(offsets) == self.num_geoms, but got {len(offsets)} != {self.num_geoms}")
 
         for segment, tangent, width, offset in zip(self.geoms, self.tangents, widths, offsets):
@@ -235,20 +233,13 @@ class Curve(Geometry):
 
         """
         import holoviews as hv
-        plots_to_overlay = []
-        alternate_color = color if not alternate_color else alternate_color
+        alternate_color = alternate_color or color
         b = min_aspect_bounds(self.bounds) if bounds is None else bounds
 
-        for i, curve in enumerate(self.geoms):
-            plots_to_overlay.append(
-                hv.Curve((curve[0], curve[1])).opts(data_aspect=1, frame_height=200, line_width=line_width,
-                                                    ylim=(b[1], b[3]), xlim=(b[0], b[2]),
-                                                    color=(color, alternate_color)[i % 2], tools=['hover']))
+        plots_to_overlay = [hv.Curve((curve[0], curve[1])).opts(data_aspect=1, frame_height=200, line_width=line_width, ylim=(b[1], b[3]), xlim=(b[0], b[2]), color=(color, alternate_color)[i % 2], tools=['hover']) for i, curve in enumerate(self.geoms)]
 
         if plot_ports:
-            for name, port in self.port.items():
-                plots_to_overlay.append(port.hvplot(name))
-
+            plots_to_overlay.extend(port.hvplot(name) for name, port in self.port.items())
         return hv.Overlay(plots_to_overlay)
 
     @property
@@ -337,16 +328,18 @@ def get_ndarray_curve(curvelike_list: Iterable[Union[float, "Curve", CurveLike, 
         elif np.isscalar(curve):
             # just a straight segment
             new_linestrings = np.array(((0, 0), (curve, 0))).T
-        elif isinstance(curve, list) or isinstance(curve, tuple):
+        elif isinstance(curve, (list, tuple)):
             # recursively apply to the list.
             new_linestrings_and_tangents = [get_ndarray_curve([p]) for p in curve]
-            new_linestrings = sum([linestrings for linestrings, _ in new_linestrings_and_tangents], [])
-            new_tangents = sum([tangents for _, tangents in new_linestrings_and_tangents], [])
+            new_linestrings = sum((linestrings for linestrings, _ in new_linestrings_and_tangents), [])
+
+            new_tangents = sum((tangents for _, tangents in new_linestrings_and_tangents), [])
+
         elif isinstance(curve, Curve):
             new_linestrings = curve.geoms
             new_tangents = curve.tangents
         elif isinstance(curve, np.ndarray):
-            if curve.ndim != 2 and curve.ndim != 3:
+            if curve.ndim not in [2, 3]:
                 raise AttributeError("The number of dimensions for the curve must be 2 or 3")
             new_linestrings = [curve] if curve.ndim == 2 else curve.tolist()
         elif isinstance(curve, LineString):
@@ -355,7 +348,8 @@ def get_ndarray_curve(curvelike_list: Iterable[Union[float, "Curve", CurveLike, 
             new_linestrings = [linestring_points(geom).T for geom in curve.geoms]
         else:
             raise TypeError(f'Pattern does not accept type {type(curve)}')
-        tangents.extend(new_tangents if new_tangents else [np.gradient(p, axis=1) for p in new_linestrings])
+        tangents.extend(new_tangents or [np.gradient(p, axis=1) for p in new_linestrings])
+
         linestrings.extend(new_linestrings)
     return linestrings, tangents
 

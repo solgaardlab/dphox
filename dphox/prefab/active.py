@@ -308,7 +308,8 @@ class MultilayerPath(Device):
         child_to_ports = defaultdict(list)
         for p in self.sequence:
             if p is not None:
-                d = p.copy if isinstance(p, Device) or isinstance(p, Pattern) else straight(p).path(self.waveguide_w)
+                d = p.copy if isinstance(p, (Device, Pattern)) else straight(p).path(self.waveguide_w)
+
                 if isinstance(d, Device) and d.child_to_device:
                     child_to_device[d.name] = d
                     child_to_ports[d.name].append(port.copy)
@@ -316,9 +317,8 @@ class MultilayerPath(Device):
                 else:
                     waveguided_patterns.append(d.to(port, 'a0'))
                     port = d.port['b0'].copy
-        pattern_to_layer = sum(
-            [[(p, self.path_layer)] if isinstance(p, Pattern) else [p] for p in waveguided_patterns],
-            [])
+        pattern_to_layer = sum(([(p, self.path_layer)] if isinstance(p, Pattern) else [p] for p in waveguided_patterns), [])
+
         super(MultilayerPath, self).__init__(self.name, pattern_to_layer)
         for child in child_to_device:
             self.place(child_to_device[child], child_to_ports[child], 'a0')
@@ -532,10 +532,8 @@ class LocalMesh(Device):
         ps_array = ps_array.reshape((*path_array.shape, 4, 2))
 
         def _shapely_to_mesh_from_step(_geom, translation):
-            _meshes = []
-            for _poly in _geom.geoms:
-                _meshes.append(extrude_polygon(_poly, height=height))
-            _mesh = trimesh.util.concatenate(_meshes) if len(_meshes) > 0 else trimesh.Trimesh()
+            _meshes = [extrude_polygon(_poly, height=height) for _poly in _geom.geoms]
+            _mesh = trimesh.util.concatenate(_meshes) if _meshes else trimesh.Trimesh()
             return _mesh.apply_translation((0, 0, translation))
 
         path_3d_array = []
@@ -618,3 +616,8 @@ class HTree(Device):
     def fill_ports(self, device: Device):
         self.place(device, [port for pname, port in self.port.items() if 'b' in pname])
         self.place(device, [port for pname, port in self.port.items() if 't' in pname], flip_y=True)
+
+
+if __name__ == "__main__": 
+    c = ThermalPS()
+

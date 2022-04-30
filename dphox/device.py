@@ -61,9 +61,8 @@ class Device:
     def __init__(self, name: str, devices: List[Union[Tuple[Pattern, Union[int, str]], "Device"]] = None):
         self.name = name
         self.pattern_to_layer = [] if devices is None else devices
-        self.pattern_to_layer = sum(
-            [p.pattern_to_layer if isinstance(p, Device) else [p] for p in self.pattern_to_layer], []
-        )
+        self.pattern_to_layer = sum((p.pattern_to_layer if isinstance(p, Device) else [p] for p in self.pattern_to_layer), [])
+
         self.layer_to_polys = self._update_layers()
         self.child_to_device: Dict[str, Device] = {}  # children in this dictionary
         self.child_to_transform: Dict[str, GDSTransform] = {}  # dictionary from child name to transform
@@ -123,7 +122,7 @@ class Device:
         multilayers = defaultdict(list)
         for named_tuple in nd.cell_iter(cell, flat=True):
             if named_tuple.cell_start:
-                for i, (polygon, points, bbox) in enumerate(named_tuple.iters['polygon']):
+                for polygon, points, bbox in named_tuple.iters['polygon']:
                     if polygon.layer == 'bb_pin':
                         # TODO(sunil): actually extract the pins from this layer.
                         continue
@@ -140,9 +139,7 @@ class Device:
             Bounding box ndarray.
 
         """
-        bound_list = []
-        for p, _ in self.pattern_to_layer:
-            bound_list.append(np.reshape(p.bounds, (2, 2)).T)
+        bound_list = [np.reshape(p.bounds, (2, 2)).T for p, _ in self.pattern_to_layer]
         bound_list = np.hstack(bound_list) if bound_list else np.array([[], []])
         child_bboxes = []
         for child_name, child in self.child_to_device.items():
@@ -245,7 +242,7 @@ class Device:
 
         """
         old_x, old_y = self.center
-        center = c.center if isinstance(c, Device) or isinstance(c, Pattern) else c
+        center = c.center if isinstance(c, (Device, Pattern)) else c
         self.translate(center[0] - old_x, center[1] - old_y)
         return self
 
@@ -413,9 +410,8 @@ class Device:
                 transform.append(from_port.orient_xyaf(p, flip_y=flip_y))
         self.child_to_transform[device.name] = GDSTransform.parse(transform, self.child_to_transform.get(device.name))
         if return_ports:
-            placed_ports = []
-            for t in transform:
-                placed_ports.append({pname: port.copy.transform_xyaf(t) for pname, port in device.port.items()})
+            placed_ports = [{pname: port.copy.transform_xyaf(t) for pname, port in device.port.items()} for t in transform]
+
             return placed_ports[0] if len(placed_ports) == 1 else placed_ports
 
     def clear(self, device: Union[str, "Device"]):
@@ -572,8 +568,7 @@ class Device:
                                  f"Make sure you specify the correct foundry.")
             pattern = Pattern(*multipoly)
             plots_to_overlay.append(pattern.hvplot(color, layer, alpha, plot_ports=False))
-        for name, port in self.port.items():
-            plots_to_overlay.append(port.hvplot(name))
+        plots_to_overlay.extend(port.hvplot(name) for name, port in self.port.items())
         return hv.Overlay(plots_to_overlay).opts(show_legend=True, shared_axes=False,
                                                  ylim=(b[1], b[3]), xlim=(b[0], b[2]))
 
@@ -591,7 +586,8 @@ class Device:
             for layer, multipoly in child.full_layer_to_polys.items():
                 if len(multipoly) > 0:
                     polygons = self.child_to_transform[child_name][0].transform_geoms(multipoly)
-                    new_polys = sum([np.split(p, p.shape[0]) if p.ndim == 3 else [p] for p in polygons], [])
+                    new_polys = sum((np.split(p, p.shape[0]) if p.ndim == 3 else [p] for p in polygons), [])
+
                     new_polys = [np.squeeze(p) for p in new_polys]
                     layer_to_polys[layer].extend(new_polys)
         return layer_to_polys
@@ -642,7 +638,7 @@ class Device:
 
         """
         name = '|'.join([m.name for m in devices]) if name is None else name
-        return cls(name, sum([m.pattern_to_layer for m in devices], []))
+        return cls(name, sum((m.pattern_to_layer for m in devices), []))
 
     def smooth_layer(self, distance: float, layer: str):
         """Smooth a layer in the device (useful for sharp corners that may appear)
@@ -736,12 +732,12 @@ class Device:
             cells = {}
             references = {}
 
-            for key in structs.keys():
-                pattern_to_layer = []
+            for key, value in structs.items():
                 labels = []
                 name = key.decode("utf-8")
                 references[name] = []
-                for obj in structs[key]:
+                pattern_to_layer = []
+                for obj in value:
                     if isinstance(obj, klamath.elements.Boundary):
                         if obj.layer in foundry.gds_label_to_layer:
                             layer = foundry.gds_label_to_layer[obj.layer]  # klamath layer is gds_label in dphox
@@ -759,7 +755,7 @@ class Device:
                 cell.port = cell._pdk_ports(labels, foundry, header.user_units_per_db_unit)
                 cells[name] = cell
             net = nx.DiGraph([(r, s[0]) for r in references for s in references[r]])
-            topo_sorted_cells = [node for node in nx.topological_sort(net)]
+            topo_sorted_cells = list(nx.topological_sort(net))
             for node in topo_sorted_cells[::-1]:
                 for cell_name, ref in references[node]:
                     cells[node].place(cells[cell_name], ref)
@@ -884,10 +880,9 @@ class Via(Device):
         max_boundary_grow = max(self.boundary_grow)
         via_pattern = Box(self.via_extent, decimals=self.decimals)
         if self.pitch > 0 and self.shape is not None:
-            patterns = []
             x, y = np.meshgrid(np.arange(self.shape[0]) * self.pitch, np.arange(self.shape[1]) * self.pitch)
-            for x, y in zip(x.flatten(), y.flatten()):
-                patterns.append(via_pattern.copy.translate(x, y))
+            patterns = [via_pattern.copy.translate(x, y) for x, y in zip(x.flatten(), y.flatten())]
+
             via_pattern = Pattern(*patterns, decimals=self.decimals)
         boundary = Box((via_pattern.size[0] + 2 * max_boundary_grow,
                         via_pattern.size[1] + 2 * max_boundary_grow), decimals=2).align((0, 0)).halign(0)

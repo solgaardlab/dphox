@@ -262,7 +262,7 @@ class Foundry:
             for _poly in _geom.geoms:
                 if _poly.area > 1e-8:
                     _meshes.append(extrude_polygon(_poly, height=_step.thickness))
-            _mesh = trimesh.util.concatenate(_meshes) if len(_meshes) > 0 else trimesh.Trimesh()
+            _mesh = trimesh.util.concatenate(_meshes) if _meshes else trimesh.Trimesh()
             _mesh.visual.face_colors = _step.mat.color
             return _mesh
 
