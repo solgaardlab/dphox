@@ -13,7 +13,7 @@
 
 <!-- start at-a-glance -->
 
-# At a glance
+# DPhox 0.0.5
 
 The `dphox` module is yet another Python 3-based design tool for automating photonic device development.
 

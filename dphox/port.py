@@ -224,7 +224,7 @@ class Port:
         return transform_array + np.array((*rotated_translate, -self.a + 180, 0))
 
     def transform_xyaf(self, xyaf: Tuple[float, float, float, bool]):
-        """Transform
+        """Transform this port given some xyaf (x, y , angle, flip) specification.
 
         Args:
             xyaf: The x, y, angle, and flip objects.

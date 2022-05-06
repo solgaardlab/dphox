@@ -421,6 +421,14 @@ class Interposer(Pattern):
         interposer.place(grating, self.port['l1'], from_port=grating.port['a0'])
         return interposer
 
+@fix_dataclass_init_docs
+@dataclass
+class ArrayWaveguideGrating(Pattern):
+    """
+
+    """
+    pass
+
 
 @fix_dataclass_init_docs
 @dataclass

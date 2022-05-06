@@ -74,6 +74,29 @@ def turn_connect(start: Port, end: Port, radius: float, radius_end: Optional[flo
     return curve.path(start.w) if include_width else curve
 
 
+def link_turn_connect(path: Union[Pattern, Curve], port: Port, radius: float, radius_end: Optional[float] = None,
+                      euler: float = 0, resolution: int = DEFAULT_RESOLUTION,
+                      include_width: bool = True, out_port_label: str = 'b0') -> Union[Pattern, Curve]:
+    """Use turn_connect to link an existing path to a new port.
+
+    Args:
+        path: Path with the start port
+        port: End port to connect to path
+        radius: Start turn effective radius
+        radius_end: End turn effective radius (use :code:`radius` if :code:`None`)
+        euler: Euler path contribution (see :code:`turn` method).
+        resolution: Number of evaluations for the turns.
+        include_width: Whether to include the width (cubic taper) of the turn connect
+        out_port_label: Output port label for the connection
+
+    Returns:
+        The linked path.
+
+    """
+    connector = turn_connect(path.port[out_port_label], port, radius, radius_end, euler, resolution, include_width)
+    return link(path, connector)
+
+
 def manhattan_route(start: Port, lengths: np.ndarray, include_width: bool = True):
     """Manhattan route (intended for metal routing).
 
@@ -93,10 +116,10 @@ def manhattan_route(start: Port, lengths: np.ndarray, include_width: bool = True
     lengths = lengths if isinstance(lengths, np.ndarray) else np.array(lengths)
     xs = np.hstack((0, np.tile(np.cumsum(lengths[::2]), 2).reshape((2, -1)).T.flatten()))[:lengths.size + 1]
     ys = np.hstack(((0, 0), np.tile(np.cumsum(lengths[1::2]), 2).reshape((2, -1)).T.flatten()))[:lengths.size + 1]
-    points = np.vstack((xs, ys)).T
+    points = np.vstack((xs, ys))
     path = Curve(points)
     if include_width:
-        path = Pattern(path.shapely.buffer(start.w, join_style=2, cap_style=2))
+        path = Pattern(path.shapely.buffer(start.w / 2, join_style=2, cap_style=2))
     return path.to(start)
 
 
