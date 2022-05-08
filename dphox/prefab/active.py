@@ -595,12 +595,10 @@ class HTree(Device):
 
         if self.depth > 0:
             splitter_port = self.place(self.splitter, segment.port['b0'], from_port='a0', return_ports=True)
-            top_htree = HTree(self.splitter, self.depth - 1, self.pitch, 0, self.leaf_dx,
-                              f"{self.name}_{self.depth - 1}", wg_layer=self.wg_layer, top_level=False)
-            bottom_htree = HTree(self.splitter, self.depth - 1, self.pitch, 0, self.leaf_dx,
-                                 f"{self.name}_{self.depth - 1}", wg_layer=self.wg_layer, top_level=False)
-            self.place(top_htree, splitter_port['b0'], from_port='a0')
-            self.place(bottom_htree, splitter_port['b1'], from_port='a0')
+            htree = HTree(self.splitter, self.depth - 1, self.pitch, 0, self.leaf_dx,
+                          f"{self.name}_{self.depth - 1}", wg_layer=self.wg_layer, top_level=False)
+            self.place(htree, splitter_port['b0'], from_port='a0')
+            self.place(htree, splitter_port['b1'], from_port='a0')
         if self.top_level:
             b = self.bounds[-2:] - np.array((0, waveguide_w / 2))
             self.port.update({f'b_{i}_{j}': Port(b[0] - i * self.pitch * 2, b[1] - j * self.pitch, w=waveguide_w)

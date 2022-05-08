@@ -3,7 +3,7 @@ import hashlib
 from collections import defaultdict
 from copy import deepcopy, deepcopy as copy
 from dataclasses import dataclass
-from typing import BinaryIO, List, Optional, Dict
+from typing import BinaryIO, List, Optional, Dict, Set
 
 import numpy as np
 
@@ -801,20 +801,30 @@ class Device:
             ]
         return elements
 
-    def to_gds_stream(self, stream: BinaryIO, foundry: Foundry = DEFAULT_FOUNDRY, user_units_per_db_unit: float = 0.001):
+    def to_gds_stream(self, stream: BinaryIO, foundry: Foundry = DEFAULT_FOUNDRY, user_units_per_db_unit: float = 0.001,
+                      existing_cells: Optional[Set[str]] = None):
         """Use `klamath <https://mpxd.net/code/jan/klamath/src/branch/master/klamath>`_ to add device struct to GDS.
+
+        Note:
+            If the cell is added more than once, only the first addition will be added to the GDS file. All other
+            subsequent cell additions will be ignored. This behavior may change in the future as this is currently
+            a silent failure.
 
         Args:
             stream: Stream for a GDS file.
             foundry: The foundry used for the layer map.
             user_units_per_db_unit: User units per unit (to convert from nm to um, need to use 0.001 to convert).
+            existing_cells: cells that already exist in the stream (useful to avoid duplication)
 
         Returns:
+
 
         """
         elements = self.gds_elements(foundry, user_units_per_db_unit)
         for child_name, child in self.child_to_device.items():
-            child.to_gds_stream(stream, foundry, user_units_per_db_unit)
+            existing_cells.update(child.to_gds_stream(stream, foundry, user_units_per_db_unit))
+            if child_name not in existing_cells:
+                existing_cells.add(child_name)
             for gds_transform in self.child_to_transform[child_name][1]:
                 xy = (np.array([[gds_transform.x, gds_transform.y]]) / user_units_per_db_unit).astype(np.int32)
                 elements.append(
@@ -827,7 +837,9 @@ class Device:
                         properties={}
                     )
                 )
-        klamath.library.write_struct(stream, self.name.encode('utf-8'), elements)
+        if self.name not in existing_cells:
+            klamath.library.write_struct(stream, self.name.encode('utf-8'), elements)
+        return existing_cells
 
     def to_gds(self, filepath: str, foundry: Foundry = DEFAULT_FOUNDRY, user_units_per_db_unit: float = 0.001,
                meters_per_db_unit: float = 1e-9):
