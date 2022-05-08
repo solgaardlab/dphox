@@ -821,8 +821,9 @@ class Device:
 
         """
         elements = self.gds_elements(foundry, user_units_per_db_unit)
+        existing_cells = set() if existing_cells is None else existing_cells
         for child_name, child in self.child_to_device.items():
-            existing_cells.update(child.to_gds_stream(stream, foundry, user_units_per_db_unit))
+            existing_cells.update(child.to_gds_stream(stream, foundry, user_units_per_db_unit, existing_cells))
             if child_name not in existing_cells:
                 existing_cells.add(child_name)
             for gds_transform in self.child_to_transform[child_name][1]:
