@@ -256,7 +256,8 @@ class LateralNemsPS(Device):
         left_gnd_waveguide = self.gnd_anchor_waveguide.copy.to(psw.port['a0'])
         right_gnd_waveguide = self.gnd_anchor_waveguide.copy.to(psw.port['b0'])
         pos_metal = Box((self.clearout.size[0] + self.clearout_pos_sep,
-                         top_actuator.bounds[3] - bottom_actuator.bounds[1])).hollow(self.trace_w).align(clearout.center)
+                         top_actuator.bounds[3] - bottom_actuator.bounds[1])).hollow(self.trace_w).align(
+            clearout.center)
         gnd_metal = Box((right_gnd_waveguide.port['e0'].x - left_gnd_waveguide.port['e0'].x,
                          self.gnd_anchor_waveguide.size[1] + self.clearout_gnd_sep)).cup(self.trace_w).halign(
             left_gnd_waveguide.port['e0'].x).valign(left_gnd_waveguide.port['e1'].y)
@@ -316,7 +317,8 @@ class MultilayerPath(Device):
                 else:
                     waveguided_patterns.append(d.to(port, 'a0'))
                     port = d.port['b0'].copy
-        pattern_to_layer = sum(([(p, self.path_layer)] if isinstance(p, Pattern) else [p] for p in waveguided_patterns), [])
+        pattern_to_layer = sum(([(p, self.path_layer)] if isinstance(p, Pattern) else [p] for p in waveguided_patterns),
+                               [])
 
         super(MultilayerPath, self).__init__(self.name, pattern_to_layer)
         for child in child_to_device:
@@ -586,9 +588,13 @@ class HTree(Device):
         waveguide_w = self.splitter.port['a0'].w
         silver_ratio = 1 / np.sqrt(2) if self.depth % 2 else 1
         silver_length = self.pitch * 2 ** (self.depth / 2 - 1) * silver_ratio
-        segment_length = silver_length - self.splitter.size[0] - self.splitter.size[1] / 2 + waveguide_w / 2 + self.root_dx
+        segment_length = silver_length - self.splitter.size[0] - self.splitter.size[
+            1] / 2 + waveguide_w / 2 + self.root_dx
         if self.depth == 0:
             segment_length += self.splitter.size[0] + self.leaf_dx - waveguide_w / 2
+        if segment_length < 0:
+            raise ValueError(f'Segment length is less than zero,'
+                             f'try increasing period to at least {-segment_length + self.pitch}')
         segment = straight(segment_length).path(waveguide_w)
         self.add(segment, self.wg_layer)
         self.port['a0'] = segment.port['a0']
@@ -606,10 +612,69 @@ class HTree(Device):
                               for j in range(int(2 ** np.floor(self.depth / 2)))})
             dxy = (self.pitch + 2 * self.leaf_dx) * np.array((1 - self.depth % 2, self.depth % 2))
             self.port.update(
-                {f't_{i}_{j}': Port(b[0] - i * self.pitch * 2 - dxy[0], b[1] - j * self.pitch - dxy[1], 180, waveguide_w)
+                {f't_{i}_{j}': Port(b[0] - i * self.pitch * 2 - dxy[0], b[1] - j * self.pitch - dxy[1], 180,
+                                    waveguide_w)
                  for i in range(int(2 ** np.ceil(self.depth / 2 - 1)))
                  for j in range(int(2 ** np.floor(self.depth / 2)))})
 
-    def fill_ports(self, device: Device):
-        self.place(device, [port for pname, port in self.port.items() if 'b' in pname])
-        self.place(device, [port for pname, port in self.port.items() if 't' in pname], flip_y=True)
+    def fill_ports(self, device: Device, return_ports: bool = False):
+        port_list_b = self.place(device, [port for pname, port in self.port.items() if 'b' in pname],
+                                 return_ports=return_ports)
+        port_list_t = self.place(device, [port for pname, port in self.port.items() if 't' in pname], flip_y=True,
+                                 return_ports=return_ports)
+        return port_list_b + port_list_t if return_ports else None
+
+
+def multilayer_htree(period: float,
+                     si_tsplitter: Device, sin_tsplitter: Device,
+                     phase_tunable_grating: Device, escalator: Device,
+                     ps_ports: dict[str, Port],
+                     total_depth: int = 10,
+                     sin_depth: int = 6,
+                     pos_name: str = 'pos',
+                     gnd_name: str = 'gnd',
+                     si_layer: str = CommonLayer.RIDGE_SI,
+                     sin_layer: str = CommonLayer.RIDGE_SIN,
+                     name: str = "multilayer_htree"):
+    """A multilayer HTree with silicon and silicon nitride layers (useful for very large
+    implementations of HTrees).
+
+    Args:
+        period: Period of the overall H tree
+        si_tsplitter: Silicon T-splitter
+        sin_tsplitter: Silicon nitride T-splitter
+        phase_tunable_grating: Phase tunable grating structure
+        escalator: Escalator for going between nitride and silicon
+        ps_ports: Phase shifter ports (must include gnd, pos terminals and b0 port aligned with output grating)
+        total_depth: Total depth of the tree (2 ** total_depth total gratings)
+        sin_depth: Depth oif the silicon nitride (high power handling)
+        pos_name: Positive terminal port name
+        gnd_name: Ground terminal port name
+        si_layer: Silicon layer
+        sin_layer: Silicon nitride layer
+        name: Name of the Htree
+
+    Returns:
+
+    """
+    gnd_to_pos = ps_ports[pos_name].x - ps_ports[gnd_name].x
+    si_depth = total_depth - sin_depth
+    dx = period * 2 ** (si_depth / 2 - 1) - si_tsplitter.port['b0'].y
+    n = int(2 ** (total_depth / 2))
+
+    si_htree = HTree(si_tsplitter, si_depth, period, -dx / 2, -ps_ports['b0'].x, name="si_htree", wg_layer=si_layer)
+    si_htree.fill_ports(phase_tunable_grating)
+    port = si_htree.place(escalator, si_htree.port['a0'], 'a0', return_ports=True)
+    si_htree.port['a0'] = port['b0']
+    dp_htree = HTree(sin_tsplitter, sin_depth, period * 2 ** (si_depth / 2), 0,  -dx / 2,
+                     wg_layer=sin_layer, name=name)
+    ports = dp_htree.fill_ports(si_htree, return_ports=True)
+    bottom_left_port = min(ports[-1].values(), key=lambda p: p.x + p.y)
+    ref_point = (bottom_left_port.x - ps_ports[pos_name].x, bottom_left_port.y + ps_ports[pos_name].y)
+
+    for i in range(n):
+        for j in range(n):
+            gnd_x = -(2 * (i % 2) - 1) * gnd_to_pos
+            dp_htree.port[f'pos_{i}_{j}'] = Port(ref_point[0] + i * period, ref_point[1] + j * period, 180 * (1 - i % 2))
+            dp_htree.port[f'gnd_{i}_{j}'] = Port(ref_point[0] + i * period + gnd_x, ref_point[1] + j * period, 180 * (i % 2))
+    return dp_htree
