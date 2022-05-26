@@ -22,7 +22,7 @@ copyright = '2021, Solgaard Lab'
 author = 'Solgaard Lab'
 
 # The full version, including alpha/beta/rc tags
-release = '0.0.7'
+release = '0.0.8'
 
 
 # -- General configuration ---------------------------------------------------
