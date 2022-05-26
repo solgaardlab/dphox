@@ -666,7 +666,7 @@ def multilayer_htree(period: float,
     si_htree.fill_ports(phase_tunable_grating)
     port = si_htree.place(escalator, si_htree.port['a0'], 'a0', return_ports=True)
     si_htree.port['a0'] = port['b0']
-    dp_htree = HTree(sin_tsplitter, sin_depth, period * 2 ** (si_depth / 2), 0,  -dx / 2,
+    dp_htree = HTree(sin_tsplitter, sin_depth, period * 2 ** (si_depth / 2), 0, -dx / 2,
                      wg_layer=sin_layer, name=name)
     ports = dp_htree.fill_ports(si_htree, return_ports=True)
     bottom_left_port = min(ports[-1].values(), key=lambda p: p.x + p.y)
