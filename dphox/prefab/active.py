@@ -85,7 +85,7 @@ class PullOutNemsActuator(Device):
             (pos_pad.copy.expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.pos_pad_dope),
             (self.flexure.copy.buffer(dope_total_offset), self.actuator_dope),
         ]
-        via = self.via.copy.align(pos_pad.center)
+        via = self.via.copy.align(pos_pad.center).valign(pos_pad, bottom=False)
         super(PullOutNemsActuator, self).__init__(
             self.name, dopes + connectors + [(pos_pad, self.ridge), (self.flexure, self.ridge)] + via.pattern_to_layer
         )
@@ -141,7 +141,8 @@ class GndAnchorWaveguide(Device):
     Attributes:
         rib_waveguide: Transition waveguide for connecting to ground pads
         gnd_pad: Ground pad for ultimately connecting the waveguide to the ground plane
-        gnd_connector: Ground connector for connecting the anchor waveguide to the ground pad :code:`gnd_pad`.
+        gnd_connector: Ground connector for connecting the anchor waveguide to the ground pad :code:`gnd_pad`,
+            must be outfitted with ports a0 and b0.
         offset_into_rib: Offset of the ground connector into the rib.
         dope_expand_tuple: Dope expand tuple (first applies expand, then grow operation on ground pad)
         ridge: Waveguide layer (usually silicon)
@@ -150,7 +151,7 @@ class GndAnchorWaveguide(Device):
     """
     rib_waveguide: RibDevice
     gnd_pad: Box
-    gnd_connector: Box
+    gnd_connector: Pattern
     via: Via
     offset_into_rib: float
     dope_expand_tuple: Tuple[float, float] = (0, 0)
@@ -165,10 +166,12 @@ class GndAnchorWaveguide(Device):
                                            bottom=True).translate(dy=-self.offset_into_rib),
         ]
         gnd_pads = [
-            self.gnd_pad.copy.vstack(gnd_connectors[0]),
-            self.gnd_pad.copy.vstack(gnd_connectors[1], bottom=True)
+            self.gnd_pad.copy.vstack(gnd_connectors[0]).halign(gnd_connectors[0]),
+            self.gnd_pad.copy.vstack(gnd_connectors[1], bottom=True).halign(gnd_connectors[1], left=True)
         ]
-        vias = self.via.copy.align(gnd_pads[0]).pattern_to_layer + self.via.copy.align(gnd_pads[1]).pattern_to_layer
+        self.via.align(gnd_pads[0])
+        vias = self.via.copy.align(gnd_pads[0]).halign(gnd_pads[0], left=False).pattern_to_layer +\
+               self.via.copy.align(gnd_pads[1]).halign(gnd_pads[1], left=False).pattern_to_layer
         dopes = [
             (gnd_pads[0].expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.gnd_pad_dope),
             (gnd_pads[1].expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.gnd_pad_dope),

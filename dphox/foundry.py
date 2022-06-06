@@ -65,6 +65,7 @@ class ProcessOp(str, Enum):
         GROW: grow over the previously deposited layer
         DOPE: dopes the previously deposited layer
         DUMMY: No process step associated with this
+        CLAD: Only used to exclude cladding from
 
     """
     ISO_ETCH = 'iso_etch'
@@ -73,6 +74,7 @@ class ProcessOp(str, Enum):
     GROW = 'grow'
     DOPE = 'dope'
     DUMMY = 'dummy'
+    CLAD = 'clad'
 
 
 class CommonLayer(str, Enum):
@@ -305,16 +307,17 @@ class Foundry:
                     mesh = _shapely_to_mesh_from_step(MultiPolygon(geoms), meshes, step)
                     device.add_geometry(mesh.apply_translation((0, 0, dz - step.thickness)), geom_name=mesh_name)
                 elif step.process_op == ProcessOp.SAC_ETCH:
-                    if 'clad' not in device.geometry:
-                        raise ValueError(
-                            "The cladding is not in the device geometry / not spec'd by the foundry object.")
-                    clad_geometry -= geom
-                    clad_geometry = MultiPolygon([clad_geometry]) if isinstance(clad_geometry,
-                                                                                Polygon) else clad_geometry
-                    for poly in clad_geometry:
-                        meshes.append(extrude_polygon(poly, height=step.thickness))
-                    device.geometry['clad'] = trimesh.util.concatenate(meshes)
-                    mesh.visual.face_colors = (*self.cladding.color, 0.5)
+                    if 'clad' in device.geometry:
+                        clad_geometry -= geom
+                        clad_geometry = MultiPolygon([clad_geometry]) if isinstance(clad_geometry,
+                                                                                    Polygon) else clad_geometry
+                        for poly in clad_geometry:
+                            meshes.append(extrude_polygon(poly, height=step.thickness))
+                        device.geometry['clad'] = trimesh.util.concatenate(meshes)
+                        mesh.visual.face_colors = (*self.cladding.color, 0.5)
+                    # else:
+                    #     raise ValueError(
+                    #         "The cladding is not in the device geometry / not spec'd by the foundry object.")
                     # raise NotImplementedError(f"Fabrication method not yet implemented for `{step.process_op.value}`")
                     # device.geometry['clad'] -= difference(device.geometry['clad'], mesh)
                 elif not step.process_op == ProcessOp.DUMMY:

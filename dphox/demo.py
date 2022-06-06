@@ -23,7 +23,9 @@ grating = FocusingGrating(
 
 def lateral_nems_ps(ps_l=100, anchor_length=3.1, clearout_height=12, via_extent=(0.5, 0.5),
                     ps_taper_change=-0.2, flexure_box_w=31, nominal_gap=0.201, waveguide_w=0.5,
-                    nanofin_w=0.2, taper_l=10, anchor_taper_l=1.4, pull_in=False, trace_w=1, smooth: float = 0):
+                    nanofin_w=0.2, taper_l=10, anchor_taper_l=1.4, pull_in=False, trace_w=1, smooth: float = 0,
+                    clearout_pos_sep: float = 10, clearout_gnd_sep: float = 2, pos_height: float = 10,
+                    gnd_width: float = 5):
     ps_w = waveguide_w + 2 * nominal_gap + 2 * nanofin_w
     gap_w = waveguide_w + 2 * nominal_gap
 
@@ -49,20 +51,20 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, clearout_height=12, via_extent=
             ridge_waveguide=(gaw_rib - gaw_gap + gaw_waveguide).set_port(gaw_waveguide.port),
             slab_waveguide=gaw_slab,
         ),
-        gnd_pad=Box((1, 3)),
+        gnd_pad=Box((gnd_width, 3)),
         gnd_connector=Box((0.5, 2)),
         via=via_high,
         offset_into_rib=0.1
     )
 
     pina = PullInNemsActuator(
-        pos_pad=Box((ps_l, 2)),
+        pos_pad=Box((ps_l, pos_height)),
         connector=Box((0.3, 0.3)),
         via=via_low
     )
 
     pona = PullOutNemsActuator(
-        pos_pad=Box((ps_l, 2)),
+        pos_pad=Box((ps_l, pos_height)),
         connector=Box((0.2, 0.5)),
         pad_sep=0.2,
         flexure=MEMSFlexure((flexure_box_w, 4.5),
@@ -84,8 +86,9 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, clearout_height=12, via_extent=
         actuator=pina if pull_in else pona,
         clearout=clr,
         trace_w=trace_w,
-        clearout_pos_sep=10,
-        clearout_gnd_sep=2
+        clearout_pos_sep=clearout_pos_sep,
+        clearout_gnd_sep=clearout_gnd_sep
     )
 
     return ps.smooth_layer(smooth, CommonLayer.RIDGE_SI) if smooth > 0 else ps
+
