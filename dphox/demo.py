@@ -5,6 +5,7 @@ from .prefab.active import Clearout, GndAnchorWaveguide, LateralNemsPS, LocalMes
     MZI, PullInNemsActuator, PullOutNemsActuator, ThermalPS, Via
 from .prefab.passive import DC, FocusingGrating, RibDevice
 
+
 ps = ThermalPS(straight(5).path(0.5), ps_w=2, via=Via((0.4, 0.4), 0.1))
 dc = DC(waveguide_w=0.5, interaction_l=2, radius=2.5, interport_distance=5, gap_w=0.25)
 mzi = MZI(dc, top_internal=[ps.copy], bottom_internal=[ps.copy], top_external=[ps.copy], bottom_external=[ps.copy])
@@ -21,17 +22,16 @@ grating = FocusingGrating(
 )
 
 
-def lateral_nems_ps(ps_l=100, anchor_length=3.1, clearout_height=12, via_extent=(0.5, 0.5),
-                    ps_taper_change=-0.2, flexure_box_w=31, nominal_gap=0.201, waveguide_w=0.5,
-                    nanofin_w=0.2, taper_l=10, anchor_taper_l=1.4, pull_in=False, trace_w=1, smooth: float = 0,
-                    clearout_pos_sep: float = 10, clearout_gnd_sep: float = 2, pos_height: float = 10,
-                    gnd_width: float = 5):
+def lateral_nems_ps(ps_l=100, anchor_length=3.1, clearout_height=12, via_extent=(4, 4),
+                    ps_taper_w=0.3, flexure_box_extent=(31, 4.5), nominal_gap=0.201, waveguide_w=0.5,
+                    nanofin_w=0.2, taper_l=10, anchor_taper_l=1.4, pull_in=False, trace_w=3, smooth: float = 0,
+                    clearout_pos_sep: float = 10, clearout_gnd_sep: float = 2, pos_w: float = 10, gnd_w: float = 5):
     ps_w = waveguide_w + 2 * nominal_gap + 2 * nanofin_w
     gap_w = waveguide_w + 2 * nominal_gap
 
     ps_box = straight(ps_l).path(ps_w)
-    ps_gap = cubic_taper(gap_w, ps_taper_change, ps_l, taper_l)
-    ps_waveguide = cubic_taper(waveguide_w, ps_taper_change, ps_l, taper_l)
+    ps_gap = cubic_taper(gap_w, ps_taper_w - waveguide_w, ps_l, taper_l)
+    ps_waveguide = cubic_taper(waveguide_w, ps_taper_w - waveguide_w, ps_l, taper_l)
     psw = ps_box - ps_gap + ps_waveguide
     psw.port = ps_waveguide.port
 
@@ -51,23 +51,23 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, clearout_height=12, via_extent=
             ridge_waveguide=(gaw_rib - gaw_gap + gaw_waveguide).set_port(gaw_waveguide.port),
             slab_waveguide=gaw_slab,
         ),
-        gnd_pad=Box((gnd_width, 3)),
+        gnd_pad=Box((gnd_w, 3)),
         gnd_connector=Box((0.5, 2)),
         via=via_high,
         offset_into_rib=0.1
     )
 
     pina = PullInNemsActuator(
-        pos_pad=Box((ps_l, pos_height)),
+        pos_pad=Box((ps_l, pos_w)),
         connector=Box((0.3, 0.3)),
         via=via_low
     )
 
     pona = PullOutNemsActuator(
-        pos_pad=Box((ps_l, pos_height)),
+        pos_pad=Box((ps_l, pos_w)),
         connector=Box((0.2, 0.5)),
         pad_sep=0.2,
-        flexure=MEMSFlexure((flexure_box_w, 4.5),
+        flexure=MEMSFlexure(flexure_box_extent,
                             stripe_w=0.5,
                             pitch=0.5,
                             spring_extent=(ps_l + anchor_length * 2, 0.2)),
@@ -91,4 +91,3 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, clearout_height=12, via_extent=
     )
 
     return ps.smooth_layer(smooth, CommonLayer.RIDGE_SI) if smooth > 0 else ps
-

@@ -699,8 +699,16 @@ class Device:
                                    key=lambda p: np.linalg.norm(
                                        (p[:2] + p[2:]) / 2 / user_units_per_db_unit - label.xy))
                 if bbox is not None:
-                    side = np.argmin(np.abs(np.array(bbox) - np.array(overall_bounds)))
-                    side = side[0] if isinstance(side, np.ndarray) else side
+                    dist = np.abs(np.array(bbox) - np.array(overall_bounds))
+                    min_dist = np.min(dist)
+                    if dist[0] == min_dist:
+                        side = 0
+                    elif dist[2] == min_dist:
+                        side = 2
+                    elif dist[1] == min_dist:
+                        side = 1
+                    else:
+                        side = 3
                     angle = port_angle_options[side]
                     width = bbox[2] - bbox[0] if side % 2 else bbox[3] - bbox[1]
                     x = (bbox[0] + bbox[2]) / 2 if side % 2 else bbox[side]
