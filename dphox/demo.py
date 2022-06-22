@@ -22,10 +22,11 @@ grating = FocusingGrating(
 )
 
 
-def lateral_nems_ps(ps_l=100, anchor_length=3.1, clearout_height=12, via_extent=(4, 4),
+def lateral_nems_ps(ps_l=100, anchor_length=3.1, anchor_w=5, clearout_height=12, via_extent=(4, 4),
                     ps_taper_w=0.3, flexure_box_extent=(31, 4.5), nominal_gap=0.201, waveguide_w=0.5,
                     nanofin_w=0.2, taper_l=10, anchor_taper_l=1.4, pull_in=False, trace_w=3, smooth: float = 0,
-                    clearout_pos_sep: float = 10, clearout_gnd_sep: float = 2, pos_w: float = 10, gnd_w: float = 5):
+                    clearout_pos_sep: float = 10, clearout_gnd_sep: float = 2, pos_w: float = 10, gnd_pad_dim: float = (5, 3),
+                    extra_clearout_dim=(3, 5), clearout_etch_stop_grow=2, gnd_connector_dim=(1, 2), final_anchor_w=3):
     ps_w = waveguide_w + 2 * nominal_gap + 2 * nanofin_w
     gap_w = waveguide_w + 2 * nominal_gap
 
@@ -41,26 +42,26 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, clearout_height=12, via_extent=
                    metal=[CommonLayer.METAL_1, CommonLayer.METAL_2],
                    via=[CommonLayer.VIA_SI_1, CommonLayer.VIA_1_2])
 
-    gaw_rib = cubic_taper(ps_w + 0.1, 1, 2 * anchor_length, anchor_taper_l, symmetric=False)
-    gaw_gap = cubic_taper(gap_w, 1, 2 * anchor_length, anchor_taper_l, symmetric=False)
+    gaw_rib = cubic_taper(ps_w + 0.1, anchor_w, 2 * anchor_length, anchor_taper_l, symmetric=False)
+    gaw_gap = cubic_taper(gap_w, anchor_w, 2 * anchor_length, anchor_taper_l, symmetric=False)
     gaw_waveguide = straight(2 * anchor_length).path(waveguide_w)
-    gaw_slab = cubic_taper(0.5, 1, anchor_length, anchor_taper_l + 0.1)
+    gaw_slab = cubic_taper(final_anchor_w, anchor_w - final_anchor_w + 0.5, anchor_length, anchor_taper_l + 0.1, symmetric=False)
 
     gaw = GndAnchorWaveguide(
         rib_waveguide=RibDevice(
             ridge_waveguide=(gaw_rib - gaw_gap + gaw_waveguide).set_port(gaw_waveguide.port),
             slab_waveguide=gaw_slab,
         ),
-        gnd_pad=Box((gnd_w, 3)),
-        gnd_connector=Box((0.5, 2)),
-        via=via_high,
+        gnd_pad=Box(gnd_pad_dim),
+        gnd_connector=Box(gnd_connector_dim),
+        via=via_low,
         offset_into_rib=0.1
     )
 
     pina = PullInNemsActuator(
         pos_pad=Box((ps_l, pos_w)),
         connector=Box((0.3, 0.3)),
-        via=via_low
+        via=via_high
     )
 
     pona = PullOutNemsActuator(
@@ -71,12 +72,12 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, clearout_height=12, via_extent=
                             stripe_w=0.5,
                             pitch=0.5,
                             spring_extent=(ps_l + anchor_length * 2, 0.2)),
-        via=via_low
+        via=via_high
     )
 
     clr = Clearout(
-        clearout_etch=Box((ps_l, clearout_height)),
-        clearout_etch_stop_grow=0.5
+        clearout_etch=Box((ps_l + extra_clearout_dim[0], clearout_height + extra_clearout_dim[1])),
+        clearout_etch_stop_grow=clearout_etch_stop_grow
     )
 
     ps = LateralNemsPS(

@@ -265,6 +265,7 @@ class Foundry:
             _mesh = trimesh.util.concatenate(_meshes) if _meshes else trimesh.Trimesh()
             _mesh.visual.face_colors = _step.mat.color
             return _mesh
+
         device = Scene()
         prev_mat: Optional[Material] = None
         bound_list = np.array([p.bounds for _, p in layer_to_geom.items()]).T
@@ -363,5 +364,3 @@ FABLESS = Foundry(
     ],
     height=5
 )
-
-DEFAULT_FOUNDRY = FABLESS

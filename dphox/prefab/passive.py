@@ -50,7 +50,7 @@ class DC(Pattern):
         lower_path = link(self.end_l, dc_path(radius, dy, self.interaction_l, self.euler), self.end_l).path(width)
         upper_path = link(self.end_l, dc_path(radius, -dy, self.interaction_l, self.euler), self.end_l).path(width)
         upper_path.translate(dx=0, dy=self.interport_distance)
-        super(DC, self).__init__(lower_path, upper_path)
+        super().__init__(lower_path, upper_path)
         self.lower_path, self.upper_path = lower_path, upper_path
         self.port['a0'] = Port(0, 0, -180, w=self.waveguide_w)
         self.port['a1'] = Port(0, self.interport_distance, -180, w=self.waveguide_w)
@@ -461,7 +461,7 @@ class TSplitter(Pattern):
         turn_shift = self.splitter_mmi_w / 2 - self.waveguide_w / 2
         upturn = link(turn(self.radius), self.output_l).path(self.waveguide_w)
         downturn = link(turn(self.radius, -90), self.output_l).path(self.waveguide_w)
-        super(TSplitter, self).__init__(splitter_taper,
-                                        upturn.to(splitter_taper.port['b0']).translate(dy=turn_shift),
-                                        downturn.to(splitter_taper.port['b0']).translate(dy=-turn_shift))
+        super().__init__(splitter_taper,
+                         upturn.to(splitter_taper.port['b0']).translate(dy=turn_shift),
+                         downturn.to(splitter_taper.port['b0']).translate(dy=-turn_shift))
         self.port = {'a0': splitter_taper.port['a0'], 'b0': upturn.port['b0'], 'b1': downturn.port['b0']}

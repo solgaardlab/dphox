@@ -37,7 +37,7 @@ class ThermalPS(Device):
         left_via = self.via.copy.align(self.waveguide.port['a0'].xy)
         right_via = self.via.copy.align(self.waveguide.port['b0'].xy)
 
-        super(ThermalPS, self).__init__(
+        super().__init__(
             self.name,
             [(self.waveguide, self.ridge), (ps, self.heater)] + left_via.pattern_to_layer + right_via.pattern_to_layer
         )
@@ -86,7 +86,7 @@ class PullOutNemsActuator(Device):
             (self.flexure.copy.buffer(dope_total_offset), self.actuator_dope),
         ]
         via = self.via.copy.align(pos_pad.center).valign(pos_pad, bottom=False)
-        super(PullOutNemsActuator, self).__init__(
+        super().__init__(
             self.name, dopes + connectors + [(pos_pad, self.ridge), (self.flexure, self.ridge)] + via.pattern_to_layer
         )
         self.translate(dy=-self.bounds[1])
@@ -128,7 +128,7 @@ class PullInNemsActuator(Device):
         dopes = [
             (self.pos_pad.copy.expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.dopes)
         ]
-        super(PullInNemsActuator, self).__init__(
+        super().__init__(
             self.name, connectors + dopes + [(self.pos_pad, self.ridge)] + via.pattern_to_layer
         )
 
@@ -179,7 +179,7 @@ class GndAnchorWaveguide(Device):
             (gnd_connectors[1].expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.gnd_pad_dope),
         ]
         pattern_to_layer = [(p, self.ridge) for p in gnd_connectors + gnd_pads]
-        super(GndAnchorWaveguide, self).__init__(
+        super().__init__(
             self.name, pattern_to_layer + dopes + vias + self.rib_waveguide.pattern_to_layer
         )
         self.port = {
@@ -212,12 +212,14 @@ class Clearout(Device):
     clearout_etch_stop_grow: float
     clearout_layer: str = CommonLayer.CLEAROUT
     clearout_etch_stop_layer: str = CommonLayer.ALUMINA
+    clearout_metal_etch_mask_layer: str = CommonLayer.METAL_2
     name: str = "clearout"
 
     def __post_init__(self):
-        super(Clearout, self).__init__("clearout", [(self.clearout_etch, self.clearout_layer),
-                                                    (self.clearout_etch.buffer(self.clearout_etch_stop_grow),
-                                                     self.clearout_etch_stop_layer)])
+        grow = self.clearout_etch.buffer(self.clearout_etch_stop_grow)
+        super().__init__("clearout", [(self.clearout_etch, self.clearout_layer),
+                                                    (grow, self.clearout_etch_stop_layer),
+                                                    (grow - self.clearout_etch, self.clearout_metal_etch_mask_layer)])
 
 
 @fix_dataclass_init_docs
@@ -247,8 +249,8 @@ class LateralNemsPS(Device):
     clearout_pos_sep: float
     clearout_gnd_sep: float
     ridge: str = CommonLayer.RIDGE_SI
-    pos_metal_layer: str = CommonLayer.METAL_1
-    gnd_metal_layer: str = CommonLayer.METAL_2
+    pos_metal_layer: str = CommonLayer.METAL_2
+    gnd_metal_layer: str = CommonLayer.METAL_1
     name: str = "lateral_nems_ps"
 
     def __post_init__(self):
@@ -265,7 +267,7 @@ class LateralNemsPS(Device):
                          self.gnd_anchor_waveguide.size[1] + self.clearout_gnd_sep)).cup(self.trace_w).halign(
             left_gnd_waveguide.port['e0'].x).valign(left_gnd_waveguide.port['e1'].y)
 
-        super(LateralNemsPS, self).__init__(self.name, [(psw, self.ridge), (pos_metal, self.pos_metal_layer),
+        super().__init__(self.name, [(psw, self.ridge), (pos_metal, self.pos_metal_layer),
                                                         (gnd_metal, self.gnd_metal_layer), top_actuator,
                                                         bottom_actuator, clearout, left_gnd_waveguide,
                                                         right_gnd_waveguide])
@@ -323,7 +325,7 @@ class MultilayerPath(Device):
         pattern_to_layer = sum(([(p, self.path_layer)] if isinstance(p, Pattern) else [p] for p in waveguided_patterns),
                                [])
 
-        super(MultilayerPath, self).__init__(self.name, pattern_to_layer)
+        super().__init__(self.name, pattern_to_layer)
         for child in child_to_device:
             self.place(child_to_device[child], child_to_ports[child], 'a0')
         self.port['a0'] = waveguided_patterns[0].port['a0'].copy if waveguided_patterns else Port(*port.xy, 180)
@@ -385,7 +387,7 @@ class MZI(Device):
             self.bottom_arm.extend(arm_length_diff)
         else:
             self.top_arm.extend(arm_length_diff)
-        super(MZI, self).__init__(self.name)
+        super().__init__(self.name)
         self.place(self.bottom_input, Port(), 'a0')
         self.place(self.top_input, Port(0, self.coupler.interport_distance), 'a0')
         dc_port = dc_device.dummy_port_pattern.to(self.bottom_input.port['b0'], 'a0').port
@@ -447,9 +449,9 @@ class LocalMesh(Device):
         self.upper_path = mzi.path(flip=False)
         self.lower_path = mzi.path(flip=True)
         self.mzi_out = mzi.bottom_input.copy
-        self.upper_path.name = 'upper_mzi_path'
-        self.lower_path.name = 'lower_mzi_path'
-        self.mzi_out.name = 'mzi_out'
+        self.upper_path.name = f'{self.name}_upper_mzi_path'
+        self.lower_path.name = f'{self.name}_lower_mzi_path'
+        self.mzi_out.name = f'{self.name}_mzi_out'
 
         self.upper_transforms = []
         self.lower_transforms = []
@@ -463,9 +465,9 @@ class LocalMesh(Device):
                     self.flip_array[idx, layer] = 1
                 else:
                     self.upper_transforms.append((layer * mzi.full_length, idx * mzi.interport_distance))
-            self.out_transforms.append((n_layers * mzi.full_length, idx * mzi.interport_distance))
+            self.out_transforms.append((n_layers * mzi.full_length - self.mzi_out.port['a0'].x, idx * mzi.interport_distance))
 
-        super(LocalMesh, self).__init__(self.name)
+        super().__init__(self.name)
         self.place(self.upper_path, np.array(self.upper_transforms))
         self.place(self.lower_path, np.array(self.lower_transforms))
         self.place(self.mzi_out, np.array(self.out_transforms))
@@ -587,7 +589,7 @@ class HTree(Device):
             self.splitter = Device.from_pattern(self.splitter, "tsplitter", self.wg_layer) \
                 if isinstance(self.splitter, TSplitter) else self.splitter
         self.name = f"htree_{self.depth}" if self.name is None else self.name
-        super(HTree, self).__init__(self.name)
+        super().__init__(self.name)
         waveguide_w = self.splitter.port['a0'].w
         silver_ratio = 1 / np.sqrt(2) if self.depth % 2 else 1
         silver_length = self.pitch * 2 ** (self.depth / 2 - 1) * silver_ratio

@@ -6,7 +6,7 @@ from shapely.geometry import box, GeometryCollection, LineString, LinearRing, Po
 from shapely.ops import split, unary_union, polygonize
 from copy import deepcopy as copy
 
-from .foundry import CommonLayer, Foundry, DEFAULT_FOUNDRY
+from .foundry import CommonLayer, Foundry, FABLESS
 from .geometry import Geometry
 from .port import Port
 from typing import List, Optional, Iterable, Union
@@ -15,6 +15,7 @@ from .utils import DECIMALS, fix_dataclass_init_docs, min_aspect_bounds, poly_po
 
 SHAPELYVEC_IMPORTED = True
 GDSPY_IMPORTED = True
+DEFAULT_FOUNDRY = FABLESS
 
 
 try:
@@ -205,7 +206,7 @@ class Pattern(Geometry):
             new_pattern.port = self.port
         return new_pattern
 
-    def plot(self, ax: Optional = None, color: str = 'gray', plot_ports: bool = True, alpha: float = 1):
+    def plot(self, ax = None, color: str = 'gray', plot_ports: bool = True, alpha: float = 1):
         """Plot the pattern
 
         Args:
@@ -390,7 +391,7 @@ class Box(Pattern):
     decimals: int = 6
 
     def __post_init__(self):
-        super(Box, self).__init__(box(-self.extent[0] / 2, -self.extent[1] / 2,
+        super().__init__(box(-self.extent[0] / 2, -self.extent[1] / 2,
                                       self.extent[0] / 2, self.extent[1] / 2),
                                   decimals=self.decimals)
         self.port = {
@@ -535,12 +536,12 @@ class Ellipse(Pattern):
     resolution: int = 16
 
     def __post_init__(self):
-        super(Ellipse, self).__init__(Point(0, 0).buffer(1, resolution=self.resolution))
+        super().__init__(Point(0, 0).buffer(1, resolution=self.resolution))
         self.scale(*self.radius_extent)
 
 
-@fix_dataclass_init_docs
-@dataclass
+@ fix_dataclass_init_docs
+@ dataclass
 class Circle(Pattern):
     """Ellipse with default center at origin.
 
@@ -549,15 +550,15 @@ class Circle(Pattern):
         resolution: Resolution is (number of points on circle) / 2.
     """
 
-    radius: float = 1
-    resolution: int = 16
+    radius: float=1
+    resolution: int=16
 
     def __post_init__(self):
-        super(Circle, self).__init__(Point(0, 0).buffer(self.radius, resolution=self.resolution))
+        super().__init__(Point(0, 0).buffer(self.radius, resolution=self.resolution))
 
 
-@fix_dataclass_init_docs
-@dataclass
+@ fix_dataclass_init_docs
+@ dataclass
 class Sector(Pattern):
     """Sector of a circle with center at origin.
 
@@ -567,55 +568,55 @@ class Sector(Pattern):
         resolution: Resolution is (number of points on circle) / 2.
     """
 
-    radius: float = 1
-    angle: float = 180
-    resolution: int = 16
+    radius: float=1
+    angle: float=180
+    resolution: int=16
 
     def __post_init__(self):
-        circle = Point(0, 0).buffer(self.radius, resolution=self.resolution)
-        top_splitter = rotate(LineString([(0, self.radius), (0, 0)]), angle=self.angle / 2, origin=(0, 0))
-        bottom_splitter = rotate(LineString([(0, 0), (0, self.radius)]), angle=-self.angle / 2, origin=(0, 0))
-        super(Sector, self).__init__(
+        circle=Point(0, 0).buffer(self.radius, resolution = self.resolution)
+        top_splitter=rotate(LineString([(0, self.radius), (0, 0)]), angle = self.angle / 2, origin = (0, 0))
+        bottom_splitter=rotate(LineString([(0, 0), (0, self.radius)]), angle = -self.angle / 2, origin = (0, 0))
+        super().__init__(
             split(circle, LineString([*top_splitter.coords, (0, 0), *bottom_splitter.coords]))[1])
 
 
-@fix_dataclass_init_docs
-@dataclass
+@ fix_dataclass_init_docs
+@ dataclass
 class StripedBox(Pattern):
     extent: Float2
     stripe_w: float
     pitch: Union[float, Float2]
 
     def __post_init__(self):
-        super(StripedBox, self).__init__(Box(self.extent).striped(self.stripe_w, self.pitch))
+        super().__init__(Box(self.extent).striped(self.stripe_w, self.pitch))
 
 
-@fix_dataclass_init_docs
-@dataclass
+@ fix_dataclass_init_docs
+@ dataclass
 class MEMSFlexure(Pattern):
     extent: Float2
     stripe_w: float
     pitch: Union[float, Float2]
     spring_extent: Float2
-    connector_extent: Float2 = None
-    spring_center: bool = False
+    connector_extent: Float2=None
+    spring_center: bool=False
 
     def __post_init__(self):
-        super(MEMSFlexure, self).__init__(Box(self.extent).flexure(self.spring_extent, self.connector_extent,
+        super().__init__(Box(self.extent).flexure(self.spring_extent, self.connector_extent,
                                                                    self.stripe_w, self.spring_center))
-        self.box = Box(self.extent)
+        self.box=Box(self.extent)
         self.refs.append(self.box)
 
 
-@fix_dataclass_init_docs
-@dataclass
+@ fix_dataclass_init_docs
+@ dataclass
 class Quad(Pattern):
     start: Port
     end: Port
 
     def __post_init__(self):
-        super(Quad, self).__init__(Pattern(np.hstack((self.start.line, self.end.line))))
-        self.port = {'a0': self.start.copy, 'b0': self.end.copy}
+        super().__init__(Pattern(np.hstack((self.start.line, self.end.line))))
+        self.port={'a0': self.start.copy, 'b0': self.end.copy}
 
 
 def text(string: str, size: float = 12):
@@ -631,18 +632,18 @@ def text(string: str, size: float = 12):
     """
     import matplotlib.pyplot as plt
     from matplotlib.textpath import TextPath
-    plt.rc('text.latex', preamble=r'\usepackage{sfmath}')
+    plt.rc('text.latex', preamble = r'\usepackage{sfmath}')
 
     try:
-        usetex = True
-        path = TextPath((0, 0), string, size=size, usetex=True)
+        usetex=True
+        path=TextPath((0, 0), string, size = size, usetex = True)
     except FileNotFoundError:
-        usetex = False
-        path = TextPath((0, 0), string, size=size, usetex=False)
-    rings = [LinearRing(p) for p in path.to_polygons()]
-    multipoly = MultiPolygon(polygonize(rings))
+        usetex=False
+        path=TextPath((0, 0), string, size = size, usetex = False)
+    rings=[LinearRing(p) for p in path.to_polygons()]
+    multipoly=MultiPolygon(polygonize(rings))
 
-    filtered_polys = []
+    filtered_polys=[]
     for ring in rings:
         filtered_polys.extend(poly for poly in multipoly.geoms if (Polygon(poly.exterior) ^ Polygon(ring)).area < 1e-6 and ring.is_ccw == usetex)
 

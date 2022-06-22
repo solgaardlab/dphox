@@ -11,8 +11,7 @@ from shapely.geometry import MultiPolygon, Polygon
 from shapely.ops import unary_union
 import networkx as nx
 
-from .foundry import CommonLayer, DEFAULT_FOUNDRY, Foundry
-
+from .foundry import CommonLayer, Foundry, FABLESS
 from .geometry import Geometry
 from .pattern import Box, Pattern, Port
 from .transform import GDSTransform
@@ -34,6 +33,7 @@ except ImportError:
     KLAMATH_IMPORTED = False
 
 GDSTransformOrTuple = Union[GDSTransform, Tuple, np.ndarray, Port, List[Port]]
+DEFAULT_FOUNDRY = FABLESS
 
 
 class Device:
@@ -368,7 +368,7 @@ class Device:
                 port.x - self.port[from_port].x, port.y - self.port[from_port].y
             )
 
-    def place(self, device: "Device", placement: Union[GDSTransformOrTuple],
+    def place(self, device: "Device", placement: GDSTransformOrTuple,
               from_port: Optional[Union[str, Port, tuple]] = None, flip_y: bool = False, return_ports: bool = False):
         """Place another device into this device at a specified :code:`placement` (location and angle) or list of them.
 
@@ -502,7 +502,7 @@ class Device:
         self.pattern_to_layer.append((pattern, layer))
         self.layer_to_polys = self._update_layers()
 
-    def plot(self, ax: Optional = None, foundry: Foundry = DEFAULT_FOUNDRY,
+    def plot(self, ax = None, foundry: Foundry = DEFAULT_FOUNDRY,
              exclude_layer: Optional[List[CommonLayer]] = None, alpha: float = 0.5,
              plot_ports: bool = False):
         """Plot this device on a matplotlib plot.
@@ -701,14 +701,9 @@ class Device:
                 if bbox is not None:
                     dist = np.abs(np.array(bbox) - np.array(overall_bounds))
                     min_dist = np.min(dist)
-                    if dist[0] == min_dist:
-                        side = 0
-                    elif dist[2] == min_dist:
-                        side = 2
-                    elif dist[1] == min_dist:
-                        side = 1
-                    else:
-                        side = 3
+                    for i in (1, 3, 0, 2):
+                        if dist[i] == min_dist:
+                            side = i
                     angle = port_angle_options[side]
                     width = bbox[2] - bbox[0] if side % 2 else bbox[3] - bbox[1]
                     x = (bbox[0] + bbox[2]) / 2 if side % 2 else bbox[side]
@@ -922,7 +917,7 @@ class Via(Device):
         layers += [(Box((via_pattern.size[0] + 2 * bg,
                          via_pattern.size[1] + 2 * bg), decimals=2).align(boundary), layer)
                    for layer, bg in zip(self.metal, self.boundary_grow)]
-        super(Via, self).__init__(self.name, layers)
+        super().__init__(self.name, layers)
         self.port = {
             'w': Port(self.bounds[0], self.center[1], -180),
             'e': Port(self.bounds[2], self.center[1]),
