@@ -101,4 +101,6 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, anchor_w=5, clearout_height=12,
         clearout_gnd_sep=clearout_gnd_sep
     )
 
+    ps.add(ps.bbox_pattern.buffer(3), layer=CommonLayer.PAD_OPEN)
+
     return ps.smooth_layer(smooth, CommonLayer.RIDGE_SI) if smooth > 0 else ps
