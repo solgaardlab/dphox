@@ -118,10 +118,10 @@ class GDSTransform(AffineTransform):
     mag: float = 1
 
     def __post_init__(self):
-        super(GDSTransform, self).__init__((scale2d((self.mag, self.mag)),
-                                            reflect2d(flip=self.flip_y),
-                                            rotate2d(np.radians(self.angle)),
-                                            translate2d((self.x, self.y))))
+        super().__init__((scale2d((self.mag, self.mag)),
+                          reflect2d(flip=self.flip_y),
+                          rotate2d(np.radians(self.angle)),
+                          translate2d((self.x, self.y))))
 
     @property
     def xya(self):

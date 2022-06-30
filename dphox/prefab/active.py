@@ -66,6 +66,9 @@ class PullOutNemsActuator(Device):
     pos_pad: Box
     pad_sep: float
     flexure: MEMSFlexure
+    stop_extender: Box
+    stop_bump: Box
+    stop_gap: Tuple[float, float]
     connector: Box
     via: Via
     dope_expand_tuple: Tuple[float, float] = (0, 0)
@@ -76,7 +79,13 @@ class PullOutNemsActuator(Device):
 
     def __post_init__(self):
         dope_total_offset = self.dope_expand_tuple[0] + self.dope_expand_tuple[1]
-        pos_pad = self.pos_pad.copy.vstack(self.flexure, bottom=True).translate(dy=self.pad_sep)
+        pos_pad = self.pos_pad.copy.vstack(self.flexure.box, bottom=True).translate(dy=self.pad_sep)
+        stop_bump = self.stop_bump.copy.valign(self.flexure.box, bottom=True).translate(dy=self.stop_gap[1] + self.flexure.spring_extent[1]).halign(
+            self.flexure.box, left=True, opposite=True).translate(dx=self.stop_gap[0])
+        stop_extender = self.stop_extender.copy.vstack(stop_bump, bottom=True).halign(stop_bump)
+        stop = [(stop_bump, self.ridge), (stop_extender, self.ridge),
+                (stop_bump.copy.reflect(self.flexure.center, horiz=True), self.ridge),
+                (stop_extender.copy.reflect(self.flexure.center, horiz=True), self.ridge)]
         connectors = [
             (self.connector.copy.vstack(self.flexure).halign(self.flexure.box, left=True), self.ridge),
             (self.connector.copy.vstack(self.flexure).halign(self.flexure.box, left=False), self.ridge)
@@ -87,8 +96,10 @@ class PullOutNemsActuator(Device):
         ]
         via = self.via.copy.align(pos_pad.center).valign(pos_pad, bottom=False)
         super().__init__(
-            self.name, dopes + connectors + [(pos_pad, self.ridge), (self.flexure, self.ridge)] + via.pattern_to_layer
+            self.name, dopes + connectors + [(pos_pad, self.ridge), (self.flexure, self.ridge)] + via.pattern_to_layer + stop
         )
+        self.stop_pattern = Pattern([s[0] for s in stop])
+        self.translate_dist = -self.bounds[1]
         self.translate(dy=-self.bounds[1])
 
 
@@ -131,6 +142,8 @@ class PullInNemsActuator(Device):
         super().__init__(
             self.name, connectors + dopes + [(self.pos_pad, self.ridge)] + via.pattern_to_layer
         )
+        self.translate_dist = 0
+        self.stop_pattern = None
 
 
 @fix_dataclass_init_docs
@@ -208,18 +221,16 @@ class Clearout(Device):
         clearout_etch_stop_layer: The clearout etch stop layer (this can vary more than the clearout layer).
 
     """
-    clearout_etch: Box
+    clearout_etch: Pattern
     clearout_etch_stop_grow: float
     clearout_layer: str = CommonLayer.CLEAROUT
     clearout_etch_stop_layer: str = CommonLayer.ALUMINA
-    clearout_metal_etch_mask_layer: str = CommonLayer.METAL_2
     name: str = "clearout"
 
     def __post_init__(self):
         grow = self.clearout_etch.buffer(self.clearout_etch_stop_grow)
         super().__init__("clearout", [(self.clearout_etch, self.clearout_layer),
-                                                    (grow, self.clearout_etch_stop_layer),
-                                                    (grow - self.clearout_etch, self.clearout_metal_etch_mask_layer)])
+                                                    (grow, self.clearout_etch_stop_layer)])
 
 
 @fix_dataclass_init_docs
@@ -257,7 +268,18 @@ class LateralNemsPS(Device):
         psw = self.phase_shifter_waveguide.copy
         top_actuator = self.actuator.copy.to(Port(psw.center[0], psw.bounds[3], 0))
         bottom_actuator = self.actuator.copy.to(Port(psw.center[0], psw.bounds[1], -180))
-        clearout = self.clearout.copy.align(psw)
+        if top_actuator.stop_pattern is not None:
+            top_stop_pattern = self.actuator.stop_pattern.copy.translate(dy=self.actuator.translate_dist).to(Port(psw.center[0], psw.bounds[3], 0))
+            bot_stop_pattern = self.actuator.stop_pattern.copy.translate(dy=self.actuator.translate_dist).to(Port(psw.center[0], psw.bounds[1], -180))
+            clearout = Clearout(
+                clearout_etch=self.clearout.clearout_etch.align(psw) - (top_stop_pattern + bot_stop_pattern),
+                clearout_etch_stop_grow=self.clearout.clearout_etch_stop_grow,
+                clearout_layer=self.clearout.clearout_layer,
+                clearout_etch_stop_layer=self.clearout.clearout_etch_stop_layer
+            )
+        else:
+            clearout = self.clearout
+            clearout = clearout.copy.align(psw)
         left_gnd_waveguide = self.gnd_anchor_waveguide.copy.to(psw.port['a0'])
         right_gnd_waveguide = self.gnd_anchor_waveguide.copy.to(psw.port['b0'])
         pos_metal = Box((self.clearout.size[0] + self.clearout_pos_sep,

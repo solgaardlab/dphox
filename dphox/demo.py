@@ -1,6 +1,6 @@
 from .foundry import AIR, CommonLayer, SILICON
 from .parametric import cubic_taper, straight
-from .pattern import Box
+from .pattern import Box, Ellipse
 from .prefab.active import Clearout, GndAnchorWaveguide, LateralNemsPS, LocalMesh, MEMSFlexure, \
     MZI, PullInNemsActuator, PullOutNemsActuator, ThermalPS, Via
 from .prefab.passive import DC, FocusingGrating, RibDevice
@@ -26,9 +26,12 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, anchor_w=5, clearout_height=12,
                     ps_taper_w=0.3, flexure_box_extent=(31, 4.5), nominal_gap=0.201, waveguide_w=0.5,
                     nanofin_w=0.2, taper_l=10, anchor_taper_l=1.4, pull_in=False, trace_w=3, smooth: float = 0,
                     clearout_pos_sep: float = 10, clearout_gnd_sep: float = 2, pos_w: float = 10, gnd_pad_dim: float = (5, 3),
-                    extra_clearout_dim=(3, 5), clearout_etch_stop_grow=2, gnd_connector_dim=(1, 2), final_anchor_w=3):
+                    extra_clearout_dim=(3, 5), clearout_etch_stop_grow=2, gnd_connector_dim=(1, 2), final_anchor_w=3,
+                    etch_stop_gap = 0.18):
     ps_w = waveguide_w + 2 * nominal_gap + 2 * nanofin_w
     gap_w = waveguide_w + 2 * nominal_gap
+
+    # center phase shifting region
 
     ps_box = straight(ps_l).path(ps_w)
     ps_gap = cubic_taper(gap_w, ps_taper_w - waveguide_w, ps_l, taper_l)
@@ -36,11 +39,15 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, anchor_w=5, clearout_height=12,
     psw = ps_box - ps_gap + ps_waveguide
     psw.port = ps_waveguide.port
 
+    # vias to connect different metal layers to the MEMS actuators
+
     via_low = Via(via_extent=via_extent, boundary_grow=0.25,
                   metal=[CommonLayer.METAL_1], via=[CommonLayer.VIA_SI_1])
     via_high = Via(via_extent=via_extent, boundary_grow=0.25,
                    metal=[CommonLayer.METAL_1, CommonLayer.METAL_2],
                    via=[CommonLayer.VIA_SI_1, CommonLayer.VIA_1_2])
+
+    # ground anchor waveguide
 
     gaw_rib = cubic_taper(ps_w + 0.1, anchor_w, 2 * anchor_length, anchor_taper_l, symmetric=False)
     gaw_gap = cubic_taper(gap_w, anchor_w, 2 * anchor_length, anchor_taper_l, symmetric=False)
@@ -72,7 +79,10 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, anchor_w=5, clearout_height=12,
                             stripe_w=0.5,
                             pitch=0.5,
                             spring_extent=(ps_l + anchor_length * 2, 0.2)),
-        via=via_high
+        via=via_high,
+        stop_extender=Box(((ps_l + extra_clearout_dim[0] - flexure_box_extent[0])/ 2, flexure_box_extent[1] / 2)),
+        stop_bump=Ellipse((2.5 * etch_stop_gap, etch_stop_gap)) + Box((5 * etch_stop_gap, etch_stop_gap)).valign(0),
+        stop_gap=(etch_stop_gap, etch_stop_gap)
     )
 
     clr = Clearout(
