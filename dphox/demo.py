@@ -1,6 +1,7 @@
 from .foundry import AIR, CommonLayer, SILICON
 from .parametric import cubic_taper, straight
 from .pattern import Box, Ellipse
+from .device import Device
 from .prefab.active import Clearout, GndAnchorWaveguide, LateralNemsPS, LocalMesh, MEMSFlexure, \
     MZI, PullInNemsActuator, PullOutNemsActuator, ThermalPS, Via
 from .prefab.passive import DC, FocusingGrating, RibDevice
@@ -27,7 +28,7 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, anchor_w=5, clearout_height=12,
                     nanofin_w=0.2, taper_l=10, anchor_taper_l=1.4, pull_in=False, trace_w=3, smooth: float = 0,
                     clearout_pos_sep: float = 10, clearout_gnd_sep: float = 2, pos_w: float = 10, gnd_pad_dim: float = (5, 3),
                     extra_clearout_dim=(3, 5), clearout_etch_stop_grow=2, gnd_connector_dim=(1, 2), final_anchor_w=3,
-                    etch_stop_gap = 0.18):
+                    etch_stop_gap = 0.18, via_boundary_w: float = 1.5, via_high_l: float = 20):
     ps_w = waveguide_w + 2 * nominal_gap + 2 * nanofin_w
     gap_w = waveguide_w + 2 * nominal_gap
 
@@ -41,11 +42,20 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, anchor_w=5, clearout_height=12,
 
     # vias to connect different metal layers to the MEMS actuators
 
-    via_low = Via(via_extent=via_extent, boundary_grow=0.25,
+    via_low = Via(via_extent=via_extent, boundary_grow=via_boundary_w,
                   metal=[CommonLayer.METAL_1], via=[CommonLayer.VIA_SI_1])
-    via_high = Via(via_extent=via_extent, boundary_grow=0.25,
-                   metal=[CommonLayer.METAL_1, CommonLayer.METAL_2],
-                   via=[CommonLayer.VIA_SI_1, CommonLayer.VIA_1_2])
+    
+
+    via_high = Via(via_extent=via_extent, boundary_grow=via_boundary_w,
+                   metal=[CommonLayer.METAL_2],
+                   via=[CommonLayer.VIA_1_2])
+
+    via_high.translate(via_high_l)
+
+    via_high.add(Box((via_high_l, via_extent[1] + 2 * via_boundary_w)).align(via_high.center).halign(via_high, left=False), CommonLayer.METAL_1)
+    via_high.add(Box((via_high_l, via_extent[1] + 2 * via_boundary_w)).align(via_high.center).halign(via_high, left=False), CommonLayer.METAL_2)
+    
+    via_full = Device("via", [via_low.copy, via_high])
 
     # ground anchor waveguide
 
@@ -68,7 +78,7 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, anchor_w=5, clearout_height=12,
     pina = PullInNemsActuator(
         pos_pad=Box((ps_l, pos_w)),
         connector=Box((0.3, 0.3)),
-        via=via_high
+        via=via_full
     )
 
     pona = PullOutNemsActuator(
@@ -79,10 +89,11 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, anchor_w=5, clearout_height=12,
                             stripe_w=0.5,
                             pitch=0.5,
                             spring_extent=(ps_l + anchor_length * 2, 0.2)),
-        via=via_high,
+        via=via_full,
         stop_extender=Box(((ps_l + extra_clearout_dim[0] - flexure_box_extent[0])/ 2, flexure_box_extent[1] / 2)),
         stop_bump=Ellipse((2.5 * etch_stop_gap, etch_stop_gap)) + Box((5 * etch_stop_gap, etch_stop_gap)).valign(0),
-        stop_gap=(etch_stop_gap, etch_stop_gap)
+        stop_gap=(etch_stop_gap, etch_stop_gap),
+        dope_expand_tuple=(0.2, 0.2)
     )
 
     clr = Clearout(
@@ -101,6 +112,6 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, anchor_w=5, clearout_height=12,
         clearout_gnd_sep=clearout_gnd_sep
     )
 
-    ps.add(ps.bbox_pattern.buffer(3), layer=CommonLayer.PAD_OPEN)
+    # ps.add(ps.bbox_pattern.buffer(3), layer=CommonLayer.PAD_OPEN)
 
     return ps.smooth_layer(smooth, CommonLayer.RIDGE_SI) if smooth > 0 else ps
