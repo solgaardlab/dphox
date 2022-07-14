@@ -91,7 +91,7 @@ class PullOutNemsActuator(Device):
             (self.connector.copy.vstack(self.flexure).halign(self.flexure.box, left=False), self.ridge)
         ]
         dopes = [
-            (pos_pad.copy.expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.pos_pad_dope),
+            (pos_pad.copy, self.pos_pad_dope),
             (pos_pad.copy.expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.actuator_dope),
             (self.flexure.copy.buffer(dope_total_offset), self.actuator_dope),
         ]

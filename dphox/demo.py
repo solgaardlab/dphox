@@ -85,7 +85,7 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, anchor_w=5, clearout_height=12,
 
     pona = PullOutNemsActuator(
         pos_pad=Box((ps_l, pos_w)),
-        connector=Box((0.2, 0.5)),
+        connector=Box((0.2, 0.8)),
         pad_sep=0.2,
         flexure=MEMSFlexure(flexure_box_extent,
                             stripe_w=0.5,
@@ -95,7 +95,7 @@ def lateral_nems_ps(ps_l=100, anchor_length=3.1, anchor_w=5, clearout_height=12,
         stop_extender=Box(((ps_l + extra_clearout_dim[0] - flexure_box_extent[0])/ 2, flexure_box_extent[1] / 2)),
         stop_bump=Ellipse((2.5 * etch_stop_gap, etch_stop_gap)) + Box((5 * etch_stop_gap, etch_stop_gap)).valign(0),
         stop_gap=(etch_stop_gap, etch_stop_gap),
-        dope_expand_tuple=(0.2, 0.2)
+        dope_expand_tuple=(0.3, 0.3)
     )
 
     clr = Clearout(
