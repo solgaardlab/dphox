@@ -92,6 +92,7 @@ class PullOutNemsActuator(Device):
         ]
         dopes = [
             (pos_pad.copy.expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.pos_pad_dope),
+            (pos_pad.copy.expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.actuator_dope),
             (self.flexure.copy.buffer(dope_total_offset), self.actuator_dope),
         ]
         via = self.via.copy.align(pos_pad.center).valign(pos_pad, bottom=False)
@@ -190,6 +191,10 @@ class GndAnchorWaveguide(Device):
             (gnd_pads[1].expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.gnd_pad_dope),
             (gnd_connectors[0].expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.gnd_pad_dope),
             (gnd_connectors[1].expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), self.gnd_pad_dope),
+            (gnd_pads[0].expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), CommonLayer.P_SI),
+            (gnd_pads[1].expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), CommonLayer.P_SI),
+            (gnd_connectors[0].expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), CommonLayer.P_SI),
+            (gnd_connectors[1].expand(self.dope_expand_tuple[0]).buffer(self.dope_expand_tuple[1]), CommonLayer.P_SI),
         ]
         pattern_to_layer = [(p, self.ridge) for p in gnd_connectors + gnd_pads]
         super().__init__(
